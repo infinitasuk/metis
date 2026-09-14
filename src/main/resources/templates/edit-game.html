@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="'METIS / Edit / ' + ${game.gameName}"></title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main class="shell">
+    <a class="back-link" th:href="@{/admin/games/{id}(id=${game.gameId})}">&lt;- Game definition</a>
+    <section class="intro compact-intro"><p class="eyebrow">ADMIN / EDIT GAME</p><h1>Edit the<br><em>game engine.</em></h1><p class="lede">Changes apply to the static game definition used by future simulations.</p></section>
+    <form class="edit-form" method="post" th:action="@{/admin/games/{id}/edit(id=${game.gameId})}">
+        <label>Game name<input name="gameName" required th:value="${game.gameName}"></label>
+        <label>Description<textarea name="gameDescription" rows="4" th:text="${game.gameDescription}"></textarea></label>
+        <div class="form-grid">
+            <label>Minimum players<input type="number" name="minimumPlayers" min="1" required th:value="${game.minimumNumberOfPlayers}"></label>
+            <label>Maximum players<input type="number" name="maximumPlayers" min="1" required th:value="${game.maximumNumberOfPlayers}"></label>
+            <label>Minimum CPU<input type="number" name="minimumCpu" min="0" required th:value="${game.minimumNumberOfCpu}"></label>
+            <label>Maximum CPU<input type="number" name="maximumCpu" min="0" required th:value="${game.maximumNumberOfCpu}"></label>
+        </div>
+        <div class="form-actions"><a class="text-link" th:href="@{/admin/games/{id}(id=${game.gameId})}">Cancel</a><button class="button" type="submit">Save game definition <span>-&gt;</span></button></div>
+    </form>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

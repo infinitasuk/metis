@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="'METIS / Simulation / ' + ${session.sessionName}"></title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main class="shell">
+    <a class="back-link" href="/simulator">&lt;- Game Simulator</a>
+    <section class="hero-panel compact-hero">
+        <p class="eyebrow">LIVE SIMULATION</p>
+        <h1 th:text="${session.sessionName}"></h1>
+        <p class="lede" th:text="|${session.gameName} / ${session.sessionCode}|"></p>
+        <div class="tag-row"><span class="tag accent" th:text="${session.status}"></span><span class="tag" th:text="|Round ${session.currentRound}|"></span></div>
+    </section>
+    <div class="two-column">
+        <section class="data-panel">
+            <div class="section-heading compact"><div><p class="eyebrow">PLAYERS</p><h2>Fleet commanders</h2></div><span class="count" th:text="${players.size()}"></span></div>
+            <div class="data-list" th:if="${!players.isEmpty()}"><article class="data-item" th:each="player : ${players}"><div><span class="card-kicker" th:text="|SEAT ${player.seatNumber}|"></span><h3 th:text="${player.displayName}"></h3><p th:text="${player.playerKind}"></p></div><span class="tag" th:text="${player.ready ? 'ready' : 'not ready'}"></span></article></div>
+            <p class="muted" th:if="${players.isEmpty()}">Add players to prepare this simulation.</p>
+            <form class="inline-form" id="player-form" th:attr="data-session-id=${session.sessionId}">
+                <input name="displayName" placeholder="Player name" required>
+                <input name="seatNumber" type="number" min="1" placeholder="Seat" required>
+                <select name="playerKind"><option value="human">Human</option><option value="cpu">CPU</option></select>
+                <button class="button" type="submit">Add player</button>
+            </form>
+            <p class="form-message" id="player-message" aria-live="polite"></p>
+        </section>
+        <section class="data-panel">
+            <div class="section-heading compact"><div><p class="eyebrow">BATTLEFIELD</p><h2>Unit state</h2></div><span class="count" th:text="${units.size()}"></span></div>
+            <p class="muted" th:if="${units.isEmpty()}">Units will appear here when fleet construction is connected to the runtime.</p>
+            <div class="data-list" th:if="${!units.isEmpty()}"><article class="data-item" th:each="unit : ${units}"><div><h3 th:text="${unit.unitName}"></h3><p th:text="${unit.status}"></p></div><code th:text="|${unit.positionX}, ${unit.positionY}|"></code></article></div>
+        </section>
+    </div>
+    <div class="two-column">
+        <section class="data-panel">
+            <div class="section-heading compact"><div><p class="eyebrow">FLEETS</p><h2>Army lists</h2></div><span class="count" th:text="${fleets.size()}"></span></div>
+            <div class="data-list" th:if="${!fleets.isEmpty()}"><article class="data-item" th:each="fleet : ${fleets}"><div><span class="card-kicker" th:text="${fleet.playerName}"></span><h3 th:text="${fleet.fleetName}"></h3><p th:text="${fleet.fleetFormatName != null ? fleet.fleetFormatName : 'No format selected'}"></p></div><code th:text="|${fleet.unitCount} units / ${fleet.pointsTotal != null ? fleet.pointsTotal : '-'} points|"></code></article></div>
+            <p class="muted" th:if="${fleets.isEmpty()}">Fleet construction will add army lists here.</p>
+        </section>
+        <section class="data-panel">
+            <div class="section-heading compact"><div><p class="eyebrow">BOARDS</p><h2>Battlefield</h2></div><span class="count" th:text="${boards.size()}"></span></div>
+            <div class="data-list" th:if="${!boards.isEmpty()}"><article class="data-item" th:each="board : ${boards}"><div><h3 th:text="${board.boardName}"></h3><p th:text="${board.role}"></p></div><code th:text="|${board.width} x ${board.height}|"></code></article></div>
+            <p class="muted" th:if="${boards.isEmpty()}">Choose a board to establish the battlefield.</p>
+        </section>
+    </div>
+    <section class="data-panel runtime-panel">
+        <div class="section-heading compact"><div><p class="eyebrow">TURN LOG</p><h2>Timeline</h2></div><span class="count" th:text="|${turns.size()} turns / ${events.size()} events|"></span></div>
+        <div class="data-list" th:if="${!turns.isEmpty()}"><article class="data-item" th:each="turn : ${turns}"><div><span class="card-kicker" th:text="|SEQUENCE ${turn.sequence}|"></span><h3 th:text="|Round ${turn.roundNumber} / ${turn.phaseName != null ? turn.phaseName : 'Unassigned phase'}|"></h3></div><code th:text="${turn.endedAt == null ? 'active' : 'ended'}"></code></article></div>
+        <p class="muted" th:if="${turns.isEmpty()}">Turn records will appear when the phase engine starts.</p>
+    </section>
+    <section class="data-panel runtime-panel"><p class="eyebrow">NEXT RUNTIME STEP</p><h2>Turn engine</h2><p class="lede">The session and player state are now persistent. Next, actions will create turns and append events here so the match can be replayed.</p></section>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+<script>
+    const playerForm = document.querySelector('#player-form');
+    const playerMessage = document.querySelector('#player-message');
+    playerForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const form = new FormData(playerForm);
+        const response = await fetch(`/api/v1/sessions/${playerForm.dataset.sessionId}/players`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seatNumber: Number(form.get('seatNumber')), displayName: form.get('displayName'), playerKind: form.get('playerKind') }) });
+        if (response.ok) window.location.reload(); else playerMessage.textContent = 'Could not add player.';
+    });
+</script>
+</body>
+</html>

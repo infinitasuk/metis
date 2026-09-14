@@ -1,0 +1,10 @@
+target/
+*.iml
+.idea/
+.vscode/
+*.log
+.$*.bkp
+.env
+**/.env
+!.env.example
+**/node_modules/

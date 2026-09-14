@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<header th:fragment="header" class="site-header">
+    <script>
+        document.documentElement.dataset.theme = localStorage.getItem('metis-theme') || 'workspace';
+    </script>
+    <a class="brand" href="/">
+        <span class="brand-mark">M</span>
+        <span><strong>METIS</strong><small>tabletop intelligence</small></span>
+    </a>
+    <nav><a href="/simulator">Game Simulator</a><a href="/admin">Admin</a><a href="/design-options">Design</a></nav>
+</header>
+
+<footer th:fragment="footer" class="site-footer">
+    <span>METIS / tabletop intelligence</span>
+    <span>Simulator / Admin</span>
+</footer>
+</body>
+</html>

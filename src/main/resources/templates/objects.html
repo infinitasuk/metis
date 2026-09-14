@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="'METIS / ' + ${game.gameName} + ' / Objects'"></title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main class="shell">
+    <a class="back-link" th:href="@{/admin/games/{id}(id=${game.gameId})}" th:text="'&lt;- ' + ${game.gameName}"></a>
+    <section class="hero-panel compact-hero">
+        <p class="eyebrow">GENERIC STATIC CONTENT</p>
+        <h1>Everything that<br><em>can be selected.</em></h1>
+        <p class="lede">Cards, profiles, tokens, dice, abilities and other reusable definitions imported for this game.</p>
+    </section>
+
+    <form class="object-filters" method="get" th:action="@{/admin/games/{id}/objects(id=${game.gameId})}">
+        <label>Search <input type="search" name="q" th:value="${query}" placeholder="Object name or source ID"></label>
+        <label>Type
+            <select name="type">
+                <option value="">All object types</option>
+                <option th:each="typeOption : ${objectTypes}" th:value="${typeOption.code}" th:text="|${typeOption.name} (${typeOption.objectCount})|" th:selected="${typeOption.code == selectedType}"></option>
+            </select>
+        </label>
+        <button class="button" type="submit">Filter <span>-&gt;</span></button>
+    </form>
+
+    <section class="section-heading object-heading">
+        <div><p class="eyebrow">RESULTS</p><h2 th:text="${selectedType == '' ? 'All objects' : selectedType}"></h2></div>
+        <span class="count" th:text="${objects.size()} + ' objects'"></span>
+    </section>
+    <section class="object-list" th:if="${!objects.isEmpty()}">
+        <a class="object-card" th:each="item : ${objects}" th:href="@{/admin/game-objects/{id}(id=${item.objectId})}">
+            <div class="object-card-top"><span class="card-kicker" th:text="${item.typeName}"></span><span class="object-id" th:text="${item.typeCode}"></span></div>
+            <h3 th:text="${item.name}"></h3>
+            <p th:text="${item.description}"></p>
+            <div class="object-card-bottom"><code th:text="${item.code}"></code><span class="arrow">Inspect <span>-&gt;</span></span></div>
+        </a>
+    </section>
+    <section class="empty-state" th:if="${objects.isEmpty()}">
+        <p class="eyebrow">NO MATCHES</p><h2>Nothing found.</h2><p class="muted">Try a different name, source ID or object type.</p>
+    </section>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

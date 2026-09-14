@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="'METIS / ' + ${object.name}"></title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main class="shell">
+    <a class="back-link" th:href="@{/admin/games/{id}/objects(id=${object.gameId})}">&lt;- Object explorer</a>
+    <section class="hero-panel compact-hero">
+        <p class="eyebrow" th:text="${object.typeName}"></p>
+        <h1 th:text="${object.name}"></h1>
+        <p class="lede" th:text="${object.description}"></p>
+        <div class="tag-row"><span class="tag accent" th:text="${object.typeCode}"></span><span class="tag" th:text="'ID ' + ${object.objectId}"></span></div>
+    </section>
+
+    <div class="two-column object-detail-grid">
+        <section class="data-panel">
+        <div class="section-heading compact"><div><p class="eyebrow">IDENTITY</p><h2>Source record</h2></div><a class="text-link" th:href="@{/admin/game-objects/{id}/edit(id=${object.objectId})}">Edit object -&gt;</a></div>
+            <div class="detail-block"><span class="muted">Stable object code</span><code th:text="${object.code}"></code></div>
+            <div class="detail-block"><span class="muted">Display text</span><p th:text="${object.displayText}"></p></div>
+            <div class="detail-block"><span class="muted">Provenance</span><code th:text="${object.sourceReference}"></code></div>
+        </section>
+        <section class="data-panel">
+            <div class="section-heading compact"><div><p class="eyebrow">ELIGIBILITY</p><h2>Allowed by</h2></div><span class="count" th:text="${object.eligibility.size()}"></span></div>
+            <div class="data-list" th:if="${!object.eligibility.isEmpty()}"><article class="data-item" th:each="item : ${object.eligibility}"><div><h3 th:text="${item.targetName}"></h3><p th:text="${item.type}"></p></div><code th:text="${item.condition}"></code></article></div>
+            <p class="muted" th:if="${object.eligibility.isEmpty()}">No explicit eligibility target recorded.</p>
+        </section>
+    </div>
+
+    <section class="data-panel rules-panel">
+        <div class="section-heading compact"><div><p class="eyebrow">ASSOCIATIONS</p><h2>Used by</h2></div><span class="count" th:text="${object.associations.size()}"></span></div>
+        <div class="data-list" th:if="${!object.associations.isEmpty()}"><article class="data-item" th:each="item : ${object.associations}"><div><span class="card-kicker" th:text="${item.ownerType}"></span><h3 th:text="${item.ownerName}"></h3><p th:text="${item.usageCode}"></p></div><code th:text="|quantity ${item.quantity} / ${item.configuration}|"></code></article></div>
+        <p class="muted" th:if="${object.associations.isEmpty()}">This definition is not currently attached to another static record.</p>
+    </section>
+
+    <section class="data-panel rules-panel">
+        <div class="section-heading compact"><div><p class="eyebrow">STRUCTURED DATA</p><h2>Definition payload</h2></div></div>
+        <pre class="json-block" th:text="${object.data}"></pre>
+    </section>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

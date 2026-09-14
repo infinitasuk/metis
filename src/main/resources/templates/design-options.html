@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>METIS / Design Options</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 40px; background: #e8e9e7; color: #192329; font-family: Arial, sans-serif; }
+        .page { max-width: 1440px; margin: auto; }
+        .intro { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 30px; }
+        h1, h2, p { margin-top: 0; }
+        h1 { margin-bottom: 8px; font: 400 48px/1 Georgia, serif; letter-spacing: -.04em; }
+        .intro p { margin-bottom: 0; color: #667176; }
+        .hint { color: #667176; font-size: 12px; text-transform: uppercase; letter-spacing: .12em; }
+        .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+        .option { overflow: hidden; background: #fff; border: 1px solid #cfd4d1; box-shadow: 0 15px 35px #15252b12; }
+        .option-head { display: flex; align-items: baseline; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid #d9ddda; }
+        .option-head h2 { margin: 0; font-size: 17px; }
+        .option-head span { color: #728080; font-size: 10px; font-weight: bold; letter-spacing: .12em; text-transform: uppercase; }
+        .screen { min-height: 310px; padding: 17px; }
+        .mini-nav { display: flex; align-items: center; justify-content: space-between; height: 23px; margin-bottom: 22px; font-size: 8px; font-weight: bold; letter-spacing: .1em; text-transform: uppercase; }
+        .mini-nav b { font-size: 11px; }
+        .mini-nav span { margin-left: 13px; }
+        .screen h3 { margin: 0 0 8px; font-size: 25px; line-height: .98; }
+        .screen p { max-width: 290px; margin-bottom: 18px; font-size: 9px; line-height: 1.5; opacity: .7; }
+        .mini-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .mini-action { min-height: 115px; padding: 14px; border: 1px solid currentColor; }
+        .mini-action strong { display: block; margin-bottom: 45px; font-size: 11px; }
+        .mini-action small { font-size: 8px; opacity: .7; }
+        .choose-design { width: calc(100% - 34px); margin: 14px 17px 17px; padding: 11px 14px; color: #fff; background: #1d292f; border: 0; font: inherit; font-size: 10px; font-weight: bold; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
+        .choose-design:hover { background: #d45735; }
+        .choose-design.selected { background: #236c69; }
+        .selection { min-height: 17px; margin: 16px 0 0; color: #236c69; font-size: 12px; font-weight: bold; }
+        .tactical { color: #e9f2f0; background: #101c26; }
+        .tactical .mini-nav { color: #73d2bf; border-bottom: 1px solid #2b414b; }
+        .tactical .mini-nav b { color: #fff; }
+        .tactical .mini-action:first-child { color: #fff; background: #155b61; border-color: #42b7ac; }
+        .tactical .mini-action:last-child { color: #ff9b76; background: #222c35; border-color: #684238; }
+        .tactical .mini-action small { color: #d5e3de; }
+        .rulebook { color: #312920; background: #eadfca; font-family: Georgia, serif; }
+        .rulebook .mini-nav { color: #7f3325; border-bottom: 1px solid #c5b495; font-family: Arial, sans-serif; }
+        .rulebook .mini-action { background: #f5eddb; border-color: #b89f78; box-shadow: 3px 3px 0 #c9b796; }
+        .rulebook .mini-action:first-child { color: #8e3427; }
+        .rulebook .mini-action:last-child { color: #4b5e55; }
+        .workspace { color: #253143; background: #f6f8fb; }
+        .workspace .mini-nav { color: #637188; border-bottom: 1px solid #dce2ec; }
+        .workspace .mini-action { background: #fff; border-color: #d5ddea; border-radius: 5px; box-shadow: 0 5px 12px #34486712; }
+        .workspace .mini-action:first-child { color: #2864c7; }
+        .workspace .mini-action:last-child { color: #253143; }
+        .operations { color: #d9f5ff; background: #090c14; font-family: Consolas, monospace; }
+        .operations .mini-nav { color: #53d9ff; border-bottom: 1px solid #1d3d51; }
+        .operations h3 { color: #fff; text-transform: uppercase; }
+        .operations .mini-action { background: #101624; border-color: #26506b; }
+        .operations .mini-action:first-child { color: #53d9ff; box-shadow: inset 3px 0 #53d9ff; }
+        .operations .mini-action:last-child { color: #ffbf52; box-shadow: inset 3px 0 #ffbf52; }
+        .label { display: inline-block; margin-bottom: 13px; font-size: 8px; font-weight: bold; letter-spacing: .14em; text-transform: uppercase; opacity: .7; }
+        @media (max-width: 800px) { body { padding: 20px; } .gallery { grid-template-columns: 1fr; } .intro { display: block; } .hint { display: block; margin-top: 12px; } }
+    </style>
+</head>
+<body>
+<main class="page">
+    <header class="intro">
+        <div><p class="hint">METIS / Visual comparison</p><h1>Four possible identities.</h1><p>These are visual directions for the Simulator and Admin split. They are previews, not final screens.</p></div>
+        <span class="hint">Choose one to implement</span>
+    </header>
+    <section class="gallery">
+        <article class="option"><header class="option-head"><h2>01 / Tactical Command Centre</h2><span>Focused / operational</span></header><div class="screen tactical"><div class="mini-nav"><b>METIS</b><div><span>SIMULATOR</span><span>ADMIN</span></div></div><span class="label">Choose workspace</span><h3>Control the<br>battlefield.</h3><p>A dark, information-dense command interface for running matches and maintaining the engine.</p><div class="mini-actions"><div class="mini-action"><strong>Game Simulator</strong><small>Launch a match -&gt;</small></div><div class="mini-action"><strong>Admin</strong><small>Manage engine -&gt;</small></div></div></div><button class="choose-design" data-theme="tactical">Use this design</button></article>
+        <article class="option"><header class="option-head"><h2>02 / Digital Rulebook</h2><span>Warm / tabletop</span></header><div class="screen rulebook"><div class="mini-nav"><b>METIS</b><div><span>PLAY</span><span>RULES</span><span>ADMIN</span></div></div><span class="label">The Armada compendium</span><h3>Begin a new<br>chapter.</h3><p>A tactile, paper-like experience where game setup feels like opening a beautifully organised rulebook.</p><div class="mini-actions"><div class="mini-action"><strong>Game Simulator</strong><small>Play a scenario -&gt;</small></div><div class="mini-action"><strong>Admin</strong><small>Edit the rules -&gt;</small></div></div></div><button class="choose-design" data-theme="rulebook">Use this design</button></article>
+        <article class="option"><header class="option-head"><h2>03 / Modern Product Workspace</h2><span>Clear / scalable</span></header><div class="screen workspace"><div class="mini-nav"><b>METIS <i>workspace</i></b><div><span>SIMULATOR</span><span>ADMIN</span></div></div><span class="label">Your workspaces</span><h3>What do you want<br>to do today?</h3><p>A calm, highly usable product interface designed to grow into multiple games and team workflows.</p><div class="mini-actions"><div class="mini-action"><strong>Game Simulator</strong><small>Continue to setup -&gt;</small></div><div class="mini-action"><strong>Admin</strong><small>Open catalogue -&gt;</small></div></div></div><button class="choose-design" data-theme="workspace">Use this design</button></article>
+        <article class="option"><header class="option-head"><h2>04 / Sci-Fi Operations Deck</h2><span>Technical / futuristic</span></header><div class="screen operations"><div class="mini-nav"><b>METIS // CORE</b><div><span>PLAY</span><span>ENGINE</span></div></div><span class="label">System ready</span><h3>SELECT<br>OPERATION_</h3><p>High-contrast panels, telemetry and terminal language for a more fictional command-system feel.</p><div class="mini-actions"><div class="mini-action"><strong>GAME_SIM</strong><small>Initialize -&gt;</small></div><div class="mini-action"><strong>ENGINE_ADMIN</strong><small>Modify core -&gt;</small></div></div></div><button class="choose-design" data-theme="operations">Use this design</button></article>
+    </section>
+    <p class="selection" id="selection" aria-live="polite"></p>
+</main>
+<script>
+    const buttons = document.querySelectorAll('.choose-design');
+    const selection = document.querySelector('#selection');
+    const applyTheme = (theme) => {
+        document.documentElement.dataset.theme = theme;
+        localStorage.setItem('metis-theme', theme);
+        buttons.forEach(button => button.classList.toggle('selected', button.dataset.theme === theme));
+        buttons.forEach(button => { button.textContent = button.dataset.theme === theme ? 'Selected design' : 'Use this design'; });
+        selection.textContent = 'Your design is saved for this browser. Open Simulator or Admin to preview it.';
+        if (document.activeElement && document.activeElement.dataset.theme === theme) {
+            window.setTimeout(() => window.location.assign('/'), 250);
+        }
+    };
+    buttons.forEach(button => button.addEventListener('click', () => applyTheme(button.dataset.theme)));
+    const savedTheme = localStorage.getItem('metis-theme') || 'workspace';
+    document.documentElement.dataset.theme = savedTheme;
+    buttons.forEach(button => {
+        button.classList.toggle('selected', button.dataset.theme === savedTheme);
+        button.textContent = button.dataset.theme === savedTheme ? 'Selected design' : 'Use this design';
+    });
+</script>
+</body>
+</html>

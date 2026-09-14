@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="'METIS / Simulator / ' + ${game.gameName}"></title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main class="shell">
+    <a class="back-link" href="/simulator">&lt;- Game Simulator</a>
+    <section class="hero-panel compact-hero">
+        <p class="eyebrow">SIMULATION SETUP</p>
+        <h1 th:text="${game.gameName}"></h1>
+        <p class="lede">Configure the match using the loaded game engine.</p>
+        <div class="tag-row"><span class="tag" th:text="|${game.minimumNumberOfPlayers}-${game.maximumNumberOfPlayers} players|"></span><span class="tag" th:text="|up to ${game.maximumNumberOfCpu} CPU players|"></span></div>
+    </section>
+    <form class="data-panel setup-panel" id="setup-form" th:attr="data-game-id=${game.gameId}">
+        <div class="section-heading compact"><div><p class="eyebrow">MATCH CONFIGURATION</p><h2>Prepare a game</h2></div></div>
+        <div class="setup-grid">
+            <label>Game mode<select id="game-mode"><option value="">Choose a mode</option><option th:each="mode : ${gameModes}" th:value="${mode.gameModeId}" th:text="${mode.name}"></option></select></label>
+            <label>Scenario<select id="scenario"><option value="">Choose a scenario</option><option th:each="scenario : ${scenarios}" th:value="${scenario.scenarioId}" th:text="${scenario.name}"></option></select></label>
+            <label>Fleet format<select id="fleet-format"><option th:each="format : ${fleetFormats}" th:value="${format.fleetFormatId}" th:text="${format.name}"></option></select></label>
+        </div>
+        <div class="simulator-note"><span class="eyebrow">RUNTIME LAYER</span><p>The match board and turn engine will appear here when the game-instance runtime is connected to this game definition.</p></div>
+        <button class="button" type="submit">Create simulation <span>-&gt;</span></button>
+        <p class="form-message" id="setup-message" aria-live="polite"></p>
+    </form>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+<script>
+    const setupForm = document.querySelector('#setup-form');
+    const setupMessage = document.querySelector('#setup-message');
+    setupForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        setupMessage.textContent = 'Creating simulation...';
+        const value = id => document.querySelector(id).value;
+        const body = { name: `${setupForm.dataset.gameId} simulation`, gameModeId: value('#game-mode') || null, scenarioId: value('#scenario') || null, fleetFormatId: value('#fleet-format') || null };
+        const response = await fetch(`/api/v1/games/${setupForm.dataset.gameId}/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!response.ok) { setupMessage.textContent = 'Could not create the simulation.'; return; }
+        const session = await response.json();
+        window.location.assign(`/simulator/sessions/${session.sessionId}`);
+    });
+</script>
+</body>
+</html>

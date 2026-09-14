@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>METIS / Admin</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main class="shell">
+    <section class="intro">
+        <p class="eyebrow">ADMIN / GAME ENGINE</p>
+        <h1>Shape what can exist<br><em>before</em> the battle begins.</h1>
+        <p class="lede">Inspect and edit the static game definitions that power the METIS simulator.</p>
+    </section>
+
+    <section class="section-heading">
+        <div><p class="eyebrow">GAME ENGINE</p><h2>Game definitions</h2></div>
+        <span class="count" th:text="${games.size()} + ' loaded'"></span>
+    </section>
+    <section class="game-grid">
+        <a class="game-card" th:each="game : ${games}" th:href="@{/admin/games/{id}(id=${game.gameId})}">
+            <div class="card-kicker">GAME <span th:text="'0' + ${game.gameId}"></span></div>
+            <h3 th:text="${game.gameName}"></h3>
+            <p th:text="${game.gameDescription}"></p>
+            <div class="metric-row">
+                <span><b th:text="${game.factionCount}"></b> factions</span>
+                <span><b th:text="${game.unitTypeCount}"></b> types</span>
+                <span><b th:text="${game.variantCount}"></b> variants</span>
+                <span><b th:text="${game.objectCount}"></b> objects</span>
+            </div>
+            <span class="arrow">Inspect engine <span>-&gt;</span></span>
+        </a>
+    </section>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

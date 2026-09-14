@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>METIS / Game Simulator</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main class="shell">
+    <a class="back-link" href="/">&lt;- Choose workspace</a>
+    <section class="intro compact-intro">
+        <p class="eyebrow">GAME SIMULATOR / 01</p>
+        <h1>Choose a game<br><em>to simulate.</em></h1>
+        <p class="lede">Select a loaded game to configure a match. The simulator uses the definitions maintained in Admin.</p>
+    </section>
+    <section class="section-heading">
+        <div><p class="eyebrow">AVAILABLE ENGINES</p><h2>Start a game</h2></div>
+        <span class="count" th:text="${games.size()} + ' loaded'"></span>
+    </section>
+    <section class="game-grid">
+        <a class="game-card" th:each="game : ${games}" th:href="@{/simulator/games/{id}(id=${game.gameId})}">
+            <div class="card-kicker">SIMULATION <span th:text="'0' + ${game.gameId}"></span></div>
+            <h3 th:text="${game.gameName}"></h3>
+            <p th:text="${game.gameDescription}"></p>
+            <div class="metric-row"><span><b th:text="|${game.minimumNumberOfPlayers}-${game.maximumNumberOfPlayers}|"></b> players</span><span><b th:text="${game.maximumNumberOfCpu}"></b> CPU max</span></div>
+            <span class="arrow">Configure match <span>-&gt;</span></span>
+        </a>
+    </section>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

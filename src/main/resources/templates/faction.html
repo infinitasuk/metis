@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="'METIS / ' + ${faction.factionName}"></title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main class="shell">
+    <a class="back-link" th:href="@{/games/{id}(id=${faction.gameId})}" th:text="'&lt;- ' + ${faction.gameName}"></a>
+    <section class="hero-panel compact-hero">
+        <p class="eyebrow" th:text="${faction.gameName} + ' / FACTION'"></p>
+        <h1 th:text="${faction.factionName}"></h1>
+        <p class="lede" th:text="${faction.factionDescription}"></p>
+    </section>
+
+    <section th:each="classification : ${faction.classifications}" class="classification-section">
+        <div class="section-heading"><div><p class="eyebrow">CLASSIFICATION</p><h2 th:text="${classification.name}"></h2></div><span class="count" th:text="${classification.unitTypeCount} + ' types'"></span></div>
+        <div class="type-grid">
+            <a class="type-card" th:each="unitType : ${classification.unitTypes}" th:href="@{/unit-types/{id}(id=${unitType.unitTypeId})}">
+                <div><h3 th:text="${unitType.name}"></h3><p th:text="${unitType.description}"></p></div>
+                <span class="type-count" th:text="${unitType.variantCount} + ' variants  -&gt;'"></span>
+            </a>
+        </div>
+    </section>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

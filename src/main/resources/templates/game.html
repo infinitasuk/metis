@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="'METIS / ' + ${game.gameName}"></title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main class="shell">
+    <a class="back-link" href="/admin">&lt;- Admin</a>
+    <section class="hero-panel">
+        <p class="eyebrow">GAME DEFINITION</p>
+        <h1 th:text="${game.gameName}"></h1>
+        <p class="lede" th:text="${game.gameDescription}"></p>
+        <div class="tag-row">
+            <span class="tag" th:text="|${game.minimumNumberOfPlayers}-${game.maximumNumberOfPlayers} players|"></span>
+            <span class="tag" th:text="|${game.minimumNumberOfCpu}-${game.maximumNumberOfCpu} CPU players|"></span>
+            <span class="tag accent">static data</span>
+        </div>
+        <div class="hero-actions"><a class="button" th:href="@{/admin/games/{id}/objects(id=${game.gameId})}">Browse every object <span>-&gt;</span></a><a class="button secondary-button" th:href="@{/admin/games/{id}/edit(id=${game.gameId})}">Edit definition</a></div>
+    </section>
+    <p class="save-message" th:if="${param.saved != null}">Game definition saved.</p>
+
+    <section class="data-panel source-panel">
+        <div class="section-heading compact"><div><p class="eyebrow">PROVENANCE</p><h2>Catalogue release</h2></div><span class="count" th:text="${versions.size()} + ' version' + (${versions.size()} == 1 ? '' : 's')"></span></div>
+        <div class="data-list">
+            <article th:each="version : ${versions}" class="data-item">
+                <div><h3 th:text="${version.name}"></h3><p th:text="|${version.sourceName} / revision ${version.sourceRevision}|"></p></div>
+                <div><code th:text="${version.releaseDate}"></code><a class="source-link" th:if="${version.sourceUrl != null}" th:href="${version.sourceUrl}" target="_blank" rel="noreferrer">source -&gt;</a></div>
+            </article>
+        </div>
+    </section>
+
+    <section class="section-heading"><div><p class="eyebrow">ROSTER STRUCTURE</p><h2>Factions</h2></div></section>
+    <section class="faction-grid">
+        <a class="faction-card" th:each="faction : ${factions}" th:href="@{/factions/{id}(id=${faction.factionId})}">
+            <span class="card-kicker">FACTION</span>
+            <h3 th:text="${faction.factionName}"></h3>
+            <p th:text="${faction.factionDescription}"></p>
+            <div class="metric-row"><span><b th:text="${faction.unitTypeCount}"></b> types</span><span><b th:text="${faction.variantCount}"></b> variants</span></div>
+            <span class="arrow">View faction <span>-&gt;</span></span>
+        </a>
+    </section>
+
+    <div class="two-column">
+        <section class="data-panel">
+            <div class="section-heading compact"><div><p class="eyebrow">BOARD</p><h2>Terrain</h2></div><span class="count" th:text="${terrain.size()}"></span></div>
+            <div class="data-list" th:if="${!terrain.isEmpty()}">
+                <article th:each="item : ${terrain}" class="data-item">
+                    <div><h3 th:text="${item.name}"></h3><span class="muted" th:text="${item.type}"></span></div>
+                    <code th:text="${item.characteristics}"></code>
+                </article>
+            </div>
+        </section>
+        <section class="data-panel">
+            <div class="section-heading compact"><div><p class="eyebrow">GAME MODES</p><h2>Ways to play</h2></div><span class="count" th:text="${gameModes.size()}"></span></div>
+            <div class="data-list">
+                <article th:each="item : ${gameModes}" class="data-item"><div><h3 th:text="${item.name}"></h3><p th:text="${item.description}"></p><code th:text="${item.configuration}"></code></div></article>
+            </div>
+        </section>
+    </div>
+
+    <section class="data-panel rules-panel">
+        <div class="section-heading compact"><div><p class="eyebrow">REFERENCE ONLY</p><h2>Rule areas</h2></div><span class="count" th:text="${rules.size()} + ' areas'"></span></div>
+        <div class="rule-grid"><article th:each="rule : ${rules}" class="rule-item"><h3 th:text="${rule.name}"></h3><p th:text="${rule.description}"></p><code th:text="${rule.characteristics}"></code></article></div>
+    </section>
+
+    <section class="data-panel rules-panel">
+        <div class="section-heading compact"><div><p class="eyebrow">GENERIC CONTENT</p><h2>Object catalogue</h2></div><a class="text-link" th:href="@{/admin/games/{id}/objects(id=${game.gameId})}">Open explorer -&gt;</a></div>
+        <div class="object-type-grid">
+            <a class="object-type" th:each="type : ${objectTypes}" th:href="@{/admin/games/{id}/objects(id=${game.gameId},type=${type.code})}">
+                <span class="card-kicker" th:text="${type.kind}"></span><h3 th:text="${type.name}"></h3><span class="type-count" th:text="${type.objectCount} + ' objects  -&gt;'"></span>
+            </a>
+        </div>
+    </section>
+
+    <div class="two-column structure-grid">
+        <section class="data-panel">
+            <div class="section-heading compact"><div><p class="eyebrow">ROUND STRUCTURE</p><h2>Phases</h2></div><span class="count" th:text="${phases.size()} + ' phases'"></span></div>
+            <div class="data-list"><article th:each="phase : ${phases}" class="data-item"><div><h3 th:text="${phase.name}"></h3><p th:text="${phase.description}"></p><details><summary>Configuration</summary><code th:text="${phase.configuration}"></code></details></div><code th:text="${phase.code}"></code></article></div>
+        </section>
+        <section class="data-panel">
+            <div class="section-heading compact"><div><p class="eyebrow">PLAYER VERBS</p><h2>Actions</h2></div><span class="count" th:text="${actions.size()} + ' actions'"></span></div>
+            <div class="data-list"><article th:each="action : ${actions}" class="data-item"><div><h3 th:text="${action.name}"></h3><p th:text="${action.description}"></p><details><summary>Configuration</summary><code th:text="${action.configuration}"></code></details></div><code th:text="${action.code}"></code></article></div>
+        </section>
+    </div>
+
+    <div class="two-column structure-grid">
+        <section class="data-panel">
+            <div class="section-heading compact"><div><p class="eyebrow">SCENARIO LAYER</p><h2>Scenarios</h2></div><span class="count" th:text="${scenarios.size()} + ' scenarios'"></span></div>
+            <div class="data-list"><article th:each="scenario : ${scenarios}" class="data-item"><div><h3 th:text="${scenario.name}"></h3><p th:text="${scenario.description}"></p><span class="muted" th:text="|${scenario.boardCount} board / ${scenario.objectCount} objects|"></span><details><summary>Configuration</summary><code th:text="${scenario.configuration}"></code></details></div><code th:text="${scenario.code}"></code></article></div>
+        </section>
+        <section class="data-panel">
+            <div class="section-heading compact"><div><p class="eyebrow">SPATIAL DATA</p><h2>Boards</h2></div><span class="count" th:text="${boards.size()} + ' boards'"></span></div>
+            <div class="data-list"><article th:each="board : ${boards}" class="data-item"><div><h3 th:text="${board.name}"></h3><p th:text="${board.coordinateSystem}"></p><details><summary>Configuration</summary><code th:text="${board.configuration}"></code></details></div><code th:text="|${board.width} x ${board.height} mm|"></code></article></div>
+        </section>
+    </div>
+
+    <section class="data-panel rules-panel">
+        <div class="section-heading compact"><div><p class="eyebrow">CONSTRUCTION</p><h2>Fleet formats</h2></div><span class="count" th:text="${fleetFormats.size()} + ' formats'"></span></div>
+        <div class="rule-grid"><article th:each="format : ${fleetFormats}" class="rule-item"><h3 th:text="${format.name}"></h3><p th:text="|${format.gameModeName} / ${format.pointsLimit} points|"></p><code th:text="|${format.factionCount} factions / ${format.limitCount} limits|"></code><details><summary>Format data</summary><code th:text="|${format.configuration} / ${format.limits}|"></code></details></article></div>
+    </section>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

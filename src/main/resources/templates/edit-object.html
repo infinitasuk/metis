@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="'METIS / Edit / ' + ${object.name}"></title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main class="shell">
+    <a class="back-link" th:href="@{/admin/game-objects/{id}(id=${object.objectId})}">&lt;- Object detail</a>
+    <section class="intro compact-intro"><p class="eyebrow" th:text="'ADMIN / ' + ${object.typeName}"></p><h1>Edit<br><em>definition.</em></h1><p class="lede">Update this generic game-engine object. JSON fields must remain valid JSON.</p></section>
+    <form class="edit-form" method="post" th:action="@{/admin/game-objects/{id}/edit(id=${object.objectId})}">
+        <label>Object name<input name="objectName" required th:value="${object.name}"></label>
+        <label>Description<textarea name="objectDescription" rows="3" th:text="${object.description}"></textarea></label>
+        <label>Display text<textarea name="displayText" rows="4" th:text="${object.displayText}"></textarea></label>
+        <label>Definition JSON<textarea class="code-input" name="objectData" rows="12" required th:text="${object.data}"></textarea></label>
+        <label>Source reference JSON<textarea class="code-input" name="sourceReference" rows="6" required th:text="${object.sourceReference}"></textarea></label>
+        <div class="form-actions"><a class="text-link" th:href="@{/admin/game-objects/{id}(id=${object.objectId})}">Cancel</a><button class="button" type="submit">Save object <span>-&gt;</span></button></div>
+    </form>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

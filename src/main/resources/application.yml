@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: metis-web
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/metis?escapeSyntaxCallMode=callIfNoReturn}
+    username: ${DB_USER:metis}
+    password: ${DB_PASSWORD:metis-local-dev-password}
+  thymeleaf:
+    cache: false
+
+server:
+  port: ${PORT:8080}
