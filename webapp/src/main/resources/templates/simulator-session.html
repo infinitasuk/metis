@@ -14,7 +14,8 @@
         <p class="eyebrow">LIVE SIMULATION</p>
         <h1 th:text="${session.sessionName}"></h1>
         <p class="lede" th:text="|${session.gameName} / ${session.sessionCode}|"></p>
-        <div class="tag-row"><span class="tag accent" th:text="${session.status}"></span><span class="tag" th:text="|Round ${session.currentRound}|"></span></div>
+        <div class="tag-row"><span class="tag accent" th:text="${session.status}"></span><span class="tag" th:text="|Round ${session.currentRound}|"></span><span class="tag" th:text="|Game definition ${session.gameVersionCode != null ? session.gameVersionCode : 'unassigned'}|"></span></div>
+        <p class="muted" th:text="|Engine ${session.engineVersion} / API ${session.apiVersion} / Events ${session.eventSchemaVersion}|"></p>
     </section>
     <div class="two-column">
         <section class="data-panel">

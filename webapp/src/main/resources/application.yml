@@ -10,3 +10,13 @@ spring:
 
 server:
   port: ${PORT:8080}
+
+metis:
+  engine:
+    version: ${METIS_ENGINE_VERSION:0.1.0-SNAPSHOT}
+  api:
+    version: ${METIS_API_VERSION:v1}
+  event:
+    schema-version: ${METIS_EVENT_SCHEMA_VERSION:1}
+  git:
+    sha: ${METIS_GIT_SHA:unknown}

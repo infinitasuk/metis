@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.net.URI;
 import java.math.BigDecimal;
@@ -34,9 +35,27 @@ import java.util.Map;
 public class BattleApiController {
 
     private final BattleRepository battle;
+    private final String engineVersion;
+    private final String apiVersion;
+    private final int eventSchemaVersion;
+    private final String gitSha;
 
-    public BattleApiController(BattleRepository battle) {
+    public BattleApiController(BattleRepository battle,
+                               @Value("${metis.engine.version:0.1.0-SNAPSHOT}") String engineVersion,
+                               @Value("${metis.api.version:v1}") String apiVersion,
+                               @Value("${metis.event.schema-version:1}") int eventSchemaVersion,
+                               @Value("${metis.git.sha:unknown}") String gitSha) {
         this.battle = battle;
+        this.engineVersion = engineVersion;
+        this.apiVersion = apiVersion;
+        this.eventSchemaVersion = eventSchemaVersion;
+        this.gitSha = gitSha;
+    }
+
+    @GetMapping("/meta")
+    public Map<String, Object> metadata() {
+        return Map.of("engineVersion", engineVersion, "apiVersion", apiVersion,
+                "eventSchemaVersion", eventSchemaVersion, "gitSha", gitSha);
     }
 
     @GetMapping("/sessions")
@@ -48,7 +67,8 @@ public class BattleApiController {
     @PostMapping("/games/{gameId}/sessions")
     public ResponseEntity<BattleSessionDetail> createSession(@PathVariable long gameId,
                                                               @RequestBody CreateSessionRequest request) {
-        long sessionId = battle.createSession(gameId, request.name(), request.gameModeId(), request.scenarioId(), request.fleetFormatId());
+        long sessionId = battle.createSession(gameId, request.name(), request.gameModeId(), request.scenarioId(),
+                request.fleetFormatId(), engineVersion, apiVersion, eventSchemaVersion);
         return ResponseEntity.created(URI.create("/api/v1/sessions/" + sessionId))
                 .body(getSession(sessionId));
     }

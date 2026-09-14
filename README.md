@@ -52,5 +52,7 @@ The default database settings match `docker/.env`. Override them with `DB_URL`,
   database ownership boundaries.
 - `IMPLEMENTATION_PLAN.md` tracks the concrete development phases and immediate
   work queue.
+- `VERSIONING_DESIGN.md` defines software, API, database, event and
+  game-definition versioning.
 - `METIS_PROJECT_PLAN.md` defines the staged path from catalogue to web POC,
   MVP, production Armada application and multi-game platform.

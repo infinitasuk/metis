@@ -33,6 +33,8 @@ Completed foundations:
 - REST resources for the runtime foundation.
 - Simulator/Admin WebApp areas.
 - Stored routines for runtime CRUD.
+- Version metadata for engine builds, API contracts, event schemas and game
+  definition revisions.
 - Architecture and runtime model documentation.
 
 Known gaps:
@@ -40,6 +42,8 @@ Known gaps:
 - WebApp still contains legacy direct JDBC access to static catalogue data.
 - The WebApp and GamingEngine are not yet separate runtime services.
 - Static definitions are not fully revisioned or publishable.
+- Build SHA injection is available for Docker deployments but is not yet part of
+  an automated release pipeline.
 - The engine does not yet validate or execute game actions.
 - No automated tests currently exist in the repository.
 

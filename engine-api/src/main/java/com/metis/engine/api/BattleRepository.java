@@ -35,13 +35,15 @@ public class BattleRepository {
                 ? Optional.of(new BattleSessionDetail(
                         rs.getLong("session_id"), rs.getLong("game_id"),
                         rs.getString("game_name"), rs.getObject("game_version_id", Long.class),
+                        rs.getString("game_version_code"),
                         rs.getObject("game_mode_id", Long.class), rs.getObject("scenario_id", Long.class),
                         rs.getObject("fleet_format_id", Long.class),
                         rs.getString("session_name"), rs.getString("session_code"),
                         rs.getString("status"), rs.getInt("current_round"),
                         rs.getObject("current_phase_id", Long.class),
-                        rs.getString("state_json"), rs.getString("created_at"),
-                        rs.getString("updated_at")
+                        rs.getString("state_json"), rs.getString("engine_version"),
+                        rs.getString("api_version"), rs.getInt("event_schema_version"),
+                        rs.getString("created_at"), rs.getString("updated_at")
                 ))
                 : Optional.empty(), sessionId);
     }
@@ -144,20 +146,25 @@ public class BattleRepository {
                 : Optional.empty(), eventId);
     }
 
-    public long createSession(long gameId, String name, Long gameModeId, Long scenarioId, Long fleetFormatId) {
+    public long createSession(long gameId, String name, Long gameModeId, Long scenarioId,
+                              Long fleetFormatId, String engineVersion, String apiVersion,
+                              int eventSchemaVersion) {
         return jdbc.execute((CallableStatementCreator) connection -> {
             CallableStatement statement = connection.prepareCall(
-                    "{call game_instance.sp_session_create(?,?,?,?,?,?)}");
+                    "{call game_instance.sp_session_create(?,?,?,?,?,?,?,?,?)}");
             statement.setLong(1, gameId);
             statement.setString(2, name);
             setNullableLong(statement, 3, gameModeId);
             setNullableLong(statement, 4, scenarioId);
             setNullableLong(statement, 5, fleetFormatId);
-            statement.registerOutParameter(6, Types.BIGINT);
+            setNullableString(statement, 6, engineVersion);
+            setNullableString(statement, 7, apiVersion);
+            statement.setInt(8, eventSchemaVersion);
+            statement.registerOutParameter(9, Types.BIGINT);
             return statement;
         }, (CallableStatementCallback<Long>) statement -> {
             statement.execute();
-            return statement.getLong(6);
+            return statement.getLong(9);
         });
     }
 
@@ -366,11 +373,13 @@ public class BattleRepository {
                                 String createdAt, String updatedAt) {}
 
     public record BattleSessionDetail(long sessionId, long gameId, String gameName,
-                                      Long gameVersionId, Long gameModeId, Long scenarioId,
+                                      Long gameVersionId, String gameVersionCode,
+                                      Long gameModeId, Long scenarioId,
                                       Long fleetFormatId,
                                       String sessionName, String sessionCode, String status,
                                       int currentRound, Long currentPhaseId, String state,
-                                      String createdAt, String updatedAt) {}
+                                      String engineVersion, String apiVersion,
+                                      int eventSchemaVersion, String createdAt, String updatedAt) {}
 
     public record SessionPlayer(long sessionPlayerId, long sessionId, int seatNumber,
                                 String displayName, String playerKind, Long factionId,

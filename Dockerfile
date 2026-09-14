@@ -1,5 +1,7 @@
 FROM maven:3.9-eclipse-temurin-21 AS build
 
+ARG GIT_SHA=unknown
+
 WORKDIR /workspace
 COPY pom.xml .
 COPY engine-core/pom.xml engine-core/pom.xml
@@ -14,6 +16,9 @@ COPY database ./database
 RUN mvn -q -pl webapp -am -DskipTests package
 
 FROM eclipse-temurin:21-jre
+
+ARG GIT_SHA=unknown
+ENV METIS_GIT_SHA=${GIT_SHA}
 
 WORKDIR /app
 COPY --from=build /workspace/webapp/target/metis-web-0.1.0-SNAPSHOT.jar app.jar
