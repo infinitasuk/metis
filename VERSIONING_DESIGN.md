@@ -102,8 +102,10 @@ database or catalogue releases.
   copied game-owned rows to the new revision.
 - Object updates are accepted only when the object and definition are both
   draft-owned.
+- Admin catalogue pages accept `versionId` and display the selected revision;
+  omitted revision IDs resolve to the published revision.
 
-The next versioning task is to make the WebApp select and display a draft
-revision, then route all Admin content mutations through revision-aware
-procedures. Base game metadata and global characteristic types also need
-revision ownership before the lifecycle is complete.
+The next versioning task is to route all remaining Admin content mutations
+through revision-aware procedures. Base game metadata and global
+characteristic types also need revision ownership before the lifecycle is
+complete.

@@ -9,7 +9,7 @@
 <body>
 <header th:replace="~{fragments :: header}"></header>
 <main class="shell">
-    <a class="back-link" th:href="@{/admin/games/{id}/objects(id=${object.gameId})}">&lt;- Object explorer</a>
+    <a class="back-link" th:href="@{/admin/games/{id}/objects(id=${object.gameId},versionId=${object.gameVersionId})}">&lt;- Object explorer</a>
     <section class="hero-panel compact-hero">
         <p class="eyebrow" th:text="${object.typeName}"></p>
         <h1 th:text="${object.name}"></h1>
@@ -19,7 +19,7 @@
 
     <div class="two-column object-detail-grid">
         <section class="data-panel">
-        <div class="section-heading compact"><div><p class="eyebrow">IDENTITY</p><h2>Source record</h2></div><a class="text-link" th:href="@{/admin/game-objects/{id}/edit(id=${object.objectId})}">Edit object -&gt;</a></div>
+        <div class="section-heading compact"><div><p class="eyebrow">IDENTITY</p><h2>Source record</h2></div><a class="text-link" th:if="${selectedVersion.status == 'draft'}" th:href="@{/admin/game-objects/{id}/edit(id=${object.objectId})}">Edit object -&gt;</a></div>
             <div class="detail-block"><span class="muted">Stable object code</span><code th:text="${object.code}"></code></div>
             <div class="detail-block"><span class="muted">Display text</span><p th:text="${object.displayText}"></p></div>
             <div class="detail-block"><span class="muted">Provenance</span><code th:text="${object.sourceReference}"></code></div>

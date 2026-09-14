@@ -43,8 +43,8 @@ Known gaps:
 
 - WebApp still contains legacy direct JDBC access to static catalogue data.
 - The WebApp and GamingEngine are not yet separate runtime services.
-- WebApp catalogue pages still default to the published revision and do not yet
-  provide a complete draft editing workspace.
+- WebApp catalogue pages support selected revisions, but remaining Admin content
+  mutations are not all revision-aware yet.
 - Base game metadata and global characteristic types are not yet revision-owned.
 - Build SHA injection is available for Docker deployments but is not yet part of
   an automated release pipeline.

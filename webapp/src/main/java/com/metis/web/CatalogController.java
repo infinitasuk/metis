@@ -84,22 +84,28 @@ public class CatalogController {
     }
 
     @GetMapping({"/games/{gameId}", "/admin/games/{gameId}"})
-    public String game(@PathVariable long gameId, Model model) {
-        GameSummary game = catalog.findGame(gameId).orElseThrow(this::notFound);
-        model.addAttribute("game", game);
-        model.addAttribute("factions", catalog.findFactions(gameId));
-        model.addAttribute("terrain", catalog.findTerrain(gameId));
-        model.addAttribute("rules", catalog.findRules(gameId));
-        model.addAttribute("gameModes", catalog.findGameModes(gameId));
-        model.addAttribute("phases", catalog.findPhases(gameId));
-        model.addAttribute("actions", catalog.findActions(gameId));
-        model.addAttribute("scenarios", catalog.findScenarios(gameId));
-        model.addAttribute("boards", catalog.findBoards(gameId));
-        model.addAttribute("fleetFormats", catalog.findFleetFormats(gameId));
-        model.addAttribute("objectTypes", catalog.findObjectTypes(gameId));
+    public String game(@PathVariable long gameId,
+                       @RequestParam(required = false) Long versionId,
+                       Model model) {
         List<DefinitionVersion> versions = definitions.findVersions(gameId);
+        DefinitionVersion selectedVersion = selectVersion(gameId, versionId, versions);
+        long selectedVersionId = selectedVersion.definitionId();
+        GameSummary game = catalog.findGame(gameId, selectedVersionId).orElseThrow(this::notFound);
+        model.addAttribute("game", game);
+        model.addAttribute("factions", catalog.findFactions(gameId, selectedVersionId));
+        model.addAttribute("terrain", catalog.findTerrain(gameId, selectedVersionId));
+        model.addAttribute("rules", catalog.findRules(gameId, selectedVersionId));
+        model.addAttribute("gameModes", catalog.findGameModes(gameId, selectedVersionId));
+        model.addAttribute("phases", catalog.findPhases(gameId, selectedVersionId));
+        model.addAttribute("actions", catalog.findActions(gameId, selectedVersionId));
+        model.addAttribute("scenarios", catalog.findScenarios(gameId, selectedVersionId));
+        model.addAttribute("boards", catalog.findBoards(gameId, selectedVersionId));
+        model.addAttribute("fleetFormats", catalog.findFleetFormats(gameId, selectedVersionId));
+        model.addAttribute("objectTypes", catalog.findObjectTypes(gameId, selectedVersionId));
         model.addAttribute("versions", versions);
-        model.addAttribute("canEditDefinition", canEditDefinition(versions));
+        model.addAttribute("selectedVersion", selectedVersion);
+        model.addAttribute("versionId", selectedVersionId);
+        model.addAttribute("canEditGame", false);
         return "game";
     }
 
@@ -108,22 +114,22 @@ public class CatalogController {
                                    @RequestParam String code,
                                    @RequestParam String name,
                                    @RequestParam(required = false) String sourceRevision) {
-        definitions.createVersion(gameId, code, name, sourceRevision);
-        return "redirect:/admin/games/" + gameId;
+        long definitionId = definitions.createVersion(gameId, code, name, sourceRevision);
+        return "redirect:/admin/games/" + gameId + "?versionId=" + definitionId;
     }
 
     @PostMapping("/admin/definitions/{definitionId}/publish")
     public String publishDefinition(@PathVariable long definitionId) {
         DefinitionVersion version = definition(definitionId);
         definitions.publishVersion(definitionId);
-        return "redirect:/admin/games/" + version.gameId();
+        return "redirect:/admin/games/" + version.gameId() + "?versionId=" + definitionId;
     }
 
     @PostMapping("/admin/definitions/{definitionId}/retire")
     public String retireDefinition(@PathVariable long definitionId) {
         DefinitionVersion version = definition(definitionId);
         definitions.retireVersion(definitionId);
-        return "redirect:/admin/games/" + version.gameId();
+        return "redirect:/admin/games/" + version.gameId() + "?versionId=" + definitionId;
     }
 
     @GetMapping("/admin/games/{gameId}/edit")
@@ -151,26 +157,35 @@ public class CatalogController {
     public String objects(@PathVariable long gameId,
                           @RequestParam(defaultValue = "") String type,
                           @RequestParam(defaultValue = "") String q,
+                          @RequestParam(required = false) Long versionId,
                           Model model) {
-        GameSummary game = catalog.findGame(gameId).orElseThrow(this::notFound);
+        List<DefinitionVersion> versions = definitions.findVersions(gameId);
+        DefinitionVersion selectedVersion = selectVersion(gameId, versionId, versions);
+        long selectedVersionId = selectedVersion.definitionId();
+        GameSummary game = catalog.findGame(gameId, selectedVersionId).orElseThrow(this::notFound);
         model.addAttribute("game", game);
-        model.addAttribute("objectTypes", catalog.findObjectTypes(gameId));
+        model.addAttribute("objectTypes", catalog.findObjectTypes(gameId, selectedVersionId));
         model.addAttribute("selectedType", type);
         model.addAttribute("query", q);
-        model.addAttribute("objects", catalog.findObjects(gameId, type, q));
+        model.addAttribute("objects", catalog.findObjects(gameId, type, q, selectedVersionId));
+        model.addAttribute("versions", versions);
+        model.addAttribute("selectedVersion", selectedVersion);
+        model.addAttribute("versionId", selectedVersionId);
         return "objects";
     }
 
     @GetMapping({"/game-objects/{objectId}", "/admin/game-objects/{objectId}"})
     public String object(@PathVariable long objectId, Model model) {
-        model.addAttribute("object", catalog.findObject(objectId).orElseThrow(this::notFound));
+        GameObjectPage object = catalog.findObject(objectId).orElseThrow(this::notFound);
+        model.addAttribute("object", object);
+        model.addAttribute("selectedVersion", definition(object.getGameVersionId()));
         return "object";
     }
 
     @GetMapping("/admin/game-objects/{objectId}/edit")
     public String editObject(@PathVariable long objectId, Model model) {
         GameObjectPage object = catalog.findObject(objectId).orElseThrow(this::notFound);
-        requireEditableDefinition(object.getGameId());
+        requireDraftObject(object);
         model.addAttribute("object", object);
         return "edit-object";
     }
@@ -183,9 +198,9 @@ public class CatalogController {
                                @RequestParam String objectData,
                                @RequestParam String sourceReference) {
         GameObjectPage object = catalog.findObject(objectId).orElseThrow(this::notFound);
-        requireEditableDefinition(object.getGameId());
-        catalog.updateObject(objectId, objectName, objectDescription, displayText,
-                objectData.isBlank() ? "{}" : objectData,
+        requireDraftObject(object);
+        definitions.updateObject(object.getGameVersionId(), objectId, objectName, objectDescription,
+                displayText, objectData.isBlank() ? "{}" : objectData,
                 sourceReference.isBlank() ? "{}" : sourceReference);
         return "redirect:/admin/game-objects/" + objectId + "?saved=true";
     }
@@ -222,5 +237,25 @@ public class CatalogController {
     private boolean canEditDefinition(List<DefinitionVersion> versions) {
         return versions.stream().noneMatch(version -> "published".equals(version.status()))
                 && versions.stream().anyMatch(version -> "draft".equals(version.status()));
+    }
+
+    private DefinitionVersion selectVersion(long gameId, Long versionId,
+                                            List<DefinitionVersion> versions) {
+        if (versionId == null) {
+            return versions.stream()
+                    .filter(version -> "published".equals(version.status()))
+                    .findFirst().orElseThrow(this::notFound);
+        }
+        return versions.stream()
+                .filter(version -> version.definitionId() == versionId)
+                .findFirst().orElseThrow(this::notFound);
+    }
+
+    private void requireDraftObject(GameObjectPage object) {
+        DefinitionVersion version = definition(object.getGameVersionId());
+        if (!"draft".equals(version.status())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Only objects in a draft definition can be edited");
+        }
     }
 }

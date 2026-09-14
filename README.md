@@ -27,7 +27,8 @@ Definition lifecycle operations are available through the Admin API under
 retired. Published definitions are protected while full revision-scoped
 catalogue editing is being connected to the Admin UI. Creating a draft now
 deep-copies the relational catalogue graph, and draft-owned object updates are
-available through the Admin API.
+available through the Admin API. Open a specific revision with
+`/admin/games/{gameId}?versionId={definitionId}`.
 
 ## Run the application locally
 

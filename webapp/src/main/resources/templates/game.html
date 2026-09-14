@@ -17,9 +17,9 @@
         <div class="tag-row">
             <span class="tag" th:text="|${game.minimumNumberOfPlayers}-${game.maximumNumberOfPlayers} players|"></span>
             <span class="tag" th:text="|${game.minimumNumberOfCpu}-${game.maximumNumberOfCpu} CPU players|"></span>
-            <span class="tag accent">static data</span>
+            <span class="tag accent" th:text="|${selectedVersion.status} revision|"></span>
         </div>
-        <div class="hero-actions"><a class="button" th:href="@{/admin/games/{id}/objects(id=${game.gameId})}">Browse every object <span>-&gt;</span></a><a class="button secondary-button" th:if="${canEditDefinition}" th:href="@{/admin/games/{id}/edit(id=${game.gameId})}">Edit definition</a></div>
+        <div class="hero-actions"><a class="button" th:href="@{/admin/games/{id}/objects(id=${game.gameId},versionId=${versionId})}">Browse every object <span>-&gt;</span></a><a class="button secondary-button" th:if="${canEditGame}" th:href="@{/admin/games/{id}/edit(id=${game.gameId})}">Edit definition</a></div>
     </section>
     <p class="save-message" th:if="${param.saved != null}">Game definition saved.</p>
 
@@ -27,8 +27,9 @@
         <div class="section-heading compact"><div><p class="eyebrow">PROVENANCE</p><h2>Catalogue release</h2></div><span class="count" th:text="${versions.size()} + ' version' + (${versions.size()} == 1 ? '' : 's')"></span></div>
         <div class="data-list">
             <article th:each="version : ${versions}" class="data-item">
-                <div><h3 th:text="|${version.name} (${version.code})|"></h3><p th:text="|${version.sourceName} / revision ${version.sourceRevision != null ? version.sourceRevision : 'unspecified'}|"></p><span class="tag" th:text="${version.status}"></span><span class="tag" th:if="${!version.valid}">needs attention</span></div>
+                <div><h3 th:text="|${version.name} (${version.code})|"></h3><p th:text="|${version.sourceName} / revision ${version.sourceRevision != null ? version.sourceRevision : 'unspecified'}|"></p><span class="tag" th:text="${version.status}"></span><span class="tag accent" th:if="${version.definitionId == selectedVersion.definitionId}">selected</span><span class="tag" th:if="${!version.valid}">needs attention</span></div>
                 <div><code th:text="${version.releaseDate}"></code><a class="source-link" th:if="${version.sourceUrl != null}" th:href="${version.sourceUrl}" target="_blank" rel="noreferrer">source -&gt;</a><form th:if="${version.status == 'draft'}" method="post" th:action="@{/admin/definitions/{id}/publish(id=${version.definitionId})}"><button class="text-link" type="submit">Publish -&gt;</button></form><form th:if="${version.status != 'retired'}" method="post" th:action="@{/admin/definitions/{id}/retire(id=${version.definitionId})}"><button class="text-link" type="submit">Retire -&gt;</button></form></div>
+                <a class="text-link" th:href="@{/admin/games/{id}(id=${game.gameId},versionId=${version.definitionId})}">Open revision -&gt;</a>
             </article>
         </div>
         <form class="inline-form" method="post" th:action="@{/admin/games/{id}/definitions(id=${game.gameId})}">
@@ -37,7 +38,7 @@
             <input name="sourceRevision" placeholder="Source revision">
             <button class="button" type="submit">Create draft</button>
         </form>
-        <p class="muted" th:if="${!canEditDefinition}">Published definitions are protected. Content editing becomes available after revision-scoped catalogue copies are enabled.</p>
+        <p class="muted" th:if="${selectedVersion.status != 'draft'}">Published and retired definitions are read-only. Open a draft revision to edit its copied catalogue.</p>
     </section>
 
     <section class="section-heading"><div><p class="eyebrow">ROSTER STRUCTURE</p><h2>Factions</h2></div></section>
@@ -75,9 +76,9 @@
     </section>
 
     <section class="data-panel rules-panel">
-        <div class="section-heading compact"><div><p class="eyebrow">GENERIC CONTENT</p><h2>Object catalogue</h2></div><a class="text-link" th:href="@{/admin/games/{id}/objects(id=${game.gameId})}">Open explorer -&gt;</a></div>
+        <div class="section-heading compact"><div><p class="eyebrow">GENERIC CONTENT</p><h2>Object catalogue</h2></div><a class="text-link" th:href="@{/admin/games/{id}/objects(id=${game.gameId},versionId=${versionId})}">Open explorer -&gt;</a></div>
         <div class="object-type-grid">
-            <a class="object-type" th:each="type : ${objectTypes}" th:href="@{/admin/games/{id}/objects(id=${game.gameId},type=${type.code})}">
+            <a class="object-type" th:each="type : ${objectTypes}" th:href="@{/admin/games/{id}/objects(id=${game.gameId},type=${type.code},versionId=${versionId})}">
                 <span class="card-kicker" th:text="${type.kind}"></span><h3 th:text="${type.name}"></h3><span class="type-count" th:text="${type.objectCount} + ' objects  -&gt;'"></span>
             </a>
         </div>

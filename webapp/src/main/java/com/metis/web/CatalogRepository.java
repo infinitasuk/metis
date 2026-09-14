@@ -18,6 +18,15 @@ public class CatalogRepository {
         this.jdbc = jdbc;
     }
 
+    public long publishedDefinitionId(long gameId) {
+        Long definitionId = jdbc.queryForObject(
+                "SELECT game_engine.fn_published_definition_id(?)", Long.class, gameId);
+        if (definitionId == null) {
+            throw new IllegalStateException("Game " + gameId + " has no published definition");
+        }
+        return definitionId;
+    }
+
     public List<GameSummary> findGames() {
         return jdbc.query("""
                 SELECT g.game_id, g.game_name, g.game_description,
@@ -53,6 +62,10 @@ public class CatalogRepository {
     }
 
     public Optional<GameSummary> findGame(long gameId) {
+        return findGame(gameId, publishedDefinitionId(gameId));
+    }
+
+    public Optional<GameSummary> findGame(long gameId, long definitionId) {
         return jdbc.query("""
                 SELECT g.game_id, g.game_name, g.game_description,
                        g.minimum_number_of_players, g.maximum_number_of_players,
@@ -63,14 +76,14 @@ public class CatalogRepository {
                        count(DISTINCT go.game_object_id) AS object_count
                 FROM game_engine.game g
                  LEFT JOIN game_engine.faction f ON f.game_id = g.game_id
-                     AND f.game_version_id = game_engine.fn_published_definition_id(g.game_id)
+                     AND f.game_version_id = ?
                 LEFT JOIN game_engine.unit_classification uc ON uc.faction_id = f.faction_id
                 LEFT JOIN game_engine.unit_type ut ON ut.unit_classification_id = uc.unit_classification_id
                 LEFT JOIN game_engine.unit_variant uv ON uv.unit_type_id = ut.unit_type_id
                  LEFT JOIN game_engine.game_object go ON go.game_id = g.game_id
-                     AND go.game_version_id = game_engine.fn_published_definition_id(g.game_id)
-                WHERE g.game_id = ?
-                GROUP BY g.game_id
+                     AND go.game_version_id = ?
+                 WHERE g.game_id = ?
+                 GROUP BY g.game_id
                 """, rs -> rs.next()
                 ? Optional.of(new GameSummary(
                         rs.getLong("game_id"),
@@ -85,10 +98,14 @@ public class CatalogRepository {
                         rs.getLong("variant_count"),
                         rs.getLong("object_count")
                 ))
-                : Optional.empty(), gameId);
+                : Optional.empty(), definitionId, definitionId, gameId);
     }
 
     public List<FactionSummary> findFactions(long gameId) {
+        return findFactions(gameId, publishedDefinitionId(gameId));
+    }
+
+    public List<FactionSummary> findFactions(long gameId, long definitionId) {
         return jdbc.query("""
                 SELECT f.faction_id, f.faction_name, f.faction_description,
                        count(DISTINCT uc.unit_classification_id) AS classification_count,
@@ -99,7 +116,7 @@ public class CatalogRepository {
                 LEFT JOIN game_engine.unit_type ut ON ut.unit_classification_id = uc.unit_classification_id
                  LEFT JOIN game_engine.unit_variant uv ON uv.unit_type_id = ut.unit_type_id
                  WHERE f.game_id = ?
-                   AND f.game_version_id = game_engine.fn_published_definition_id(f.game_id)
+                   AND f.game_version_id = ?
                  GROUP BY f.faction_id
                 ORDER BY f.faction_name
                 """, (rs, rowNum) -> new FactionSummary(
@@ -109,55 +126,67 @@ public class CatalogRepository {
                 rs.getLong("classification_count"),
                 rs.getLong("unit_type_count"),
                 rs.getLong("variant_count")
-        ), gameId);
+        ), gameId, definitionId);
     }
 
     public List<Terrain> findTerrain(long gameId) {
+        return findTerrain(gameId, publishedDefinitionId(gameId));
+    }
+
+    public List<Terrain> findTerrain(long gameId, long definitionId) {
         return jdbc.query("""
                 SELECT terrain_type_id, terrain_type_name, terrain_type,
                        default_characteristic_json::text AS default_characteristic_json
                  FROM game_engine.terrain_type
                  WHERE game_id = ?
-                   AND game_version_id = game_engine.fn_published_definition_id(game_id)
+                   AND game_version_id = ?
                  ORDER BY terrain_type_name
                 """, (rs, rowNum) -> new Terrain(
                 rs.getLong("terrain_type_id"),
                 rs.getString("terrain_type_name"),
                 rs.getString("terrain_type"),
                 rs.getString("default_characteristic_json")
-        ), gameId);
+        ), gameId, definitionId);
     }
 
     public List<GameRule> findRules(long gameId) {
+        return findRules(gameId, publishedDefinitionId(gameId));
+    }
+
+    public List<GameRule> findRules(long gameId, long definitionId) {
         return jdbc.query("""
                 SELECT game_rule_id, game_rule_name, game_rule_description,
                        game_rule_characteristic_json::text AS game_rule_characteristic_json
                  FROM game_engine.game_rule
                  WHERE game_id = ?
-                   AND game_version_id = game_engine.fn_published_definition_id(game_id)
+                   AND game_version_id = ?
                  ORDER BY game_rule_name
                 """, (rs, rowNum) -> new GameRule(
                 rs.getLong("game_rule_id"),
                 rs.getString("game_rule_name"),
                 rs.getString("game_rule_description"),
                 rs.getString("game_rule_characteristic_json")
-        ), gameId);
+        ), gameId, definitionId);
     }
 
     public List<GameMode> findGameModes(long gameId) {
+        return findGameModes(gameId, publishedDefinitionId(gameId));
+    }
+
+    public List<GameMode> findGameModes(long gameId, long definitionId) {
         return jdbc.query("""
                 SELECT game_mode_id, game_mode_name, game_mode_description,
                        mode_config_json::text AS mode_config_json
                  FROM game_engine.game_mode
                  WHERE game_id = ?
-                   AND game_version_id = game_engine.fn_published_definition_id(game_id)
+                   AND game_version_id = ?
                  ORDER BY game_mode_name
                 """, (rs, rowNum) -> new GameMode(
                 rs.getLong("game_mode_id"),
                 rs.getString("game_mode_name"),
                 rs.getString("game_mode_description"),
                 rs.getString("mode_config_json")
-        ), gameId);
+        ), gameId, definitionId);
     }
 
     public List<GameVersion> findGameVersions(long gameId) {
@@ -182,36 +211,48 @@ public class CatalogRepository {
     }
 
     public List<Phase> findPhases(long gameId) {
+        return findPhases(gameId, publishedDefinitionId(gameId));
+    }
+
+    public List<Phase> findPhases(long gameId, long definitionId) {
         return jdbc.query("""
                 SELECT phase_id, phase_code, phase_name, phase_description,
                        phase_config_json::text AS phase_config_json
                  FROM game_engine.phase_definition
                  WHERE game_id = ?
-                   AND game_version_id = game_engine.fn_published_definition_id(game_id)
+                   AND game_version_id = ?
                  ORDER BY phase_code
                 """, (rs, rowNum) -> new Phase(
                 rs.getLong("phase_id"), rs.getString("phase_code"),
                 rs.getString("phase_name"), rs.getString("phase_description"),
                 rs.getString("phase_config_json")
-        ), gameId);
+        ), gameId, definitionId);
     }
 
     public List<Action> findActions(long gameId) {
+        return findActions(gameId, publishedDefinitionId(gameId));
+    }
+
+    public List<Action> findActions(long gameId, long definitionId) {
         return jdbc.query("""
                 SELECT action_id, action_code, action_name, action_description,
                        action_config_json::text AS action_config_json
                  FROM game_engine.action_definition
                  WHERE game_id = ?
-                   AND game_version_id = game_engine.fn_published_definition_id(game_id)
+                   AND game_version_id = ?
                  ORDER BY action_name
                 """, (rs, rowNum) -> new Action(
                 rs.getLong("action_id"), rs.getString("action_code"),
                 rs.getString("action_name"), rs.getString("action_description"),
                 rs.getString("action_config_json")
-        ), gameId);
+        ), gameId, definitionId);
     }
 
     public List<Scenario> findScenarios(long gameId) {
+        return findScenarios(gameId, publishedDefinitionId(gameId));
+    }
+
+    public List<Scenario> findScenarios(long gameId, long definitionId) {
         return jdbc.query("""
                 SELECT s.scenario_id, s.scenario_code, s.scenario_name,
                        s.scenario_description,
@@ -222,7 +263,7 @@ public class CatalogRepository {
                 LEFT JOIN game_engine.scenario_board sb ON sb.scenario_id = s.scenario_id
                  LEFT JOIN game_engine.scenario_game_object sgo ON sgo.scenario_id = s.scenario_id
                  WHERE s.game_id = ?
-                   AND s.game_version_id = game_engine.fn_published_definition_id(s.game_id)
+                   AND s.game_version_id = ?
                  GROUP BY s.scenario_id
                 ORDER BY s.scenario_name
                 """, (rs, rowNum) -> new Scenario(
@@ -230,26 +271,34 @@ public class CatalogRepository {
                 rs.getString("scenario_name"), rs.getString("scenario_description"),
                 rs.getString("scenario_config_json"), rs.getLong("board_count"),
                 rs.getLong("object_count")
-        ), gameId);
+        ), gameId, definitionId);
     }
 
     public List<Board> findBoards(long gameId) {
+        return findBoards(gameId, publishedDefinitionId(gameId));
+    }
+
+    public List<Board> findBoards(long gameId, long definitionId) {
         return jdbc.query("""
                 SELECT board_definition_id, board_code, board_name, width, height,
                        coordinate_system, board_config_json::text AS board_config_json
                  FROM game_engine.board_definition
                  WHERE game_id = ?
-                   AND game_version_id = game_engine.fn_published_definition_id(game_id)
+                   AND game_version_id = ?
                  ORDER BY board_name
                 """, (rs, rowNum) -> new Board(
                 rs.getLong("board_definition_id"), rs.getString("board_code"),
                 rs.getString("board_name"), rs.getBigDecimal("width"),
                 rs.getBigDecimal("height"), rs.getString("coordinate_system"),
                 rs.getString("board_config_json")
-        ), gameId);
+        ), gameId, definitionId);
     }
 
     public List<FleetFormat> findFleetFormats(long gameId) {
+        return findFleetFormats(gameId, publishedDefinitionId(gameId));
+    }
+
+    public List<FleetFormat> findFleetFormats(long gameId, long definitionId) {
         return jdbc.query("""
                 SELECT ff.fleet_format_id, ff.format_code, ff.format_name,
                        ff.points_limit, gm.game_mode_name,
@@ -271,7 +320,7 @@ public class CatalogRepository {
                  LEFT JOIN game_engine.unit_classification uc
                      ON uc.unit_classification_id = ful.unit_classification_id
                  WHERE gm.game_id = ?
-                   AND gm.game_version_id = game_engine.fn_published_definition_id(gm.game_id)
+                   AND gm.game_version_id = ?
                  GROUP BY ff.fleet_format_id, gm.game_mode_name
                 ORDER BY ff.format_name, gm.game_mode_name
                 """, (rs, rowNum) -> new FleetFormat(
@@ -280,10 +329,14 @@ public class CatalogRepository {
                 rs.getString("game_mode_name"), rs.getString("format_config_json"),
                 rs.getLong("faction_count"), rs.getLong("limit_count"),
                 rs.getString("limits")
-        ), gameId);
+         ), gameId, definitionId);
     }
 
     public List<GameObjectTypeSummary> findObjectTypes(long gameId) {
+        return findObjectTypes(gameId, publishedDefinitionId(gameId));
+    }
+
+    public List<GameObjectTypeSummary> findObjectTypes(long gameId, long definitionId) {
         return jdbc.query("""
                 SELECT got.game_object_type_id, got.object_type_code,
                        got.object_type_name, got.object_kind,
@@ -292,17 +345,21 @@ public class CatalogRepository {
                  LEFT JOIN game_engine.game_object go
                      ON go.game_object_type_id = got.game_object_type_id
                  WHERE got.game_id = ?
-                   AND got.game_version_id = game_engine.fn_published_definition_id(got.game_id)
+                   AND got.game_version_id = ?
                  GROUP BY got.game_object_type_id
                 ORDER BY got.object_kind, got.object_type_name
                 """, (rs, rowNum) -> new GameObjectTypeSummary(
                 rs.getLong("game_object_type_id"), rs.getString("object_type_code"),
                 rs.getString("object_type_name"), rs.getString("object_kind"),
                 rs.getLong("object_count")
-        ), gameId);
+         ), gameId, definitionId);
     }
 
     public List<GameObjectSummary> findObjects(long gameId, String type, String query) {
+        return findObjects(gameId, type, query, publishedDefinitionId(gameId));
+    }
+
+    public List<GameObjectSummary> findObjects(long gameId, String type, String query, long definitionId) {
         return jdbc.query("""
                 SELECT go.game_object_id, got.object_type_code, got.object_type_name,
                        go.object_code, go.object_name, go.object_description,
@@ -312,7 +369,7 @@ public class CatalogRepository {
                  JOIN game_engine.game_object_type got
                      ON got.game_object_type_id = go.game_object_type_id
                  WHERE go.game_id = ?
-                   AND go.game_version_id = game_engine.fn_published_definition_id(go.game_id)
+                   AND go.game_version_id = ?
                    AND (? = '' OR got.object_type_code = ?)
                   AND (? = '' OR go.object_name ILIKE '%' || ? || '%'
                        OR go.object_code ILIKE '%' || ? || '%')
@@ -323,12 +380,12 @@ public class CatalogRepository {
                 rs.getString("object_name"), rs.getString("object_description"),
                 rs.getString("display_text"), rs.getString("object_data_json"),
                 rs.getString("source_reference_json")
-        ), gameId, type, type, query, query, query);
+         ), gameId, definitionId, type, type, query, query, query);
     }
 
     public Optional<GameObjectPage> findObject(long objectId) {
         Optional<GameObjectPage> object = jdbc.query("""
-                SELECT go.game_object_id, go.game_id, got.object_type_code,
+                SELECT go.game_object_id, go.game_id, go.game_version_id, got.object_type_code,
                        got.object_type_name, go.object_code, go.object_name,
                        go.object_description, go.display_text,
                        go.object_data_json::text AS object_data_json,
@@ -339,7 +396,8 @@ public class CatalogRepository {
                 WHERE go.game_object_id = ?
                 """, rs -> rs.next()
                 ? Optional.of(new GameObjectPage(
-                        rs.getLong("game_object_id"), rs.getLong("game_id"),
+                         rs.getLong("game_object_id"), rs.getLong("game_id"),
+                         rs.getLong("game_version_id"),
                         rs.getString("object_type_code"), rs.getString("object_type_name"),
                         rs.getString("object_code"), rs.getString("object_name"),
                         rs.getString("object_description"), rs.getString("display_text"),
@@ -719,6 +777,7 @@ public class CatalogRepository {
     public static final class GameObjectPage {
         private final long objectId;
         private final long gameId;
+        private final long gameVersionId;
         private final String typeCode;
         private final String typeName;
         private final String code;
@@ -730,11 +789,13 @@ public class CatalogRepository {
         private final List<Eligibility> eligibility = new ArrayList<>();
         private final List<ObjectAssociation> associations = new ArrayList<>();
 
-        private GameObjectPage(long objectId, long gameId, String typeCode, String typeName,
+        private GameObjectPage(long objectId, long gameId, long gameVersionId,
+                               String typeCode, String typeName,
                                String code, String name, String description, String displayText,
                                String data, String sourceReference) {
             this.objectId = objectId;
             this.gameId = gameId;
+            this.gameVersionId = gameVersionId;
             this.typeCode = typeCode;
             this.typeName = typeName;
             this.code = code;
@@ -747,6 +808,7 @@ public class CatalogRepository {
 
         public long getObjectId() { return objectId; }
         public long getGameId() { return gameId; }
+        public long getGameVersionId() { return gameVersionId; }
         public String getTypeCode() { return typeCode; }
         public String getTypeName() { return typeName; }
         public String getCode() { return code; }

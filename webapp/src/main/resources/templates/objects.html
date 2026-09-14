@@ -9,7 +9,7 @@
 <body>
 <header th:replace="~{fragments :: header}"></header>
 <main class="shell">
-    <a class="back-link" th:href="@{/admin/games/{id}(id=${game.gameId})}" th:text="'&lt;- ' + ${game.gameName}"></a>
+    <a class="back-link" th:href="@{/admin/games/{id}(id=${game.gameId},versionId=${versionId})}" th:text="'&lt;- ' + ${game.gameName}"></a>
     <section class="hero-panel compact-hero">
         <p class="eyebrow">GENERIC STATIC CONTENT</p>
         <h1>Everything that<br><em>can be selected.</em></h1>
@@ -17,6 +17,7 @@
     </section>
 
     <form class="object-filters" method="get" th:action="@{/admin/games/{id}/objects(id=${game.gameId})}">
+        <input type="hidden" name="versionId" th:value="${versionId}">
         <label>Search <input type="search" name="q" th:value="${query}" placeholder="Object name or source ID"></label>
         <label>Type
             <select name="type">
