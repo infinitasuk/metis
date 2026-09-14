@@ -50,5 +50,7 @@ The default database settings match `docker/.env`. Override them with `DB_URL`,
   routine contract for the battle simulator.
 - `ARCHITECTURE_DESIGN.md` records the agreed WebApp, GamingEngine, API and
   database ownership boundaries.
+- `IMPLEMENTATION_PLAN.md` tracks the concrete development phases and immediate
+  work queue.
 - `METIS_PROJECT_PLAN.md` defines the staged path from catalogue to web POC,
   MVP, production Armada application and multi-game platform.

@@ -1,15 +1,15 @@
-package com.metis.web;
+package com.metis.engine.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.metis.web.BattleRepository.BattleSession;
-import com.metis.web.BattleRepository.BattleSessionDetail;
-import com.metis.web.BattleRepository.SessionEvent;
-import com.metis.web.BattleRepository.SessionPlayer;
-import com.metis.web.BattleRepository.SessionUnit;
-import com.metis.web.BattleRepository.FleetSummary;
-import com.metis.web.BattleRepository.FleetUnit;
-import com.metis.web.BattleRepository.SessionBoard;
-import com.metis.web.BattleRepository.SessionTurn;
+import com.metis.engine.api.BattleRepository.BattleSession;
+import com.metis.engine.api.BattleRepository.BattleSessionDetail;
+import com.metis.engine.api.BattleRepository.SessionEvent;
+import com.metis.engine.api.BattleRepository.SessionPlayer;
+import com.metis.engine.api.BattleRepository.SessionUnit;
+import com.metis.engine.api.BattleRepository.FleetSummary;
+import com.metis.engine.api.BattleRepository.FleetUnit;
+import com.metis.engine.api.BattleRepository.SessionBoard;
+import com.metis.engine.api.BattleRepository.SessionTurn;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

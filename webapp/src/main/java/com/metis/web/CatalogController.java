@@ -1,9 +1,10 @@
 package com.metis.web;
 
+import com.metis.engine.api.BattleRepository;
+import com.metis.engine.api.BattleRepository.BattleSessionDetail;
 import com.metis.web.CatalogRepository.FactionPage;
 import com.metis.web.CatalogRepository.GameSummary;
 import com.metis.web.CatalogRepository.UnitTypePage;
-import com.metis.web.BattleRepository.BattleSessionDetail;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
