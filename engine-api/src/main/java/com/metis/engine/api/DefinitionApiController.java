@@ -1,5 +1,6 @@
 package com.metis.engine.api;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -70,6 +71,16 @@ public class DefinitionApiController {
         return definition(definitionId);
     }
 
+    @PatchMapping("/definitions/{definitionId}/objects/{objectId}")
+    public DefinitionRepository.DefinitionVersion updateObject(@PathVariable long definitionId,
+                                                                @PathVariable long objectId,
+                                                                @RequestBody ObjectUpdateRequest request) {
+        definition(definitionId);
+        definitions.updateObject(definitionId, objectId, request.name(), request.description(),
+                request.displayText(), json(request.objectData()), json(request.sourceReference()));
+        return definition(definitionId);
+    }
+
     @ExceptionHandler(DefinitionNotFoundException.class)
     public ResponseEntity<Map<String, String>> notFound(DefinitionNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", exception.getMessage()));
@@ -81,6 +92,13 @@ public class DefinitionApiController {
     }
 
     public record DefinitionRequest(String code, String name, String sourceRevision) {}
+
+    public record ObjectUpdateRequest(String name, String description, String displayText,
+                                      JsonNode objectData, JsonNode sourceReference) {}
+
+    private static String json(JsonNode value) {
+        return value == null ? null : value.toString();
+    }
 
     private static final class DefinitionNotFoundException extends RuntimeException {
         private DefinitionNotFoundException(String message) {

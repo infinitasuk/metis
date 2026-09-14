@@ -25,7 +25,9 @@ versioned API boundary.
 Definition lifecycle operations are available through the Admin API under
 `/api/v1/admin`: revisions can be created as drafts, validated, published and
 retired. Published definitions are protected while full revision-scoped
-catalogue copies are being implemented.
+catalogue editing is being connected to the Admin UI. Creating a draft now
+deep-copies the relational catalogue graph, and draft-owned object updates are
+available through the Admin API.
 
 ## Run the application locally
 

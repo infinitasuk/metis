@@ -80,6 +80,12 @@ public class DefinitionRepository {
                 statement -> statement.setLong(1, definitionId));
     }
 
+    public void updateObject(long definitionId, long objectId, String name, String description,
+                             String displayText, String data, String sourceReference) {
+        jdbc.update("CALL game_engine.sp_definition_object_update(?,?,?,?,?,?,?)", definitionId, objectId,
+                name, description, displayText, data, sourceReference);
+    }
+
     private void execute(String call, StatementConfigurer configurer) {
         jdbc.execute((CallableStatementCreator) connection -> {
             CallableStatement statement = connection.prepareCall(call);

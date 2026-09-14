@@ -28,11 +28,13 @@ public class CatalogRepository {
                        count(DISTINCT uv.unit_variant_id) AS variant_count,
                        count(DISTINCT go.game_object_id) AS object_count
                 FROM game_engine.game g
-                LEFT JOIN game_engine.faction f ON f.game_id = g.game_id
+                 LEFT JOIN game_engine.faction f ON f.game_id = g.game_id
+                     AND f.game_version_id = game_engine.fn_published_definition_id(g.game_id)
                 LEFT JOIN game_engine.unit_classification uc ON uc.faction_id = f.faction_id
                 LEFT JOIN game_engine.unit_type ut ON ut.unit_classification_id = uc.unit_classification_id
                 LEFT JOIN game_engine.unit_variant uv ON uv.unit_type_id = ut.unit_type_id
-                LEFT JOIN game_engine.game_object go ON go.game_id = g.game_id
+                 LEFT JOIN game_engine.game_object go ON go.game_id = g.game_id
+                     AND go.game_version_id = game_engine.fn_published_definition_id(g.game_id)
                 GROUP BY g.game_id
                 ORDER BY g.game_name
                 """, (rs, rowNum) -> new GameSummary(
@@ -60,11 +62,13 @@ public class CatalogRepository {
                        count(DISTINCT uv.unit_variant_id) AS variant_count,
                        count(DISTINCT go.game_object_id) AS object_count
                 FROM game_engine.game g
-                LEFT JOIN game_engine.faction f ON f.game_id = g.game_id
+                 LEFT JOIN game_engine.faction f ON f.game_id = g.game_id
+                     AND f.game_version_id = game_engine.fn_published_definition_id(g.game_id)
                 LEFT JOIN game_engine.unit_classification uc ON uc.faction_id = f.faction_id
                 LEFT JOIN game_engine.unit_type ut ON ut.unit_classification_id = uc.unit_classification_id
                 LEFT JOIN game_engine.unit_variant uv ON uv.unit_type_id = ut.unit_type_id
-                LEFT JOIN game_engine.game_object go ON go.game_id = g.game_id
+                 LEFT JOIN game_engine.game_object go ON go.game_id = g.game_id
+                     AND go.game_version_id = game_engine.fn_published_definition_id(g.game_id)
                 WHERE g.game_id = ?
                 GROUP BY g.game_id
                 """, rs -> rs.next()
@@ -93,9 +97,10 @@ public class CatalogRepository {
                 FROM game_engine.faction f
                 LEFT JOIN game_engine.unit_classification uc ON uc.faction_id = f.faction_id
                 LEFT JOIN game_engine.unit_type ut ON ut.unit_classification_id = uc.unit_classification_id
-                LEFT JOIN game_engine.unit_variant uv ON uv.unit_type_id = ut.unit_type_id
-                WHERE f.game_id = ?
-                GROUP BY f.faction_id
+                 LEFT JOIN game_engine.unit_variant uv ON uv.unit_type_id = ut.unit_type_id
+                 WHERE f.game_id = ?
+                   AND f.game_version_id = game_engine.fn_published_definition_id(f.game_id)
+                 GROUP BY f.faction_id
                 ORDER BY f.faction_name
                 """, (rs, rowNum) -> new FactionSummary(
                 rs.getLong("faction_id"),
@@ -111,9 +116,10 @@ public class CatalogRepository {
         return jdbc.query("""
                 SELECT terrain_type_id, terrain_type_name, terrain_type,
                        default_characteristic_json::text AS default_characteristic_json
-                FROM game_engine.terrain_type
-                WHERE game_id = ?
-                ORDER BY terrain_type_name
+                 FROM game_engine.terrain_type
+                 WHERE game_id = ?
+                   AND game_version_id = game_engine.fn_published_definition_id(game_id)
+                 ORDER BY terrain_type_name
                 """, (rs, rowNum) -> new Terrain(
                 rs.getLong("terrain_type_id"),
                 rs.getString("terrain_type_name"),
@@ -126,9 +132,10 @@ public class CatalogRepository {
         return jdbc.query("""
                 SELECT game_rule_id, game_rule_name, game_rule_description,
                        game_rule_characteristic_json::text AS game_rule_characteristic_json
-                FROM game_engine.game_rule
-                WHERE game_id = ?
-                ORDER BY game_rule_name
+                 FROM game_engine.game_rule
+                 WHERE game_id = ?
+                   AND game_version_id = game_engine.fn_published_definition_id(game_id)
+                 ORDER BY game_rule_name
                 """, (rs, rowNum) -> new GameRule(
                 rs.getLong("game_rule_id"),
                 rs.getString("game_rule_name"),
@@ -141,9 +148,10 @@ public class CatalogRepository {
         return jdbc.query("""
                 SELECT game_mode_id, game_mode_name, game_mode_description,
                        mode_config_json::text AS mode_config_json
-                FROM game_engine.game_mode
-                WHERE game_id = ?
-                ORDER BY game_mode_name
+                 FROM game_engine.game_mode
+                 WHERE game_id = ?
+                   AND game_version_id = game_engine.fn_published_definition_id(game_id)
+                 ORDER BY game_mode_name
                 """, (rs, rowNum) -> new GameMode(
                 rs.getLong("game_mode_id"),
                 rs.getString("game_mode_name"),
@@ -177,9 +185,10 @@ public class CatalogRepository {
         return jdbc.query("""
                 SELECT phase_id, phase_code, phase_name, phase_description,
                        phase_config_json::text AS phase_config_json
-                FROM game_engine.phase_definition
-                WHERE game_id = ?
-                ORDER BY phase_code
+                 FROM game_engine.phase_definition
+                 WHERE game_id = ?
+                   AND game_version_id = game_engine.fn_published_definition_id(game_id)
+                 ORDER BY phase_code
                 """, (rs, rowNum) -> new Phase(
                 rs.getLong("phase_id"), rs.getString("phase_code"),
                 rs.getString("phase_name"), rs.getString("phase_description"),
@@ -191,9 +200,10 @@ public class CatalogRepository {
         return jdbc.query("""
                 SELECT action_id, action_code, action_name, action_description,
                        action_config_json::text AS action_config_json
-                FROM game_engine.action_definition
-                WHERE game_id = ?
-                ORDER BY action_name
+                 FROM game_engine.action_definition
+                 WHERE game_id = ?
+                   AND game_version_id = game_engine.fn_published_definition_id(game_id)
+                 ORDER BY action_name
                 """, (rs, rowNum) -> new Action(
                 rs.getLong("action_id"), rs.getString("action_code"),
                 rs.getString("action_name"), rs.getString("action_description"),
@@ -210,9 +220,10 @@ public class CatalogRepository {
                        count(DISTINCT sgo.game_object_id) AS object_count
                 FROM game_engine.scenario_definition s
                 LEFT JOIN game_engine.scenario_board sb ON sb.scenario_id = s.scenario_id
-                LEFT JOIN game_engine.scenario_game_object sgo ON sgo.scenario_id = s.scenario_id
-                WHERE s.game_id = ?
-                GROUP BY s.scenario_id
+                 LEFT JOIN game_engine.scenario_game_object sgo ON sgo.scenario_id = s.scenario_id
+                 WHERE s.game_id = ?
+                   AND s.game_version_id = game_engine.fn_published_definition_id(s.game_id)
+                 GROUP BY s.scenario_id
                 ORDER BY s.scenario_name
                 """, (rs, rowNum) -> new Scenario(
                 rs.getLong("scenario_id"), rs.getString("scenario_code"),
@@ -226,9 +237,10 @@ public class CatalogRepository {
         return jdbc.query("""
                 SELECT board_definition_id, board_code, board_name, width, height,
                        coordinate_system, board_config_json::text AS board_config_json
-                FROM game_engine.board_definition
-                WHERE game_id = ?
-                ORDER BY board_name
+                 FROM game_engine.board_definition
+                 WHERE game_id = ?
+                   AND game_version_id = game_engine.fn_published_definition_id(game_id)
+                 ORDER BY board_name
                 """, (rs, rowNum) -> new Board(
                 rs.getLong("board_definition_id"), rs.getString("board_code"),
                 rs.getString("board_name"), rs.getBigDecimal("width"),
@@ -256,10 +268,11 @@ public class CatalogRepository {
                     ON fff.fleet_format_id = ff.fleet_format_id
                 LEFT JOIN game_engine.fleet_unit_limit ful
                     ON ful.fleet_format_id = ff.fleet_format_id
-                LEFT JOIN game_engine.unit_classification uc
-                    ON uc.unit_classification_id = ful.unit_classification_id
-                WHERE gm.game_id = ?
-                GROUP BY ff.fleet_format_id, gm.game_mode_name
+                 LEFT JOIN game_engine.unit_classification uc
+                     ON uc.unit_classification_id = ful.unit_classification_id
+                 WHERE gm.game_id = ?
+                   AND gm.game_version_id = game_engine.fn_published_definition_id(gm.game_id)
+                 GROUP BY ff.fleet_format_id, gm.game_mode_name
                 ORDER BY ff.format_name, gm.game_mode_name
                 """, (rs, rowNum) -> new FleetFormat(
                 rs.getLong("fleet_format_id"), rs.getString("format_code"),
@@ -276,10 +289,11 @@ public class CatalogRepository {
                        got.object_type_name, got.object_kind,
                        count(go.game_object_id) AS object_count
                 FROM game_engine.game_object_type got
-                LEFT JOIN game_engine.game_object go
-                    ON go.game_object_type_id = got.game_object_type_id
-                WHERE got.game_id = ?
-                GROUP BY got.game_object_type_id
+                 LEFT JOIN game_engine.game_object go
+                     ON go.game_object_type_id = got.game_object_type_id
+                 WHERE got.game_id = ?
+                   AND got.game_version_id = game_engine.fn_published_definition_id(got.game_id)
+                 GROUP BY got.game_object_type_id
                 ORDER BY got.object_kind, got.object_type_name
                 """, (rs, rowNum) -> new GameObjectTypeSummary(
                 rs.getLong("game_object_type_id"), rs.getString("object_type_code"),
@@ -295,10 +309,11 @@ public class CatalogRepository {
                        go.display_text, go.object_data_json::text AS object_data_json,
                        go.source_reference_json::text AS source_reference_json
                 FROM game_engine.game_object go
-                JOIN game_engine.game_object_type got
-                    ON got.game_object_type_id = go.game_object_type_id
-                WHERE go.game_id = ?
-                  AND (? = '' OR got.object_type_code = ?)
+                 JOIN game_engine.game_object_type got
+                     ON got.game_object_type_id = go.game_object_type_id
+                 WHERE go.game_id = ?
+                   AND go.game_version_id = game_engine.fn_published_definition_id(go.game_id)
+                   AND (? = '' OR got.object_type_code = ?)
                   AND (? = '' OR go.object_name ILIKE '%' || ? || '%'
                        OR go.object_code ILIKE '%' || ? || '%')
                 ORDER BY got.object_type_name, go.object_name, go.game_object_id

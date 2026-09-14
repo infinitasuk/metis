@@ -38,6 +38,9 @@ Database migrations are append-only and independently numbered:
 008_create_battle_runtime.sql
 009_runtime_resource_routines.sql
 010_add_runtime_version_metadata.sql
+011_definition_lifecycle.sql
+012_scope_catalogue_to_definition.sql
+013_revision_scoped_object_updates.sql
 ```
 
 The database schema version is not the same as a software or game-definition
@@ -95,8 +98,12 @@ database or catalogue releases.
 - `GET /api/v1/meta` exposes the active API and engine version values.
 - `GET/POST/PATCH /api/v1/admin/...` manages definition metadata and lifecycle.
 - Definitions can be validated, published and retired through stored routines.
+- Draft creation deep-copies the relational catalogue graph and assigns the
+  copied game-owned rows to the new revision.
+- Object updates are accepted only when the object and definition are both
+  draft-owned.
 
-The next versioning task is to make static catalogue revisions first-class for
-all definition records. Until that is complete, published definitions are
-protected from the existing WebApp edit paths and lifecycle operations do not
-claim to create independent copies of catalogue rows.
+The next versioning task is to make the WebApp select and display a draft
+revision, then route all Admin content mutations through revision-aware
+procedures. Base game metadata and global characteristic types also need
+revision ownership before the lifecycle is complete.
