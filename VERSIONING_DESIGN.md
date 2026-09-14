@@ -93,6 +93,10 @@ database or catalogue releases.
 - Runtime sessions record engine, API, event-schema and game-version metadata.
 - Database scripts are numbered in `docker/init/sql`.
 - `GET /api/v1/meta` exposes the active API and engine version values.
+- `GET/POST/PATCH /api/v1/admin/...` manages definition metadata and lifecycle.
+- Definitions can be validated, published and retired through stored routines.
 
 The next versioning task is to make static catalogue revisions first-class for
-all definition records and add draft/validate/publish Admin operations.
+all definition records. Until that is complete, published definitions are
+protected from the existing WebApp edit paths and lifecycle operations do not
+claim to create independent copies of catalogue rows.

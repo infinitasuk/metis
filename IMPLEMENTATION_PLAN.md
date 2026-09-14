@@ -35,6 +35,8 @@ Completed foundations:
 - Stored routines for runtime CRUD.
 - Version metadata for engine builds, API contracts, event schemas and game
   definition revisions.
+- Definition lifecycle metadata and Admin API operations for draft, published
+  and retired revisions.
 - Architecture and runtime model documentation.
 
 Known gaps:

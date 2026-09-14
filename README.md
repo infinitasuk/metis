@@ -22,6 +22,11 @@ area provides the static engine catalogue plus edit forms for game definitions
 and generic game objects. The runtime foundation is being built behind the
 versioned API boundary.
 
+Definition lifecycle operations are available through the Admin API under
+`/api/v1/admin`: revisions can be created as drafts, validated, published and
+retired. Published definitions are protected while full revision-scoped
+catalogue copies are being implemented.
+
 ## Run the application locally
 
 Start only PostgreSQL:

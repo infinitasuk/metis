@@ -2,7 +2,10 @@ package com.metis.web;
 
 import com.metis.engine.api.BattleRepository;
 import com.metis.engine.api.BattleRepository.BattleSessionDetail;
+import com.metis.engine.api.DefinitionRepository;
+import com.metis.engine.api.DefinitionRepository.DefinitionVersion;
 import com.metis.web.CatalogRepository.FactionPage;
+import com.metis.web.CatalogRepository.GameObjectPage;
 import com.metis.web.CatalogRepository.GameSummary;
 import com.metis.web.CatalogRepository.UnitTypePage;
 import org.springframework.http.HttpStatus;
@@ -14,15 +17,20 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
+
 @Controller
 public class CatalogController {
 
     private final CatalogRepository catalog;
     private final BattleRepository battle;
+    private final DefinitionRepository definitions;
 
-    public CatalogController(CatalogRepository catalog, BattleRepository battle) {
+    public CatalogController(CatalogRepository catalog, BattleRepository battle,
+                             DefinitionRepository definitions) {
         this.catalog = catalog;
         this.battle = battle;
+        this.definitions = definitions;
     }
 
     @GetMapping("/")
@@ -83,18 +91,44 @@ public class CatalogController {
         model.addAttribute("terrain", catalog.findTerrain(gameId));
         model.addAttribute("rules", catalog.findRules(gameId));
         model.addAttribute("gameModes", catalog.findGameModes(gameId));
-        model.addAttribute("versions", catalog.findGameVersions(gameId));
         model.addAttribute("phases", catalog.findPhases(gameId));
         model.addAttribute("actions", catalog.findActions(gameId));
         model.addAttribute("scenarios", catalog.findScenarios(gameId));
         model.addAttribute("boards", catalog.findBoards(gameId));
         model.addAttribute("fleetFormats", catalog.findFleetFormats(gameId));
         model.addAttribute("objectTypes", catalog.findObjectTypes(gameId));
+        List<DefinitionVersion> versions = definitions.findVersions(gameId);
+        model.addAttribute("versions", versions);
+        model.addAttribute("canEditDefinition", canEditDefinition(versions));
         return "game";
+    }
+
+    @PostMapping("/admin/games/{gameId}/definitions")
+    public String createDefinition(@PathVariable long gameId,
+                                   @RequestParam String code,
+                                   @RequestParam String name,
+                                   @RequestParam(required = false) String sourceRevision) {
+        definitions.createVersion(gameId, code, name, sourceRevision);
+        return "redirect:/admin/games/" + gameId;
+    }
+
+    @PostMapping("/admin/definitions/{definitionId}/publish")
+    public String publishDefinition(@PathVariable long definitionId) {
+        DefinitionVersion version = definition(definitionId);
+        definitions.publishVersion(definitionId);
+        return "redirect:/admin/games/" + version.gameId();
+    }
+
+    @PostMapping("/admin/definitions/{definitionId}/retire")
+    public String retireDefinition(@PathVariable long definitionId) {
+        DefinitionVersion version = definition(definitionId);
+        definitions.retireVersion(definitionId);
+        return "redirect:/admin/games/" + version.gameId();
     }
 
     @GetMapping("/admin/games/{gameId}/edit")
     public String editGame(@PathVariable long gameId, Model model) {
+        requireEditableDefinition(gameId);
         model.addAttribute("game", catalog.findGame(gameId).orElseThrow(this::notFound));
         return "edit-game";
     }
@@ -106,7 +140,8 @@ public class CatalogController {
                              @RequestParam int minimumPlayers,
                              @RequestParam int maximumPlayers,
                              @RequestParam int minimumCpu,
-                             @RequestParam int maximumCpu) {
+                              @RequestParam int maximumCpu) {
+        requireEditableDefinition(gameId);
         catalog.updateGame(gameId, gameName, gameDescription, minimumPlayers,
                 maximumPlayers, minimumCpu, maximumCpu);
         return "redirect:/admin/games/" + gameId + "?saved=true";
@@ -134,7 +169,9 @@ public class CatalogController {
 
     @GetMapping("/admin/game-objects/{objectId}/edit")
     public String editObject(@PathVariable long objectId, Model model) {
-        model.addAttribute("object", catalog.findObject(objectId).orElseThrow(this::notFound));
+        GameObjectPage object = catalog.findObject(objectId).orElseThrow(this::notFound);
+        requireEditableDefinition(object.getGameId());
+        model.addAttribute("object", object);
         return "edit-object";
     }
 
@@ -145,6 +182,8 @@ public class CatalogController {
                                @RequestParam String displayText,
                                @RequestParam String objectData,
                                @RequestParam String sourceReference) {
+        GameObjectPage object = catalog.findObject(objectId).orElseThrow(this::notFound);
+        requireEditableDefinition(object.getGameId());
         catalog.updateObject(objectId, objectName, objectDescription, displayText,
                 objectData.isBlank() ? "{}" : objectData,
                 sourceReference.isBlank() ? "{}" : sourceReference);
@@ -167,5 +206,21 @@ public class CatalogController {
 
     private ResponseStatusException notFound() {
         return new ResponseStatusException(HttpStatus.NOT_FOUND);
+    }
+
+    private DefinitionVersion definition(long definitionId) {
+        return definitions.findVersion(definitionId).orElseThrow(this::notFound);
+    }
+
+    private void requireEditableDefinition(long gameId) {
+        if (!canEditDefinition(definitions.findVersions(gameId))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Create or select a draft definition before editing catalogue content");
+        }
+    }
+
+    private boolean canEditDefinition(List<DefinitionVersion> versions) {
+        return versions.stream().noneMatch(version -> "published".equals(version.status()))
+                && versions.stream().anyMatch(version -> "draft".equals(version.status()));
     }
 }
