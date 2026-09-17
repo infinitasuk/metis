@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.metis.engine.core.GameState;
 import com.metis.engine.api.BattleRepository;
+import com.metis.engine.api.BattleTemplateRepository;
 import com.metis.engine.api.BattleRepository.BattleSessionDetail;
 import com.metis.engine.api.DefinitionRepository;
 import com.metis.engine.api.DefinitionRepository.DefinitionVersion;
@@ -31,15 +32,18 @@ public class CatalogController {
 
     private final CatalogRepository catalog;
     private final BattleRepository battle;
+    private final BattleTemplateRepository templates;
     private final DefinitionRepository definitions;
     private final ObjectMapper objectMapper;
     private final AuthenticationContext authentication;
 
     public CatalogController(CatalogRepository catalog, BattleRepository battle,
-                              DefinitionRepository definitions, ObjectMapper objectMapper,
+                              BattleTemplateRepository templates, DefinitionRepository definitions,
+                              ObjectMapper objectMapper,
                               AuthenticationContext authentication) {
         this.catalog = catalog;
         this.battle = battle;
+        this.templates = templates;
         this.definitions = definitions;
         this.objectMapper = objectMapper;
         this.authentication = authentication;
@@ -103,6 +107,7 @@ public class CatalogController {
         model.addAttribute("fleetFormats", catalog.findFleetFormats(gameId));
         model.addAttribute("factions", catalog.findFactions(gameId));
         model.addAttribute("boards", catalog.findBoards(gameId));
+        model.addAttribute("templates", templates.findTemplates(gameId));
         return "simulator-game";
     }
 

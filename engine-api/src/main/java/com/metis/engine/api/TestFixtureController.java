@@ -34,6 +34,7 @@ public class TestFixtureController {
     private static final List<FixtureSpec> FIXTURES = buildFixtures();
 
     private final BattleRepository battle;
+    private final BattleTemplateRepository templates;
     private final DefinitionRepository definitions;
     private final ObjectMapper objectMapper;
     private final AuthoritativeGameEngine engine = new AuthoritativeGameEngine(bound -> 0);
@@ -41,12 +42,14 @@ public class TestFixtureController {
     private final String apiVersion;
     private final int eventSchemaVersion;
 
-    public TestFixtureController(BattleRepository battle, DefinitionRepository definitions,
+    public TestFixtureController(BattleRepository battle, BattleTemplateRepository templates,
+                                 DefinitionRepository definitions,
                                  ObjectMapper objectMapper,
                                  @Value("${metis.engine.version:0.1.0-SNAPSHOT}") String engineVersion,
                                  @Value("${metis.api.version:v1}") String apiVersion,
                                  @Value("${metis.event.schema-version:1}") int eventSchemaVersion) {
         this.battle = battle;
+        this.templates = templates;
         this.definitions = definitions;
         this.objectMapper = objectMapper;
         this.engineVersion = engineVersion;
@@ -58,13 +61,6 @@ public class TestFixtureController {
     @Transactional
     public ResponseEntity<TestFixtureResponse> load(@PathVariable long gameId,
                                                      @RequestBody(required = false) LoadRequest request) {
-        boolean resetExisting = request == null || request.resetExisting() == null || request.resetExisting();
-        if (resetExisting) {
-            battle.findSessions(gameId, null).stream()
-                    .filter(session -> FIXTURES.stream().anyMatch(fixture -> fixture.name().equals(session.sessionName())))
-                    .forEach(session -> battle.deleteSession(session.sessionId()));
-        }
-
         List<LoadedFixture> loaded = new ArrayList<>();
         for (FixtureSpec fixture : FIXTURES) {
             BattleRepository.BattleSession existing = battle.findSessions(gameId, null).stream()
@@ -73,12 +69,28 @@ public class TestFixtureController {
             BattleRepository.BattleSessionDetail session = existing == null
                     ? createFixture(gameId, fixture)
                     : battle.findSession(existing.sessionId()).orElseThrow();
+            ensureTemplate(gameId, fixture, session);
             loaded.add(new LoadedFixture(fixture.key(), fixture.ordinal(), session.sessionId(),
                     session.sessionName(), session.sessionCode(), session.status(),
                     URI.create("/api/v1/sessions/" + session.sessionId()).toString()));
         }
-        return ResponseEntity.ok(new TestFixtureResponse("metis-authoritative-v1", gameId,
-                resetExisting, loaded));
+        return ResponseEntity.ok(new TestFixtureResponse("metis-authoritative-v1", gameId, loaded));
+    }
+
+    private void ensureTemplate(long gameId, FixtureSpec fixture, BattleRepository.BattleSessionDetail session) {
+        List<BattleRepository.SessionPlayer> players = battle.findPlayers(session.sessionId());
+        List<BattleTemplateRepository.TemplatePlayer> templatePlayers = players.stream()
+                .map(player -> new BattleTemplateRepository.TemplatePlayer(player.seatNumber(), player.displayName(),
+                        player.playerKind(), player.factionId(), player.factionName(),
+                        "Fleet " + player.seatNumber(), 0))
+                .toList();
+        long templateId = templates.upsertTemplate(new BattleTemplateRepository.TemplateSpec(
+                gameId, fixture.key(), fixture.name(), "CPU versus CPU regression battle template",
+                session.gameVersionId(), session.gameModeId(), session.scenarioId(), session.fleetFormatId(),
+                fixture.boardCode(), 1800, 900,
+                Map.of("distancePerSpeed", 100, "shortRange", 100, "mediumRange", 200,
+                        "longRange", 300, "maximumRounds", 6), templatePlayers, session.sessionId()));
+        templates.assignSessionTemplate(session.sessionId(), templateId);
     }
 
     private BattleRepository.BattleSessionDetail createFixture(long gameId, FixtureSpec fixture) {
@@ -163,8 +175,7 @@ public class TestFixtureController {
 
     public record LoadRequest(Boolean resetExisting) {}
 
-    public record TestFixtureResponse(String fixtureSet, long gameId, boolean resetExisting,
-                                       List<LoadedFixture> games) {}
+    public record TestFixtureResponse(String fixtureSet, long gameId, List<LoadedFixture> games) {}
 
     public record LoadedFixture(String fixtureKey, int ordinal, long sessionId,
                                 String sessionName, String sessionCode, String status,

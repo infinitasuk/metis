@@ -33,11 +33,13 @@
             </div>
             <div class="wizard-form-grid">
                 <label>Match name<input id="session-name" type="text" maxlength="120" placeholder="Name your match" required></label>
+                <label>Battle template<select id="battle-template"><option value="">Start from scratch</option><option th:each="template : ${templates}" th:value="${template.templateId}" th:text="${template.name}"></option></select></label>
                 <label>Visibility<select id="visibility"><option value="public">Public</option><option value="private">Private</option></select></label>
                 <label>Game mode<select id="game-mode" required><option value="">Choose a mode</option><option th:each="mode : ${gameModes}" th:value="${mode.gameModeId}" th:attr="data-config=${mode.configuration},data-description=${mode.description}" th:text="${mode.name}"></option></select></label>
                 <label>Scenario<select id="scenario" required><option value="">Choose a scenario</option><option th:each="scenario : ${scenarios}" th:value="${scenario.scenarioId}" th:text="${scenario.name}"></option></select></label>
                 <label>Fleet format<select id="fleet-format" required><option value="">Choose a format</option><option th:each="format : ${fleetFormats}" th:value="${format.fleetFormatId}" th:attr="data-mode-id=${format.gameModeId},data-config=${format.configuration}" th:text="|${format.name} / ${format.pointsLimit} points|"></option></select></label>
             </div>
+            <p class="form-message" id="template-message" aria-live="polite"></p>
             <div class="wizard-help"><strong id="game-mode-label">Start with the basics.</strong><span id="game-mode-description">These settings define the match and can be changed any time before the battle starts.</span></div>
         </section>
 
@@ -173,6 +175,51 @@
     for (let index = 0; index < minPlayers; index += 1) addPlayer();
     document.querySelector('#add-player').addEventListener('click', addPlayer);
     document.querySelector('#game-mode').addEventListener('change', applyModeDefaults);
+    document.querySelector('#battle-template').addEventListener('change', async event => {
+        const templateId = event.target.value;
+        if (!templateId) return;
+        const message = field('#template-message');
+        message.textContent = 'Loading template...';
+        try {
+            const response = await fetch(`/api/v1/templates/${templateId}`);
+            if (!response.ok) throw new Error('Could not load the battle template.');
+            const template = await response.json();
+            field('#session-name').value = `${template.name} / run ${new Date().toISOString().slice(0, 10)}`;
+            field('#visibility').value = 'private';
+            if (template.gameModeId != null) field('#game-mode').value = template.gameModeId;
+            else field('#game-mode').value = field('#game-mode').options[1]?.value || '';
+            applyModeDefaults();
+            if (template.scenarioId != null) field('#scenario').value = template.scenarioId;
+            else field('#scenario').value = field('#scenario').options[1]?.value || '';
+            if (template.fleetFormatId != null) field('#fleet-format').value = template.fleetFormatId;
+            else field('#fleet-format').value = [...field('#fleet-format').options]
+                .find(option => !option.hidden && option.value)?.value || '';
+            const board = [...field('#board-code').options].find(option => option.value === template.boardCode)
+                || field('#board-code').options[1];
+            if (board) field('#board-code').value = board.value;
+            if (template.boardWidth) field('#board-width').value = template.boardWidth;
+            if (template.boardHeight) field('#board-height').value = template.boardHeight;
+            if (template.options?.distancePerSpeed) field('#movement-limit').value = template.options.distancePerSpeed;
+            playerList.replaceChildren();
+            playerNumber = 0;
+            for (const player of template.players) {
+                addPlayer();
+                const card = playerList.lastElementChild;
+                card.querySelector('[data-field=name]').value = player.displayName;
+                card.querySelector('[data-field=kind]').value = player.playerKind;
+                card.querySelector('[data-field=faction]').value = player.factionId;
+            }
+            refreshSetupCards();
+            [...fleetList.children].forEach((card, index) => {
+                const player = template.players[index];
+                if (player?.fleetName) card.querySelector('[data-field=fleet-name]').value = player.fleetName;
+                if (player?.pointsTotal != null) card.querySelector('[data-field=points]').value = player.pointsTotal;
+            });
+            message.textContent = `${template.name} loaded. Review the setup, then start a new run.`;
+        } catch (error) {
+            message.textContent = error.message;
+        }
+    });
     document.querySelector('#fleet-format').addEventListener('change', () => {
         field('#fleet-format-summary').textContent = field('#fleet-format').selectedOptions[0]?.textContent || 'Choose a fleet format in Match';
     });
@@ -224,7 +271,7 @@
         startButton.disabled = true;
         message.textContent = 'Creating battle...';
         try {
-            const createResponse = await fetch(`/api/v1/games/${setupForm.dataset.gameId}/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: value('#session-name').trim(), visibility: value('#visibility'), gameModeId: Number(value('#game-mode')), scenarioId: Number(value('#scenario')), fleetFormatId: Number(value('#fleet-format')) }) });
+            const createResponse = await fetch(`/api/v1/games/${setupForm.dataset.gameId}/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: value('#session-name').trim(), visibility: value('#visibility'), gameModeId: Number(value('#game-mode')), scenarioId: Number(value('#scenario')), fleetFormatId: Number(value('#fleet-format')), templateId: value('#battle-template') ? Number(value('#battle-template')) : null }) });
             if (!createResponse.ok) throw new Error('Could not create the game instance.');
             const session = await createResponse.json();
             const playerIds = [];

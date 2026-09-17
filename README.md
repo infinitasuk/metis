@@ -60,9 +60,9 @@ games and access the catalogue admin pages and engine logs.
 
 ## Load repeatable test games
 
-The test-fixture endpoint requires an administrator session and creates ten private, started sessions named
-`METIS-TEST-GAME-01` through `METIS-TEST-GAME-10`. Existing fixture sessions are
-reset by default, while unrelated sessions are left untouched:
+The test-fixture endpoint requires an administrator session and ensures ten retained
+CPU-versus-CPU template battles named `METIS-TEST-GAME-01` through
+`METIS-TEST-GAME-10`. Existing fixture sessions are never deleted or reset:
 
 ```powershell
 $webSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
@@ -71,11 +71,17 @@ Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:8080/login" -Method Po
 Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v1/test-fixtures/games/6" -WebSession $webSession -ContentType "application/json" -Body '{}'
 ```
 
-To reuse the existing ten sessions without resetting their state:
+The same request can be repeated safely. It preserves existing sessions and only
+creates missing templates or sessions:
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v1/test-fixtures/games/6" -WebSession $webSession -ContentType "application/json" -Body '{"resetExisting":false}'
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v1/test-fixtures/games/6" -WebSession $webSession -ContentType "application/json" -Body '{}'
 ```
+
+After loading the templates, open **Game Simulator**, choose a game, and select a
+template in the Match step. The wizard copies the template setup into a new
+session and records which template started that run. The original template battle
+and all of its AI history remain unchanged.
 
 The response contains the stable fixture keys and current session IDs for test
 clients. The numeric game ID is the catalogue game ID, not a session ID.

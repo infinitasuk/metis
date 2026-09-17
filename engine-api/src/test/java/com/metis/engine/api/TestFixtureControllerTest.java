@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TestFixtureControllerTest {
@@ -20,9 +19,10 @@ class TestFixtureControllerTest {
     @Test
     void loadsTheSameTenNamedGamesAndPreservesUnrelatedSessions() {
         FakeBattleRepository battle = new FakeBattleRepository();
+        FakeTemplateRepository templates = new FakeTemplateRepository();
         battle.createSession(7, "ordinary-session", null, null, null,
                 "public", "test", "v1", 1);
-        TestFixtureController controller = new TestFixtureController(battle,
+        TestFixtureController controller = new TestFixtureController(battle, templates,
                 new FakeDefinitionRepository(), new ObjectMapper(), "test", "v1", 1);
 
         TestFixtureController.TestFixtureResponse first = controller.load(7, null).getBody();
@@ -33,6 +33,9 @@ class TestFixtureControllerTest {
                 .map(TestFixtureController.LoadedFixture::sessionId).toList();
 
         assertEquals(10, first.games().size());
+        assertEquals(10, templates.specs.size());
+        assertTrue(templates.specs.stream().flatMap(spec -> spec.players().stream())
+                .allMatch(player -> "cpu".equals(player.playerKind())));
         assertTrue(battle.players.values().stream().flatMap(List::stream)
                 .allMatch(player -> "cpu".equals(player.playerKind())));
         assertEquals(firstIds, preservedIds);
@@ -51,7 +54,7 @@ class TestFixtureControllerTest {
                 .map(TestFixtureController.LoadedFixture::sessionId).toList();
 
         assertEquals(10, reset.games().size());
-        assertNotEquals(firstIds, resetIds);
+        assertEquals(firstIds, resetIds);
         assertTrue(battle.sessions.values().stream()
                 .anyMatch(session -> "ordinary-session".equals(session.sessionName())));
         assertEquals(11, battle.sessions.size());
@@ -75,6 +78,25 @@ class TestFixtureControllerTest {
         @Override
         public List<Faction> findFactions(long definitionId) {
             return List.of(new Faction(101, "rebel"), new Faction(102, "empire"));
+        }
+    }
+
+    private static final class FakeTemplateRepository extends BattleTemplateRepository {
+        private final List<TemplateSpec> specs = new ArrayList<>();
+
+        private FakeTemplateRepository() {
+            super(null, new ObjectMapper());
+        }
+
+        @Override
+        public long upsertTemplate(TemplateSpec spec) {
+            specs.removeIf(existing -> existing.key().equals(spec.key()));
+            specs.add(spec);
+            return spec.key().hashCode();
+        }
+
+        @Override
+        public void assignSessionTemplate(long sessionId, long templateId) {
         }
     }
 

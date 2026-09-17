@@ -48,6 +48,7 @@ import java.util.Map;
 public class BattleApiController {
 
     private final BattleRepository battle;
+    private final BattleTemplateRepository templates;
     private final DefinitionRepository definitions;
     private final ObjectMapper objectMapper;
     private final AuthoritativeGameEngine engine;
@@ -57,13 +58,15 @@ public class BattleApiController {
     private final String gitSha;
     private final AuthenticationContext authentication;
 
-    public BattleApiController(BattleRepository battle, DefinitionRepository definitions, ObjectMapper objectMapper,
+    public BattleApiController(BattleRepository battle, BattleTemplateRepository templates,
+                               DefinitionRepository definitions, ObjectMapper objectMapper,
                                AuthenticationContext authentication,
                                @Value("${metis.engine.version:0.1.0-SNAPSHOT}") String engineVersion,
                                @Value("${metis.api.version:v1}") String apiVersion,
                                @Value("${metis.event.schema-version:1}") int eventSchemaVersion,
                                @Value("${metis.git.sha:unknown}") String gitSha) {
         this.battle = battle;
+        this.templates = templates;
         this.definitions = definitions;
         this.objectMapper = objectMapper;
         this.authentication = authentication;
@@ -98,14 +101,33 @@ public class BattleApiController {
         return battle.findVisibleSessions(gameId, status, authentication.require(request));
     }
 
+    @GetMapping("/templates")
+    public List<BattleTemplateRepository.BattleTemplate> templates(@RequestParam(required = false) Long gameId) {
+        return templates.findTemplates(gameId);
+    }
+
+    @GetMapping("/templates/{templateId}")
+    public BattleTemplateRepository.BattleTemplate template(@PathVariable long templateId) {
+        return templates.findTemplate(templateId).orElseThrow(() ->
+                new ApiNotFoundException("Template " + templateId + " does not exist"));
+    }
+
     @PostMapping("/games/{gameId}/sessions")
     public ResponseEntity<BattleSessionDetail> createSession(@PathVariable long gameId,
                                                               @RequestBody CreateSessionRequest request,
                                                               HttpServletRequest httpRequest) {
         MetisUser user = authentication.require(httpRequest);
+        if (request.templateId() != null) {
+            BattleTemplateRepository.BattleTemplate template = templates.findTemplate(request.templateId())
+                    .orElseThrow(() -> new ApiNotFoundException("Template " + request.templateId() + " does not exist"));
+            if (template.gameId() != gameId) {
+                throw new ApiConflictException("Template does not belong to game " + gameId);
+            }
+        }
         long sessionId = battle.createSession(gameId, request.name(), request.gameModeId(), request.scenarioId(),
                 request.fleetFormatId(), request.visibility(), engineVersion, apiVersion, eventSchemaVersion);
         battle.assignSessionOwner(sessionId, user.userId());
+        if (request.templateId() != null) templates.assignSessionTemplate(sessionId, request.templateId());
         return ResponseEntity.created(URI.create("/api/v1/sessions/" + sessionId))
                 .body(getSession(sessionId));
     }
@@ -473,7 +495,7 @@ public class BattleApiController {
     }
 
     public record CreateSessionRequest(String name, Long gameModeId, Long scenarioId, Long fleetFormatId,
-                                       String visibility) {
+                                       String visibility, Long templateId) {
         public CreateSessionRequest {
             if (name == null || name.isBlank()) {
                 throw new IllegalArgumentException("A session name is required");
