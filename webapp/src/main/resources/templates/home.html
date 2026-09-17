@@ -21,7 +21,7 @@
             <p>Set up a match, choose a scenario and play through the game state.</p>
             <span class="arrow">Enter simulator <span>-&gt;</span></span>
         </a>
-        <a class="mode-card admin-mode" href="/admin">
+        <a class="mode-card admin-mode" href="/admin" th:if="${currentUser != null and currentUser.admin()}">
             <span class="card-kicker">02 / BUILD</span>
             <h2>Admin</h2>
             <p>View the game engine, catalogue records, rules and editable definitions.</p>

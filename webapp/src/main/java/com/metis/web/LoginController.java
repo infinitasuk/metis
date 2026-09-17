@@ -20,6 +20,7 @@ public class LoginController {
     @GetMapping("/login")
     public String login(HttpServletRequest request, @RequestParam(defaultValue = "/") String next, Model model) {
         if (authentication.current(request).isPresent()) return "redirect:" + safeNext(next);
+        request.getSession(true);
         model.addAttribute("users", authentication.users().findActiveUsers());
         model.addAttribute("next", safeNext(next));
         return "login";
