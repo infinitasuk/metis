@@ -92,7 +92,7 @@ class TestFixtureControllerTest {
                     .filter(session -> gameId == null || session.gameId() == gameId)
                     .filter(session -> status == null || status.equals(session.status()))
                     .map(session -> new BattleSession(session.sessionId(), session.gameId(), session.gameName(),
-                            session.sessionName(), session.sessionCode(), session.visibility(), session.status(),
+                            session.sessionName(), session.sessionCode(), session.visibility(), null, session.status(),
                             session.currentRound(), players.getOrDefault(session.sessionId(), List.of()).size(),
                             session.createdAt(), session.updatedAt()))
                     .toList();
@@ -130,7 +130,7 @@ class TestFixtureControllerTest {
             BattleSessionDetail old = sessions.get(sessionId);
             sessions.put(sessionId, new BattleSessionDetail(old.sessionId(), old.gameId(), old.gameName(),
                     old.gameVersionId(), old.gameVersionCode(), old.gameModeId(), old.scenarioId(),
-                    old.fleetFormatId(), old.sessionName(), old.sessionCode(), old.visibility(), status,
+                    old.fleetFormatId(), old.sessionName(), old.sessionCode(), old.visibility(), old.ownerUserId(), status,
                     currentRound, currentPhaseId, stateJson, expectedStateVersion + 1,
                     old.engineVersion(), old.apiVersion(), old.eventSchemaVersion(), old.createdAt(), old.updatedAt()));
         }
@@ -149,7 +149,7 @@ class TestFixtureControllerTest {
         private BattleSessionDetail detail(long sessionId, long gameId, String name,
                                            String status, String state, long stateVersion) {
             return new BattleSessionDetail(sessionId, gameId, "Test", 1L, "v1", null, null,
-                    null, name, "SIM-" + sessionId, "private", status, 0, null, state,
+                    null, name, "SIM-" + sessionId, "private", null, status, 0, null, state,
                     stateVersion, "test", "v1", 1, null, null);
         }
     }

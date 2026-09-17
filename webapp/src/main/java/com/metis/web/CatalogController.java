@@ -7,6 +7,8 @@ import com.metis.engine.api.BattleRepository;
 import com.metis.engine.api.BattleRepository.BattleSessionDetail;
 import com.metis.engine.api.DefinitionRepository;
 import com.metis.engine.api.DefinitionRepository.DefinitionVersion;
+import com.metis.engine.api.AuthenticationContext;
+import com.metis.engine.api.MetisUser;
 import com.metis.web.CatalogRepository.FactionPage;
 import com.metis.web.CatalogRepository.GameObjectPage;
 import com.metis.web.CatalogRepository.GameSummary;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -30,13 +33,16 @@ public class CatalogController {
     private final BattleRepository battle;
     private final DefinitionRepository definitions;
     private final ObjectMapper objectMapper;
+    private final AuthenticationContext authentication;
 
     public CatalogController(CatalogRepository catalog, BattleRepository battle,
-                             DefinitionRepository definitions, ObjectMapper objectMapper) {
+                              DefinitionRepository definitions, ObjectMapper objectMapper,
+                              AuthenticationContext authentication) {
         this.catalog = catalog;
         this.battle = battle;
         this.definitions = definitions;
         this.objectMapper = objectMapper;
+        this.authentication = authentication;
     }
 
     @GetMapping("/")
@@ -77,15 +83,12 @@ public class CatalogController {
     }
 
     @GetMapping("/simulator")
-    public String simulator(Model model) {
+    public String simulator(Model model, HttpServletRequest request) {
+        MetisUser user = authentication.require(request);
         model.addAttribute("games", catalog.findGames());
-        model.addAttribute("runningGames", battle.findSessions(null, "running").stream()
-                .filter(session -> "public".equals(session.visibility()))
-                .toList());
-        model.addAttribute("oldGames", battle.findSessions(null, null).stream()
-                .filter(session -> "public".equals(session.visibility()))
-                .filter(session -> !"running".equals(session.status()))
-                .toList());
+        model.addAttribute("runningGames", battle.findVisibleSessions(null, "running", user));
+        model.addAttribute("oldGames", battle.findVisibleSessions(null, null, user).stream()
+                .filter(session -> !"running".equals(session.status())).toList());
         return "simulator";
     }
 
@@ -113,6 +116,8 @@ public class CatalogController {
         model.addAttribute("boards", battle.findBoards(sessionId));
         model.addAttribute("turns", battle.findTurns(sessionId));
         model.addAttribute("events", battle.findEvents(sessionId, 0));
+        model.addAttribute("invitations", battle.findInvitations(sessionId));
+        model.addAttribute("users", authentication.users().findActiveUsers());
         model.addAttribute("engineState", engineState(session));
         model.addAttribute("enginePhase", enginePhase(session));
         model.addAttribute("engineDefinition", definitions.findEngineDefinition(session.gameVersionId()).orElse(null));

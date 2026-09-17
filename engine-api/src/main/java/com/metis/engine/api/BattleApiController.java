@@ -34,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,8 +55,10 @@ public class BattleApiController {
     private final String apiVersion;
     private final int eventSchemaVersion;
     private final String gitSha;
+    private final AuthenticationContext authentication;
 
     public BattleApiController(BattleRepository battle, DefinitionRepository definitions, ObjectMapper objectMapper,
+                               AuthenticationContext authentication,
                                @Value("${metis.engine.version:0.1.0-SNAPSHOT}") String engineVersion,
                                @Value("${metis.api.version:v1}") String apiVersion,
                                @Value("${metis.event.schema-version:1}") int eventSchemaVersion,
@@ -63,6 +66,7 @@ public class BattleApiController {
         this.battle = battle;
         this.definitions = definitions;
         this.objectMapper = objectMapper;
+        this.authentication = authentication;
         this.engine = new AuthoritativeGameEngine();
         this.engineVersion = engineVersion;
         this.apiVersion = apiVersion;
@@ -89,17 +93,19 @@ public class BattleApiController {
 
     @GetMapping("/sessions")
     public List<BattleSession> sessions(@RequestParam(required = false) Long gameId,
-                                        @RequestParam(required = false) String status) {
-        return battle.findSessions(gameId, status).stream()
-                .filter(session -> "public".equals(session.visibility()))
-                .toList();
+                                        @RequestParam(required = false) String status,
+                                        HttpServletRequest request) {
+        return battle.findVisibleSessions(gameId, status, authentication.require(request));
     }
 
     @PostMapping("/games/{gameId}/sessions")
     public ResponseEntity<BattleSessionDetail> createSession(@PathVariable long gameId,
-                                                              @RequestBody CreateSessionRequest request) {
+                                                              @RequestBody CreateSessionRequest request,
+                                                              HttpServletRequest httpRequest) {
+        MetisUser user = authentication.require(httpRequest);
         long sessionId = battle.createSession(gameId, request.name(), request.gameModeId(), request.scenarioId(),
                 request.fleetFormatId(), request.visibility(), engineVersion, apiVersion, eventSchemaVersion);
+        battle.assignSessionOwner(sessionId, user.userId());
         return ResponseEntity.created(URI.create("/api/v1/sessions/" + sessionId))
                 .body(getSession(sessionId));
     }
@@ -373,6 +379,21 @@ public class BattleApiController {
         return battle.findEvents(sessionId, afterSequence);
     }
 
+    @PostMapping("/sessions/{sessionId}/invitations")
+    @Transactional
+    public List<BattleRepository.SessionInvitation> invite(@PathVariable long sessionId,
+                                                            @RequestBody InviteRequest request,
+                                                            HttpServletRequest httpRequest) {
+        MetisUser user = authentication.require(httpRequest);
+        if (!battle.canEditSession(sessionId, user)) {
+            throw new ApiConflictException("Only the game owner or administrator can invite viewers");
+        }
+        authentication.users().findActive(request.userId())
+                .orElseThrow(() -> new ApiNotFoundException("User " + request.userId() + " does not exist"));
+        battle.inviteUser(sessionId, request.userId(), user.userId());
+        return battle.findInvitations(sessionId);
+    }
+
     @PostMapping("/sessions/{sessionId}/events")
     public ResponseEntity<SessionEvent> appendEvent(@PathVariable long sessionId,
                                                     @RequestBody AppendEventRequest request) {
@@ -498,6 +519,8 @@ public class BattleApiController {
     public record UpdateTurnRequest(Boolean ended, JsonNode state) {}
 
     public record AppendEventRequest(String type, Long actorPlayerId, JsonNode payload) {}
+
+    public record InviteRequest(long userId) {}
 
     private static final class ApiNotFoundException extends RuntimeException {
         private ApiNotFoundException(String message) {

@@ -9,7 +9,8 @@
         <span class="brand-mark">M</span>
         <span><strong>METIS</strong><small>tabletop intelligence</small></span>
     </a>
-    <nav><a href="/simulator">Game Simulator</a><a href="/admin">Admin</a><a href="/admin/engine-logs">Engine Logs</a><a href="/design-options">Design</a></nav>
+    <nav><a href="/simulator">Game Simulator</a><a href="/admin" th:if="${currentUser != null and currentUser.admin()}">Admin</a><a href="/admin/engine-logs" th:if="${currentUser != null and currentUser.admin()}">Engine Logs</a><a href="/design-options">Design</a></nav>
+    <div class="user-nav" th:if="${currentUser != null}"><span th:text="${currentUser.displayName}"></span><a href="/logout">Log out</a></div>
 </header>
 
 <footer th:fragment="footer" class="site-footer">

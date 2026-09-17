@@ -41,7 +41,7 @@
                  <div class="metric-row"><span><b th:text="|Round ${gameSession.currentRound}|"></b></span><span><b th:text="${gameSession.playerCount}"></b> players</span></div>
                  <span class="arrow">View game <span>-&gt;</span></span>
              </a>
-             <button class="text-button delete-session" type="button" th:attr="data-session-id=${gameSession.sessionId}">Delete session</button>
+              <button class="text-button delete-session" type="button" th:if="${currentUser.admin() or gameSession.ownerUserId == currentUser.userId}" th:attr="data-session-id=${gameSession.sessionId}">Delete session</button>
          </article>
     </section>
     <p class="muted live-games-empty" id="running-games-empty">No games are running right now. Configure a match above to start one.</p>
@@ -58,13 +58,15 @@
                 <div class="metric-row"><span><b th:text="|Round ${gameSession.currentRound}|"></b></span><span><b th:text="${gameSession.playerCount}"></b> players</span></div>
                 <span class="arrow">Open session <span>-&gt;</span></span>
             </a>
-            <button class="text-button delete-session" type="button" th:attr="data-session-id=${gameSession.sessionId}">Delete session</button>
+             <button class="text-button delete-session" type="button" th:if="${currentUser.admin() or gameSession.ownerUserId == currentUser.userId}" th:attr="data-session-id=${gameSession.sessionId}">Delete session</button>
         </article>
     </section>
     <p class="muted old-games-empty" id="old-games-empty" th:hidden="${!oldGames.isEmpty()}">No old sessions saved.</p>
 </main>
 <footer th:replace="~{fragments :: footer}"></footer>
-<script>
+<script th:inline="javascript">
+    const currentUserId = /*[[${currentUser.userId}]]*/ 0;
+    const currentUserAdmin = /*[[${currentUser.admin()}]]*/ false;
     const runningGames = document.querySelector('#running-games');
     const runningGamesEmpty = document.querySelector('#running-games-empty');
     const runningGameCount = document.querySelector('#running-game-count');
@@ -121,12 +123,16 @@
             link.className = 'arrow';
             link.textContent = 'View game ->';
             sessionLink.append(kicker, name, game, metrics, link);
-            const deleteButton = document.createElement('button');
-            deleteButton.className = 'text-button delete-session';
-            deleteButton.type = 'button';
-            deleteButton.dataset.sessionId = gameSession.sessionId;
-            deleteButton.textContent = 'Delete session';
-            card.append(sessionLink, deleteButton);
+             if (currentUserAdmin || Number(gameSession.ownerUserId) === Number(currentUserId)) {
+                 const deleteButton = document.createElement('button');
+                 deleteButton.className = 'text-button delete-session';
+                 deleteButton.type = 'button';
+                 deleteButton.dataset.sessionId = gameSession.sessionId;
+                 deleteButton.textContent = 'Delete session';
+                 card.append(sessionLink, deleteButton);
+             } else {
+                 card.append(sessionLink);
+             }
             return card;
         }));
         runningGames.hidden = sessions.length === 0;

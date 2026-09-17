@@ -25,22 +25,47 @@ public class BattleRepository {
                         rs.getLong("session_id"), rs.getLong("game_id"),
                         rs.getString("game_name"), rs.getString("session_name"),
                         rs.getString("session_code"), rs.getString("visibility"),
+                        rs.getObject("owner_user_id", Long.class),
                         rs.getString("status"),
                         rs.getInt("current_round"), rs.getLong("player_count"),
                         rs.getString("created_at"), rs.getString("updated_at")
                 ), gameId, status);
     }
 
+    public List<BattleSession> findVisibleSessions(Long gameId, String status, MetisUser user) {
+        return jdbc.query("""
+                SELECT s.session_id, s.game_id, g.game_name, s.session_name, s.session_code,
+                       s.visibility, s.owner_user_id, s.status, s.current_round,
+                       count(sp.session_player_id) AS player_count, s.created_at, s.updated_at
+                FROM game_instance.game_session s
+                JOIN game_engine.game g ON g.game_id = s.game_id
+                LEFT JOIN game_instance.session_player sp ON sp.session_id = s.session_id
+                WHERE (? IS NULL OR s.game_id = ?)
+                  AND (? IS NULL OR s.status = ?)
+                  AND (? OR s.visibility = 'public' OR s.owner_user_id = ?
+                       OR EXISTS (SELECT 1 FROM game_instance.session_invitation i
+                                  WHERE i.session_id = s.session_id AND i.user_id = ?))
+                GROUP BY s.session_id, g.game_name
+                ORDER BY s.updated_at DESC, s.session_id DESC
+                """, (rs, rowNum) -> new BattleSession(
+                rs.getLong("session_id"), rs.getLong("game_id"), rs.getString("game_name"),
+                rs.getString("session_name"), rs.getString("session_code"), rs.getString("visibility"),
+                rs.getObject("owner_user_id", Long.class), rs.getString("status"),
+                rs.getInt("current_round"), rs.getLong("player_count"),
+                rs.getString("created_at"), rs.getString("updated_at")),
+                gameId, gameId, status, status, user.admin(), user.userId(), user.userId());
+    }
+
     public Optional<BattleSessionDetail> findSession(long sessionId) {
         return jdbc.query("SELECT * FROM game_instance.fn_session_get(?)", rs -> rs.next()
                 ? Optional.of(new BattleSessionDetail(
                         rs.getLong("session_id"), rs.getLong("game_id"),
-                        rs.getString("game_name"), rs.getObject("game_version_id", Long.class),
+                         rs.getString("game_name"), rs.getObject("game_version_id", Long.class),
                         rs.getString("game_version_code"),
                          rs.getObject("game_mode_id", Long.class), rs.getObject("scenario_id", Long.class),
                          rs.getObject("fleet_format_id", Long.class),
-                         rs.getString("session_name"), rs.getString("session_code"),
-                         rs.getString("visibility"),
+                          rs.getString("session_name"), rs.getString("session_code"),
+                          rs.getString("visibility"), rs.getObject("owner_user_id", Long.class),
                          rs.getString("status"), rs.getInt("current_round"),
                          rs.getObject("current_phase_id", Long.class),
                          rs.getString("state_json"), rs.getLong("state_version"), rs.getString("engine_version"),
@@ -48,6 +73,80 @@ public class BattleRepository {
                          rs.getString("created_at"), rs.getString("updated_at")
                 ))
                 : Optional.empty(), sessionId);
+    }
+
+    public boolean canViewSession(long sessionId, MetisUser user) {
+        Boolean allowed = jdbc.queryForObject("SELECT game_instance.fn_session_can_view(?,?,?)",
+                Boolean.class, sessionId, user.userId(), user.admin());
+        return Boolean.TRUE.equals(allowed);
+    }
+
+    public boolean canEditSession(long sessionId, MetisUser user) {
+        Boolean allowed = jdbc.queryForObject("SELECT game_instance.fn_session_can_edit(?,?,?)",
+                Boolean.class, sessionId, user.userId(), user.admin());
+        return Boolean.TRUE.equals(allowed);
+    }
+
+    public void assignSessionOwner(long sessionId, long userId) {
+        execute("{call game_instance.sp_session_owner_set(?,?)}", statement -> {
+            statement.setLong(1, sessionId);
+            statement.setLong(2, userId);
+        });
+    }
+
+    public void inviteUser(long sessionId, long userId, long invitedByUserId) {
+        execute("{call game_instance.sp_session_invite(?,?,?)}", statement -> {
+            statement.setLong(1, sessionId);
+            statement.setLong(2, userId);
+            statement.setLong(3, invitedByUserId);
+        });
+    }
+
+    public List<SessionInvitation> findInvitations(long sessionId) {
+        return jdbc.query("""
+                SELECT i.user_id, u.username, u.display_name, i.invited_by_user_id, i.created_at
+                FROM game_instance.session_invitation i
+                JOIN game_instance.app_user u ON u.user_id = i.user_id
+                WHERE i.session_id = ?
+                ORDER BY u.display_name
+                """, (rs, rowNum) -> new SessionInvitation(rs.getLong("user_id"),
+                rs.getString("username"), rs.getString("display_name"),
+                rs.getLong("invited_by_user_id"), rs.getString("created_at")), sessionId);
+    }
+
+    public Optional<Long> sessionIdForPlayer(long playerId) {
+        return sessionId("SELECT session_id FROM game_instance.session_player WHERE session_player_id = ?", playerId);
+    }
+
+    public Optional<Long> sessionIdForFleet(long fleetId) {
+        return sessionId("""
+                SELECT sp.session_id
+                FROM game_instance.player_fleet f
+                JOIN game_instance.session_player sp ON sp.session_player_id = f.session_player_id
+                WHERE f.fleet_id = ?
+                """, fleetId);
+    }
+
+    public Optional<Long> sessionIdForUnit(long unitId) {
+        return sessionId("""
+                SELECT sp.session_id
+                FROM game_instance.fleet_unit u
+                JOIN game_instance.player_fleet f ON f.fleet_id = u.fleet_id
+                JOIN game_instance.session_player sp ON sp.session_player_id = f.session_player_id
+                WHERE u.unit_instance_id = ?
+                """, unitId);
+    }
+
+    public Optional<Long> sessionIdForBoard(long boardId) {
+        return sessionId("SELECT session_id FROM game_instance.session_board WHERE session_board_id = ?", boardId);
+    }
+
+    public Optional<Long> sessionIdForTurn(long turnId) {
+        return sessionId("SELECT session_id FROM game_instance.session_turn WHERE turn_id = ?", turnId);
+    }
+
+    private Optional<Long> sessionId(String sql, long resourceId) {
+        return jdbc.query(sql, rs -> rs.next() ? Optional.of(rs.getLong("session_id")) : Optional.empty(), resourceId);
     }
 
     public List<SessionPlayer> findPlayers(long sessionId) {
@@ -412,7 +511,8 @@ public class BattleRepository {
     }
 
     public record BattleSession(long sessionId, long gameId, String gameName,
-                                String sessionName, String sessionCode, String visibility, String status,
+                                String sessionName, String sessionCode, String visibility, Long ownerUserId,
+                                String status,
                                 int currentRound, long playerCount,
                                 String createdAt, String updatedAt) {}
 
@@ -420,10 +520,14 @@ public class BattleRepository {
                                       Long gameVersionId, String gameVersionCode,
                                       Long gameModeId, Long scenarioId,
                                       Long fleetFormatId,
-                                       String sessionName, String sessionCode, String visibility, String status,
+                                       String sessionName, String sessionCode, String visibility, Long ownerUserId,
+                                       String status,
                                        int currentRound, Long currentPhaseId, String state, long stateVersion,
                                       String engineVersion, String apiVersion,
                                       int eventSchemaVersion, String createdAt, String updatedAt) {}
+
+    public record SessionInvitation(long userId, String username, String displayName,
+                                    long invitedByUserId, String createdAt) {}
 
     public record SessionPlayer(long sessionPlayerId, long sessionId, int seatNumber,
                                 String displayName, String playerKind, Long factionId,

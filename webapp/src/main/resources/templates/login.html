@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>METIS / Select User</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main class="shell login-shell">
+    <section class="login-panel">
+        <p class="eyebrow">METIS / ACCESS CONTROL</p>
+        <h1>Select your<br><em>operator.</em></h1>
+        <p class="lede">Choose a seeded test identity to enter the simulator workspace.</p>
+        <form class="login-form" method="post" action="/login">
+            <input type="hidden" name="next" th:value="${next}">
+            <label for="user-id">Operator</label>
+            <select id="user-id" name="userId" required>
+                <option value="">Select a user</option>
+                <option th:each="user : ${users}" th:value="${user.userId}"
+                        th:text="${user.displayName + ' / ' + user.roleCode}"></option>
+            </select>
+            <button class="button" type="submit">Enter workspace</button>
+        </form>
+        <p class="muted">Test identities are intentionally passwordless in this development environment.</p>
+    </section>
+</main>
+</body>
+</html>

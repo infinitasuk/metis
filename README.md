@@ -50,6 +50,14 @@ Open `http://localhost:8080`.
 The default database settings match `docker/.env`. Override them with `DB_URL`,
 `DB_USER`, `DB_PASSWORD`, or `PORT` when required.
 
+## Development Login
+
+The development login screen provides four regular users (`alice`, `bob`,
+`carol`, and `dave`) plus `admin`. It is intentionally passwordless for local
+testing. Regular users can create games, see public games and their own games,
+and view private games after an owner invitation. The administrator can see all
+games and access the catalogue admin pages and engine logs.
+
 ## Load repeatable test games
 
 The test-fixture endpoint creates ten private, started sessions named

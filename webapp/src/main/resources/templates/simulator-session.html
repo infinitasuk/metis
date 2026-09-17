@@ -10,6 +10,7 @@
 <header class="tactical-hud">
     <a class="tactical-brand" href="/simulator"><strong>METIS</strong><span>BATTLE SIMULATOR / V0.1</span></a>
     <div class="tactical-system">MODULAR ENGINE FOR<br>TABLETOP INTELLIGENCE &amp; STRATEGY</div>
+    <a class="tactical-user" href="/logout" th:text="${currentUser.displayName + ' / LOG OUT'}"></a>
     <div class="tactical-readout"><div><span>GAME</span><strong th:text="${battleSession.gameName}"></strong></div><div><span>SCENARIO</span><strong th:text="${scenarioName}"></strong></div><div><span>TURN</span><strong id="session-round" th:text="|${engineState != null ? engineState.round : battleSession.currentRound} / ${engineState != null and engineState.values['maximumRounds'] != null ? engineState.values['maximumRounds'] : 6}|"></strong></div><div><span>PHASE</span><strong id="session-status" th:text="${engineState != null ? engineState.phaseCode : battleSession.status}"></strong></div></div>
 </header>
 <main class="tactical-shell">
@@ -45,6 +46,22 @@
             <details class="engine-status tactical-engine-status" id="engine-status" th:attr="data-session-id=${battleSession.sessionId}"><summary><span class="engine-status-dot"></span><span>ENGINE STATUS</span><strong id="engine-status-label" th:text="${battleSession.status}"></strong><span class="engine-status-toggle">VIEW</span></summary><div class="engine-status-body"><div class="engine-status-grid"><div><span>PHASE</span><strong id="engine-status-phase" th:text="${engineState != null ? engineState.phaseCode : 'not started'}"></strong></div><div><span>ACTIVE PLAYER</span><strong id="engine-status-player" th:text="${engineState != null and engineState.activePlayerId != null ? engineState.activePlayerId : '-'}"></strong></div><div><span>STATE VERSION</span><strong id="engine-status-version" th:text="${engineState != null ? engineState.stateVersion : 0}"></strong></div><div><span>LEGAL ACTIONS</span><strong id="engine-status-actions">-</strong></div><div><span>EVENTS</span><strong id="engine-status-events" th:text="${events.size()}"></strong></div><div><span>LAST CHECK</span><strong id="engine-status-refresh">Not checked</strong></div></div><p class="engine-status-message" id="engine-status-message">Checking the current engine state...</p></div></details>
         </aside>
     </div>
+<section class="session-sharing shell" th:if="${currentUser != null and (currentUser.admin() or battleSession.ownerUserId == currentUser.userId)}">
+    <div class="sharing-panel">
+        <p class="eyebrow">PRIVATE GAME ACCESS</p>
+        <h2>Invite viewers</h2>
+        <form class="inline-form" id="invite-form" th:attr="data-session-id=${battleSession.sessionId}">
+            <select name="userId" required>
+                <option value="">Select a user</option>
+                <option th:each="user : ${users}" th:if="${user.userId != currentUser.userId}"
+                        th:value="${user.userId}" th:text="${user.displayName + ' / ' + user.username}"></option>
+            </select>
+            <button class="button" type="submit">Invite to view</button>
+        </form>
+        <p class="form-message" id="invite-message" aria-live="polite"></p>
+        <div class="invite-list"><span th:each="invite : ${invitations}" th:text="${invite.displayName}"></span></div>
+    </div>
+</section>
 </main>
  <script th:inline="javascript">
      const unitProfiles = /*[[${engineDefinition != null ? engineDefinition.unitDefinitions : {}}]]*/ [];
@@ -1192,8 +1209,23 @@
         interactionMode = 'attack';
         document.querySelector('#interaction-message').textContent = 'Attack mode: click a highlighted hostile unit.';
     });
-    document.querySelector('#end-activation')?.addEventListener('click', () =>
-        submitAction(liveBoard, 'end_turn', { actorPlayerId: currentState.activePlayerId }));
+     document.querySelector('#end-activation')?.addEventListener('click', () =>
+         submitAction(liveBoard, 'end_turn', { actorPlayerId: currentState.activePlayerId }));
+     document.querySelector('#invite-form')?.addEventListener('submit', async event => {
+         event.preventDefault();
+         const form = event.currentTarget;
+         const response = await fetch(`/api/v1/sessions/${form.dataset.sessionId}/invitations`, {
+             method: 'POST', headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ userId: Number(new FormData(form).get('userId')) })
+         });
+         const message = document.querySelector('#invite-message');
+         if (response.ok) {
+             message.textContent = 'Viewer invitation saved.';
+             window.setTimeout(() => window.location.reload(), 350);
+         } else {
+             message.textContent = 'The invitation could not be saved.';
+         }
+     });
 </script>
 </body>
 </html>
