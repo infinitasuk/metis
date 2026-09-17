@@ -128,7 +128,7 @@ public class BattleApiController {
                 request.fleetFormatId(), request.visibility(), engineVersion, apiVersion, eventSchemaVersion);
         battle.assignSessionOwner(sessionId, user.userId());
         if (request.templateId() != null) {
-            templates.initializeRunMetadata(sessionId, request.templateId(), gitSha);
+            templates.initializeRunMetadata(sessionId, request.templateId(), aiVersion());
         }
         return ResponseEntity.created(URI.create("/api/v1/sessions/" + sessionId))
                 .body(getSession(sessionId));
@@ -467,6 +467,10 @@ public class BattleApiController {
 
     private static String json(JsonNode node) {
         return node == null ? null : node.toString();
+    }
+
+    private String aiVersion() {
+        return gitSha == null || gitSha.isBlank() || "unknown".equals(gitSha) ? "cpu-v1" : gitSha;
     }
 
     private void persistState(long sessionId, long expectedStateVersion, GameState state,
