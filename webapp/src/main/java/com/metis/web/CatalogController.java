@@ -62,7 +62,9 @@ public class CatalogController {
 
     @GetMapping("/admin")
     public String admin(Model model) {
-        model.addAttribute("games", catalog.findGames());
+        List<GameSummary> games = catalog.findGames();
+        model.addAttribute("games", games);
+        model.addAttribute("fixtureGameId", games.isEmpty() ? null : games.get(0).gameId());
         return "games";
     }
 

@@ -66,6 +66,12 @@ h3 { margin-bottom: 9px; font-size: 1.12rem; }
 .metric-row b { color: var(--ink); font-size: 1rem; }
 .arrow { margin-top: 22px; color: var(--accent); font-size: .78rem; font-weight: 800; }
 .arrow span { font-size: 1.1rem; }
+.fixture-tools { display: flex; align-items: center; justify-content: space-between; gap: 28px; margin-bottom: 24px; padding: 24px 28px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.fixture-tools h2 { margin: 0 0 8px; font-size: clamp(1.55rem, 3vw, 2.35rem); }
+.fixture-tools .muted { max-width: 580px; margin: 0; line-height: 1.5; }
+.fixture-action { min-width: 230px; }
+.fixture-action .button { width: 100%; justify-content: center; }
+.fixture-action .form-message { margin-bottom: 0; }
 .back-link { display: inline-block; margin-bottom: 28px; color: var(--muted); font-size: .78rem; }
 .hero-panel { margin-bottom: 72px; padding: 58px clamp(26px, 6vw, 80px); background: var(--ink); color: #f7f8f3; box-shadow: var(--shadow); }
 .hero-panel .eyebrow { color: #8bc1ad; }
@@ -287,6 +293,8 @@ details code { display: block; max-width: 100%; margin-top: 8px; text-align: lef
     .shell { padding: 45px 19px 70px; }
     .intro { padding-bottom: 52px; }
     .game-grid, .faction-grid, .two-column, .type-grid, .object-list, .mode-grid { grid-template-columns: 1fr; }
+    .fixture-tools { align-items: stretch; flex-direction: column; }
+    .fixture-action { min-width: 0; }
     .object-type-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .object-filters { align-items: stretch; flex-direction: column; margin-bottom: 48px; }
     .object-filters .button { justify-content: center; }

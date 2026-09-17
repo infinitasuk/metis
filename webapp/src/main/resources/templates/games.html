@@ -19,6 +19,18 @@
         <div><p class="eyebrow">GAME ENGINE</p><h2>Game definitions</h2></div>
         <span class="count" th:text="${games.size()} + ' loaded'"></span>
     </section>
+    <section class="fixture-tools" th:if="${fixtureGameId != null}">
+        <div>
+            <p class="eyebrow">TEST DATA</p>
+            <h2>Repeatable test battles</h2>
+            <p class="muted">Reset or create the ten private, started sessions used by automated tests.</p>
+        </div>
+        <div class="fixture-action">
+            <button class="button" id="load-test-fixtures" type="button"
+                    th:attr="data-game-id=${fixtureGameId}">Load 10 test games <span>-&gt;</span></button>
+            <p class="form-message" id="fixture-message" aria-live="polite"></p>
+        </div>
+    </section>
     <section class="game-grid">
         <a class="game-card" th:each="game : ${games}" th:href="@{/admin/games/{id}(id=${game.gameId})}">
             <div class="card-kicker">GAME <span th:text="'0' + ${game.gameId}"></span></div>
@@ -35,5 +47,28 @@
     </section>
 </main>
 <footer th:replace="~{fragments :: footer}"></footer>
+<script>
+    const fixtureButton = document.querySelector('#load-test-fixtures');
+    const fixtureMessage = document.querySelector('#fixture-message');
+
+    fixtureButton?.addEventListener('click', async () => {
+        fixtureButton.disabled = true;
+        fixtureMessage.textContent = 'Loading test games...';
+        try {
+            const response = await fetch(`/api/v1/test-fixtures/games/${fixtureButton.dataset.gameId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: '{}'
+            });
+            if (!response.ok) throw new Error(`Request failed (${response.status})`);
+            const result = await response.json();
+            fixtureMessage.textContent = `${result.games.length} test games loaded.`;
+        } catch (error) {
+            fixtureMessage.textContent = `Could not load test games: ${error.message}`;
+        } finally {
+            fixtureButton.disabled = false;
+        }
+    });
+</script>
 </body>
 </html>
