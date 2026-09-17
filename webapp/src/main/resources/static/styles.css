@@ -632,14 +632,13 @@ html[data-theme="operations"] .game-card, html[data-theme="operations"] .faction
 .pips { display: inline-flex; gap: 3px; }
 .pips i { width: 9px; height: 9px; border: 1px solid #28677a; background: transparent; }
 .pips i.filled { background: #53d9ff; border-color: #53d9ff; box-shadow: 0 0 5px rgba(83, 217, 255, .55); }
-.inspector-arc-diagram { display: grid; grid-template-columns: 1fr 72px; align-items: center; gap: 8px; }
-.inspector-arc-diagram svg { width: 100%; height: auto; color: #ff6670; fill: none; stroke: currentColor; stroke-width: 1.5; }
-.inspector-arc-diagram .arc-ship { color: #d9f5ff; stroke-width: 2; }
-.inspector-arc-diagram > div { display: grid; gap: 8px; color: #d9f5ff; font-size: .56rem; }
+.inspector-arc-diagram { display: grid; grid-template-columns: 1fr 118px; align-items: center; gap: 10px; }
+.inspector-arc-diagram svg { width: 100%; height: auto; color: #28677a; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.inspector-arc-diagram .arc-ship { color: #d9f5ff; fill: rgba(217, 245, 255, .08); stroke-width: 2; }
+.inspector-arc-diagram > div { display: grid; gap: 7px; color: #d9f5ff; font-size: .53rem; line-height: 1.35; }
+.inspector-arc-row { display: grid; grid-template-columns: 10px 1fr; align-items: start; gap: 5px; }
 .arc-key { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border: 1px solid currentColor; vertical-align: -1px; }
-.arc-key.front { background: #ff6670; }
-.arc-key.side { background: transparent; }
-.arc-key.rear { background: #ff6670; opacity: .55; }
+.arc-key.all-around { border-color: #d9f5ff; border-radius: 50%; background: transparent; box-shadow: 0 0 0 1px #d9f5ff inset; }
 .inspector-details { margin-top: 7px; }
 .tactical-engine-status { flex: 0 0 auto; }
 .tactical-log { max-height: 154px; }

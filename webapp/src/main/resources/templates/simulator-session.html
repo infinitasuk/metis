@@ -118,12 +118,86 @@
           Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, value));
           return node;
       };
-      const inspectorArcSvg = document.querySelector('.inspector-arc-diagram svg');
-      const inspectorArcGeometry = inspectorArcSvg ? document.createElementNS(svgNamespace, 'g') : null;
-      if (inspectorArcSvg && inspectorArcGeometry) {
-          while (inspectorArcSvg.firstChild) inspectorArcGeometry.append(inspectorArcSvg.firstChild);
-          inspectorArcSvg.append(inspectorArcGeometry);
-      }
+       const inspectorArcSvg = document.querySelector('.inspector-arc-diagram svg');
+       const inspectorArcZones = inspectorArcSvg ? svgNode('g', { id: 'inspector-arc-zones' }) : null;
+       const inspectorArcShip = inspectorArcSvg ? svgNode('path', {
+           id: 'inspector-arc-ship', class: 'arc-ship', d: 'M84 60 48 50 55 60 48 70 Z'
+       }) : null;
+       const inspectorArcLegend = document.querySelector('.inspector-arc-diagram > div');
+       if (inspectorArcSvg && inspectorArcZones && inspectorArcShip) {
+           inspectorArcSvg.replaceChildren(
+               svgNode('circle', { cx: 60, cy: 60, r: 46 }),
+               inspectorArcZones,
+               inspectorArcShip
+           );
+       }
+       const inspectorArcProfiles = [
+           { key: 'front', label: 'Front', angle: 0, colour: '#ff6670' },
+           { key: 'left', label: 'Left', angle: 90, colour: '#ffd166' },
+           { key: 'right', label: 'Right', angle: -90, colour: '#53d9ff' },
+           { key: 'rear', label: 'Rear', angle: 180, colour: '#b987ff' }
+       ];
+       const attackDieText = dice => (Array.isArray(dice) && dice.length
+           ? dice.map(die => `${die.count} ${die.color}`).join(' / ')
+           : 'none');
+       const renderInspectorArcs = unit => {
+           if (!inspectorArcZones || !inspectorArcShip || !inspectorArcLegend) return;
+           inspectorArcZones.replaceChildren();
+           inspectorArcLegend.replaceChildren();
+           const profile = unit && unitProfile(unit);
+           const batteryArcs = profile?.batteryArcs || {};
+           const facing = Number(unit?.facing) || 0;
+           inspectorArcZones.setAttribute('transform', `rotate(${-facing} 60 60)`);
+           inspectorArcShip.setAttribute('transform', `rotate(${-facing} 60 60)`);
+           const availableArcs = inspectorArcProfiles.filter(arc => Array.isArray(batteryArcs[arc.key])
+               && batteryArcs[arc.key].length);
+           const point = (angle, radius = 44) => {
+               const radians = angle * Math.PI / 180;
+               return { x: 60 + Math.cos(radians) * radius, y: 60 - Math.sin(radians) * radius };
+           };
+           const sectorPath = (angle, spread = 41) => {
+               const start = point(angle - spread);
+               const end = point(angle + spread);
+               return `M 60 60 L ${start.x} ${start.y} A 44 44 0 0 0 ${end.x} ${end.y} Z`;
+           };
+           availableArcs.forEach(arc => {
+               const dice = batteryArcs[arc.key];
+               inspectorArcZones.append(svgNode('path', {
+                   class: `inspector-arc-zone ${arc.key}`,
+                   d: sectorPath(arc.angle),
+                   fill: arc.colour,
+                   stroke: arc.colour,
+                   'fill-opacity': '.18',
+                   'stroke-width': '1.6'
+               }));
+               const row = document.createElement('span');
+               row.className = 'inspector-arc-row';
+               const swatch = document.createElement('i');
+               swatch.className = 'arc-key';
+               swatch.style.backgroundColor = arc.colour;
+               swatch.style.borderColor = arc.colour;
+               const label = document.createElement('span');
+               label.textContent = `${arc.label}: ${attackDieText(dice)}`;
+               row.append(swatch, label);
+               inspectorArcLegend.append(row);
+           });
+           const antiSquadronDice = profile?.antiSquadronDice;
+           if (Array.isArray(antiSquadronDice) && antiSquadronDice.length) {
+               const row = document.createElement('span');
+               row.className = 'inspector-arc-row';
+               const swatch = document.createElement('i');
+               swatch.className = 'arc-key all-around';
+               const label = document.createElement('span');
+               label.textContent = `All-around anti-squadron: ${attackDieText(antiSquadronDice)}`;
+               row.append(swatch, label);
+               inspectorArcLegend.append(row);
+           }
+           if (!availableArcs.length && !(Array.isArray(antiSquadronDice) && antiSquadronDice.length)) {
+               const empty = document.createElement('span');
+               empty.textContent = 'No weapon profile available';
+               inspectorArcLegend.append(empty);
+           }
+       };
      const boardPoint = (unit, state) => ({ x: unit.positionX, y: state.board.height - unit.positionY });
      const unitDistance = (first, second) => Math.hypot(second.positionX - first.positionX, second.positionY - first.positionY);
       const tacticalArc = (unit, state, radius, centerAngle, spread = 45) => {
@@ -803,9 +877,9 @@
          row.append(name, pips, amount);
          return row;
      };
-     const renderSelectedUnit = () => {
-          const unit = selectedUnit();
-          inspectorArcGeometry?.setAttribute('transform', `rotate(${90 - (Number(unit?.facing) || 0)} 60 60)`);
+      const renderSelectedUnit = () => {
+           const unit = selectedUnit();
+           renderInspectorArcs(unit);
           const name = document.querySelector('#selected-unit-name');
          const owner = document.querySelector('#selected-unit-owner');
          const art = document.querySelector('#selected-unit-art');
@@ -818,8 +892,8 @@
           const pipStats = document.querySelector('#selected-pip-stats');
          const activePlayer = currentState?.players.find(item => item.playerId === currentState.activePlayerId);
          const cpuTurn = activePlayer?.kind === 'cpu';
-         if (!unit) {
-              art.replaceChildren();
+          if (!unit) {
+               art.replaceChildren();
               name.textContent = 'Select a unit';
              owner.textContent = cpuTurn ? 'CPU controls the active fleet automatically.' : 'Click a unit on the battlefield.';
               resources.textContent = '';
@@ -827,7 +901,7 @@
                minSpeed.textContent = '-';
                turnRate.textContent = '-';
                renderMovementCommand(null);
-              pipStats.replaceChildren();
+               pipStats.replaceChildren();
              actions.hidden = cpuTurn;
              badge.textContent = cpuTurn ? 'AI' : 'PLAYER';
              return;
