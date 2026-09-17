@@ -40,8 +40,8 @@ public class BattleRepository {
                 FROM game_instance.game_session s
                 JOIN game_engine.game g ON g.game_id = s.game_id
                 LEFT JOIN game_instance.session_player sp ON sp.session_id = s.session_id
-                WHERE (? IS NULL OR s.game_id = ?)
-                  AND (? IS NULL OR s.status = ?)
+                WHERE (CAST(? AS bigint) IS NULL OR s.game_id = ?)
+                  AND (CAST(? AS text) IS NULL OR s.status = ?)
                   AND (? OR s.visibility = 'public' OR s.owner_user_id = ?
                        OR EXISTS (SELECT 1 FROM game_instance.session_invitation i
                                   WHERE i.session_id = s.session_id AND i.user_id = ?))
