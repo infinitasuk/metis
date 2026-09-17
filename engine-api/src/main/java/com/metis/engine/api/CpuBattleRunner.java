@@ -236,13 +236,13 @@ public class CpuBattleRunner {
                 .filter(unit -> unit.playerId() == state.activePlayerId())
                 .filter(unit -> "ready".equals(unit.status()) && unit.hullPoints() > 0)
                 .filter(unit -> unitCanActInPhase(definition, state.phaseCode(), unit))
-                .filter(unit -> state.units().stream().anyMatch(target -> canAttack(definition, unit, target)))
+                 .filter(unit -> state.units().stream().anyMatch(target -> canAttack(definition, state, unit, target)))
                 .findFirst().orElse(null);
         if (attacker == null) {
             return null;
         }
         UnitState target = state.units().stream()
-                .filter(candidate -> canAttack(definition, attacker, candidate))
+                .filter(candidate -> canAttack(definition, state, attacker, candidate))
                 .findFirst().orElse(null);
         return target == null ? null : new Action("attack_unit", attacker.playerId(), Map.of(
                 "unitId", attacker.unitId(), "targetUnitId", target.unitId()));
@@ -314,12 +314,12 @@ public class CpuBattleRunner {
         return normalized < 0 ? normalized + 360 : normalized;
     }
 
-    private boolean canAttack(GameDefinition definition, UnitState attacker, UnitState target) {
+    private boolean canAttack(GameDefinition definition, GameState state,
+                              UnitState attacker, UnitState target) {
         if (target.playerId() == attacker.playerId() || target.hullPoints() <= 0) {
             return false;
         }
-        UnitDefinition profile = profile(definition, attacker.unitCode());
-        return profile != null && distance(attacker, target) <= profile.maximumAttackRange();
+        return engine.canAttack(definition, state, attacker, target);
     }
 
     private boolean unitCanActInPhase(GameDefinition definition, String phase, UnitState unit) {

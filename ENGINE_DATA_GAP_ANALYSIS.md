@@ -21,8 +21,8 @@ The published Armada revision currently contains:
 
 | Data | Count | Current use |
 | --- | ---: | --- |
-| Unit variants | 330 | Projected into engine unit definitions |
-| Variant characteristics | 3,490 | Only a small subset is projected |
+| Unit variants | 165 | Projected into engine unit definitions |
+| Variant characteristics | 1,745 | A typed subset is projected; richer catalogue objects remain outside runtime |
 | Unit type characteristics | 0 | No inheritance source is populated |
 | Generic game objects | 2,952 | Admin/catalogue display only for the engine |
 | Variant/object associations | 2,598 | Not loaded into runtime definitions |
@@ -41,15 +41,15 @@ and `Squadron Ability`.
 
 | Area | Source data | Projection/runtime status | Severity | Next implementation |
 | --- | --- | --- | --- | --- |
-| Ship speed | `Max Speed` | Projection currently reads only `Speed`; ship profiles resolve to `0` and gameplay falls back to global `100` | Critical | Project `Max Speed` for ships and keep `Speed` for squadrons |
+| Ship speed | `Max Speed` | Projected with `Speed` fallback; published ship profiles no longer resolve to zero | Done | Add broader regression coverage across published variants |
 | Movement distance | Mode option `maximumMovementDistance` | New maneuver actions use `distancePerSpeed`; legacy coordinate actions remain for existing callers | Critical | Remove the legacy path after clients migrate |
-| Turning/manoeuvre | The BSData catalogue has no structured maneuver characteristic | Ship charts are imported into `unit_variant_maneuver_profile` from the pinned Armada TTS definitions; each speed row preserves its variable joint count | Critical | Verify source licensing and reconcile any chart differences against the target rules reference |
-| Base geometry | Generic base objects/profiles | Not in `UnitDefinition` or `UnitState` | High | Add base shape/size and use it for collision, range, and arc checks |
-| Hull zones | Four shield characteristics and arc names | Shields are summed into one pool; no zone state | High | Add front/left/right/rear zone state and zone-specific damage |
-| Ship attacks | Four firing arcs and `Battery` dice | Only front arc dice count is projected; colors are discarded | Critical | Add per-zone attack profiles with dice colors and range bands |
-| Squadron attacks | `Anti-Squadron`, `Squadron`, and squadron abilities | Uses the same generic attack profile as ships | High | Add ship-vs-squadron and squadron-vs-squadron profiles/rules |
-| Range | Profile source has attack data | Range is hardcoded to `100` | High | Model short/medium/long range and measurement rules |
-| Arc legality | Four arc names in source | Arcs are visual only; attack validation checks range only | Critical | Use authoritative hull-zone arc geometry in `canAttack` |
+| Turning/manoeuvre | The BSData catalogue has no structured maneuver characteristic | Ship charts are imported into `unit_variant_maneuver_profile` from the pinned Armada TTS definitions; each speed row preserves its variable joint count | Partial | Verify source licensing and reconcile chart differences against the target rules reference |
+| Base geometry | Generic base objects/profiles | A radius is projected and used for movement collision; exact base shape/size is still absent | Partial | Add base shape/size and use it for range and arc checks |
+| Hull zones | Four shield characteristics and arc names | Front/left/right/rear shield state is projected, persisted, and damaged by the target-facing zone | Partial | Add zone-specific hull/critical damage and redirect effects |
+| Ship attacks | Four firing arcs and `Battery` dice | Colored dice are projected per arc, filtered by range band, and rolled against the legal firing arc | Partial | Add critical icons, weapon-specific damage, and full attack effects |
+| Squadron attacks | `Anti-Squadron`, `Squadron`, and squadron abilities | Anti-squadron and battery profiles are projected separately for ship/squadron target selection | Partial | Implement squadron abilities and complete target-specific rules |
+| Range | Profile source has attack data | Short/medium/long bands are enforced using color eligibility and mode-coordinate defaults of 100/200/300 | Partial | Load authoritative range scale from mode/rules data |
+| Arc legality | Four arc names in source | Server-side bearing checks now select the available firing arc and reject attacks outside it | Done | Add exact base geometry and boundary-rule tests |
 | Defense tokens | Token names and counts | Count is aggregated; token type/effects are discarded | High | Model token instances/types and per-attack spend/refresh rules |
 | Command values | `Command`, `Engineering`, `Squadron` | Not projected or stored in runtime | High | Add command dials, reveal timing, and command effects |
 | Keywords | Structured keyword values | Stored in catalogue but not runtime | High | Normalize keyword vocabulary and implement effects incrementally |
@@ -65,7 +65,7 @@ and `Squadron Ability`.
 | Boards/deployment | Board dimensions and scenario board link | Dimensions are request fields; deployment zones absent | High | Load board definition and scenario deployment zones |
 | Terrain | Terrain names and characteristics | No geometry or runtime obstacle state | Medium | Add terrain geometry and movement/obstruction effects |
 | Runtime units | Fleet unit rows and engine units are separate | CPU has a fragile variant-id/code sync path | Medium | Resolve unit variants by stable IDs and persist a single runtime instance mapping |
-| Persistence | Snapshot JSON plus event rows | Core state is authoritative for the implemented slice | Medium | Add versioned schema for richer state and deterministic replay checks |
+| Persistence | Snapshot JSON plus event rows | Zone shields, attack metadata, engine logs, and client replay are persisted through the snapshot/event path | Partial | Add versioned schema and deterministic server-side replay checks |
 
 ## Speed and Turning Finding
 
@@ -84,13 +84,11 @@ reference, and formal navigation-command timing.
 
 ## Priorities
 
-1. Correct ship speed ingestion and add a regression check that capital ships
-   do not resolve to zero.
-2. Reconcile the imported per-ship maneuver charts against the target rules
+1. Reconcile the imported per-ship maneuver charts against the target rules
    reference and pin an approved source/licence.
-3. Project complete weapon and hull-zone profiles, then make arc/range checks
-   authoritative.
-4. Load selected mode/scenario/fleet format into runtime setup and enforce
+2. Complete zone-specific damage, defense-token effects, critical icons, and
+   weapon-specific attack rules.
+3. Load selected mode/scenario/fleet format into runtime setup and enforce
    points, limits, objectives, deployment, and phase configuration.
-5. Add upgrades, keywords, abilities, terrain, and richer runtime persistence
+4. Add fleet legality, upgrades, keywords, abilities, terrain, and richer runtime persistence
    behind the stable profile contracts.

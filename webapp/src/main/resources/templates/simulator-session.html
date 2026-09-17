@@ -154,7 +154,8 @@
                   status: 'ready', hullPoints: Number(profile?.maximumHullPoints ?? base.hullPoints),
                   shieldPoints: Number(profile?.maximumShieldPoints ?? base.shieldPoints),
                   defenseTokens: Number(profile?.defenseTokenCount ?? base.defenseTokens),
-                  currentSpeed: Math.min(1, maximumSpeed) };
+                  currentSpeed: Math.min(1, maximumSpeed),
+                  shieldZones: { ...(profile?.shieldZones || base.shieldZones || {}) } };
           };
           events.forEach(event => {
               const payload = event.payload || {};
@@ -181,10 +182,18 @@
                   const attacker = units.get(attackerId);
                   const target = units.get(targetId);
                   if (attacker) units.set(attackerId, { ...attacker, status: 'activated' });
-                  if (target) units.set(targetId, { ...target,
+                  if (target) {
+                      const shieldZones = { ...(target.shieldZones || {}) };
+                      const zone = payload.targetZone;
+                      if (zone && shieldZones[zone] != null) {
+                          shieldZones[zone] = Math.max(0, shieldZones[zone] - Number(payload.shieldDamage || 0));
+                      }
+                      units.set(targetId, { ...target,
                       hullPoints: Number(payload.remainingHullPoints ?? target.hullPoints),
                       shieldPoints: Number(payload.remainingShieldPoints ?? target.shieldPoints),
+                      shieldZones,
                       status: Number(payload.remainingHullPoints ?? target.hullPoints) === 0 ? 'destroyed' : target.status });
+                  }
                   if (type === 'game_won') {
                       status = 'finished';
                       phaseCode = 'victory';
@@ -316,8 +325,10 @@
                  ranges.append(svgNode('circle', { cx: point.x, cy: point.y, r: rangeRadius, class: 'firing-range', stroke: colour }));
              }
           if (layerState.arcs && unit === focus) {
+              const availableArcs = new Set(Object.keys(profile?.batteryArcs || {}));
               [{ name: 'front', offset: 0 }, { name: 'left', offset: 90 },
                   { name: 'rear', offset: 180 }, { name: 'right', offset: -90 }]
+                  .filter(zone => availableArcs.has(zone.name))
                   .forEach(zone => arcs.append(svgNode('path', {
                       d: tacticalArc(unit, state, rangeRadius, Number(unit.facing) + zone.offset),
                       class: `firing-arc firing-arc-${zone.name}`, fill: colour, stroke: colour
@@ -434,7 +445,7 @@
          const actor = state.players.find(item => item.playerId === event.actorPlayerId);
          const actorName = actor?.factionCode || 'COMMAND';
           if (event.type === 'unit_moved') return `${actorName} moved ${unit ? unitLabel(unit) : 'unit'} at speed ${payload.speed || unit?.currentSpeed || 0} to ${Math.round(payload.positionX)}, ${Math.round(payload.positionY)}`;
-         if (event.type === 'unit_attacked') return `${actorName} fired ${unit ? unitLabel(unit) : 'unit'} at ${target ? unitLabel(target) : 'target'} // ${payload.hits || 0} hits / ${payload.damage || 0} hull damage`;
+         if (event.type === 'unit_attacked') return `${actorName} fired ${unit ? unitLabel(unit) : 'unit'} at ${target ? unitLabel(target) : 'target'} // ${payload.arc || 'front'} arc / ${payload.rangeBand || 'short'} range / ${payload.hits || 0} hits / ${payload.damage || 0} hull damage`;
          if (event.type === 'game_won') return `${actorName} destroyed ${target ? unitLabel(target) : 'the final target'} // VICTORY`;
          if (event.type === 'turn_started') {
              const next = state.players.find(item => item.playerId === Number(payload.activePlayerId));
@@ -829,9 +840,13 @@
          owner.textContent = `${player?.factionCode || unitProfile(unit)?.factionCode || 'Unknown faction'} / ${unit.status}`;
          badge.textContent = cpuControlled ? 'AI' : 'PLAYER';
          actions.hidden = cpuControlled;
+          const shieldZones = profile?.shieldZones || {};
+          const currentShieldZones = unit.shieldZones || shieldZones;
+          const shieldRows = Object.keys(shieldZones).map(zone =>
+              resourceBar(`SHIELD ${zone.toUpperCase()}`, currentShieldZones[zone] ?? 0, shieldZones[zone]));
           resources.replaceChildren(
               resourceBar('HULL', unit.hullPoints, profile?.maximumHullPoints),
-              resourceBar('SHIELDS', unit.shieldPoints, profile?.maximumShieldPoints),
+              ...(shieldRows.length ? shieldRows : [resourceBar('SHIELDS', unit.shieldPoints, profile?.maximumShieldPoints)]),
               resourceBar('DEFENSE', unit.defenseTokens, profile?.defenseTokenCount)
           );
            maxSpeed.textContent = profile?.maximumMovementDistance ?? '-';

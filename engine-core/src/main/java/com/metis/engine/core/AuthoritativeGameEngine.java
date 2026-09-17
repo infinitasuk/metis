@@ -130,7 +130,7 @@ public final class AuthoritativeGameEngine implements GameEngine {
                                  Map.of("unitId", "number", "speed", "number", "yaw", "array")));
                         state.units().stream()
                         .filter(target -> target.playerId() != unit.playerId() && target.hullPoints() > 0)
-                        .filter(target -> canAttack(definition, state, unit, target))
+                        .filter(target -> attackPlan(definition, state, unit, target) != null)
                         .forEach(target -> actions.add(new LegalAction("attack_unit", state.activePlayerId(),
                                         "Attack unit " + target.unitId(),
                                         Map.of("unitId", "number", "targetUnitId", "number"))));
@@ -139,6 +139,15 @@ public final class AuthoritativeGameEngine implements GameEngine {
             return actions;
         }
         return List.of();
+    }
+
+    public boolean canAttack(GameDefinition definition, GameState state,
+                             UnitState attacker, UnitState target) {
+        if (attacker == null || target == null || attacker.playerId() == target.playerId()
+                || target.hullPoints() <= 0) {
+            return false;
+        }
+        return attackPlan(definition, state, attacker, target) != null;
     }
 
     public ActionResult applyAction(GameState state, Action action) {
@@ -199,7 +208,7 @@ public final class AuthoritativeGameEngine implements GameEngine {
                     .map(unit -> unit.hullPoints() > 0
                         ? new UnitState(unit.unitId(), unit.playerId(), unit.unitCode(), unit.positionX(),
                              unit.positionY(), unit.facing(), "ready", unit.hullPoints(), unit.shieldPoints(),
-                             unit.defenseTokens(), unit.currentSpeed())
+                             unit.defenseTokens(), unit.currentSpeed(), unit.shieldZones())
                             : unit)
                     .toList();
             String nextStatus = roundLimitReached ? "finished" : "running";
@@ -284,7 +293,8 @@ public final class AuthoritativeGameEngine implements GameEngine {
         int defenseTokens = unitDefinition == null ? 0 : unitDefinition.defenseTokenCount();
         int currentSpeed = unitDefinition == null ? 0 : defaultSpeed(unitDefinition);
         UnitState unit = new UnitState(unitId, player.playerId(), unitCode, x, y, facing, "ready",
-                hullPoints, shieldPoints, defenseTokens, currentSpeed);
+                hullPoints, shieldPoints, defenseTokens, currentSpeed,
+                unitDefinition == null ? Map.of() : unitDefinition.shieldZones());
         GameEvent event = event(state, "unit_deployed", action.actorPlayerId(),
                 Map.of("unitId", unitId, "positionX", x, "positionY", y));
         List<UnitState> units = new ArrayList<>(state.units());
@@ -339,7 +349,8 @@ public final class AuthoritativeGameEngine implements GameEngine {
         }
         double facing = doubleParameter(action.parameters(), "facing");
         UnitState moved = new UnitState(unit.unitId(), unit.playerId(), unit.unitCode(), x, y, facing,
-                "activated", unit.hullPoints(), unit.shieldPoints(), unit.defenseTokens(), unit.currentSpeed());
+                "activated", unit.hullPoints(), unit.shieldPoints(), unit.defenseTokens(), unit.currentSpeed(),
+                unit.shieldZones());
         List<UnitState> units = new ArrayList<>(state.units());
         units.set(units.indexOf(unit), moved);
         GameEvent event = event(state, "unit_moved", action.actorPlayerId(),
@@ -388,7 +399,8 @@ public final class AuthoritativeGameEngine implements GameEngine {
         double facing = MovementCalculator.finalFacing(unit.facing(), yaw);
         MovementCalculator.Pose pose = MovementCalculator.finalPose(path, facing);
         UnitState moved = new UnitState(unit.unitId(), unit.playerId(), unit.unitCode(), pose.x(), pose.y(),
-                pose.facing(), "activated", unit.hullPoints(), unit.shieldPoints(), unit.defenseTokens(), speed);
+                pose.facing(), "activated", unit.hullPoints(), unit.shieldPoints(), unit.defenseTokens(), speed,
+                unit.shieldZones());
         List<UnitState> units = new ArrayList<>(state.units());
         units.set(units.indexOf(unit), moved);
         GameEvent event = event(state, "unit_moved", action.actorPlayerId(), Map.of(
@@ -435,15 +447,20 @@ public final class AuthoritativeGameEngine implements GameEngine {
         if (target.hullPoints() == 0) {
             return rejected("TARGET_DESTROYED", "The target unit has already been destroyed");
         }
-        if (!canAttack(definition, state, attacker, target)) {
+        AttackPlan attackPlan = attackPlan(definition, state, attacker, target);
+        if (attackPlan == null) {
             return rejected("ATTACK_OUT_OF_RANGE", "The target is outside the attacking unit's range");
         }
         UnitDefinition attackerDefinition = unitDefinition(definition, attacker.unitCode());
-        int attackDice = attackerDefinition == null ? 1 : attackerDefinition.attackDice();
+        int attackDice = attackPlan.dice().stream().mapToInt(AttackDie::count).sum();
+        Map<String, Integer> diceByColor = new HashMap<>();
+        attackPlan.dice().forEach(die -> diceByColor.merge(die.color(), die.count(), Integer::sum));
         int hits = 0;
-        for (int die = 0; die < attackDice; die++) {
-            if (random.nextInt(6) >= 3) {
-                hits++;
+        for (AttackDie die : attackPlan.dice()) {
+            for (int index = 0; index < die.count(); index++) {
+                if (random.nextInt(6) >= 3) {
+                    hits++;
+                }
             }
         }
         Map<String, Object> values = new HashMap<>(state.values());
@@ -456,21 +473,31 @@ public final class AuthoritativeGameEngine implements GameEngine {
             noDamageAttacks = 0;
         }
         values.put("noDamageAttacks", noDamageAttacks);
-        int rolledDamage = hits * (attackerDefinition == null ? 1 : attackerDefinition.attackDamage());
+        int rolledDamage = hits * (attackPlan.generic() && attackerDefinition != null
+                ? attackerDefinition.attackDamage() : 1);
         boolean defenseTokenSpent = hits > 0 && target.defenseTokens() > 0;
         int mitigatedDamage = Math.max(0, rolledDamage - (defenseTokenSpent ? 1 : 0));
-        int shieldDamage = Math.min(target.shieldPoints(), mitigatedDamage);
+        String targetZone = targetZone(target, attacker);
+        Map<String, Integer> remainingShieldZones = new HashMap<>(target.shieldZones());
+        int availableShields = remainingShieldZones.isEmpty()
+                ? target.shieldPoints() : remainingShieldZones.getOrDefault(targetZone, 0);
+        int shieldDamage = Math.min(availableShields, mitigatedDamage);
         int hullDamage = mitigatedDamage - shieldDamage;
-        int remainingShields = target.shieldPoints() - shieldDamage;
+        if (!remainingShieldZones.isEmpty()) {
+            remainingShieldZones.put(targetZone, availableShields - shieldDamage);
+        }
+        int remainingShields = remainingShieldZones.isEmpty()
+                ? target.shieldPoints() - shieldDamage
+                : remainingShieldZones.values().stream().mapToInt(Integer::intValue).sum();
         int remainingHull = Math.max(0, target.hullPoints() - hullDamage);
         int remainingDefenseTokens = target.defenseTokens() - (defenseTokenSpent ? 1 : 0);
         String targetStatus = remainingHull == 0 ? "destroyed" : target.status();
         UnitState damaged = new UnitState(target.unitId(), target.playerId(), target.unitCode(), target.positionX(),
                  target.positionY(), target.facing(), targetStatus, remainingHull, remainingShields,
-                 remainingDefenseTokens, target.currentSpeed());
+                 remainingDefenseTokens, target.currentSpeed(), remainingShieldZones);
         UnitState activated = new UnitState(attacker.unitId(), attacker.playerId(), attacker.unitCode(),
-                attacker.positionX(), attacker.positionY(), attacker.facing(), "activated", attacker.hullPoints(),
-                attacker.shieldPoints(), attacker.defenseTokens(), attacker.currentSpeed());
+                 attacker.positionX(), attacker.positionY(), attacker.facing(), "activated", attacker.hullPoints(),
+                 attacker.shieldPoints(), attacker.defenseTokens(), attacker.currentSpeed(), attacker.shieldZones());
         List<UnitState> units = new ArrayList<>(state.units());
         units.set(units.indexOf(attacker), activated);
         units.set(units.indexOf(target), damaged);
@@ -480,12 +507,21 @@ public final class AuthoritativeGameEngine implements GameEngine {
                 .collect(java.util.stream.Collectors.toSet());
         boolean gameWon = survivingPlayers.size() == 1;
         Long winnerPlayerId = gameWon ? survivingPlayers.iterator().next() : null;
-        Map<String, Object> eventPayload = new HashMap<>(Map.of(
-                "unitId", attacker.unitId(), "targetUnitId", target.unitId(), "attackDice", attackDice,
-                "hits", hits, "damage", hullDamage, "shieldDamage", shieldDamage,
-                "defenseTokenSpent", defenseTokenSpent, "stabilizedRoll", stabilizedRoll,
-                "remainingHullPoints", remainingHull,
-                "remainingShieldPoints", remainingShields));
+        Map<String, Object> eventPayload = new HashMap<>();
+        eventPayload.put("unitId", attacker.unitId());
+        eventPayload.put("targetUnitId", target.unitId());
+        eventPayload.put("attackDice", attackDice);
+        eventPayload.put("hits", hits);
+        eventPayload.put("damage", hullDamage);
+        eventPayload.put("shieldDamage", shieldDamage);
+        eventPayload.put("defenseTokenSpent", defenseTokenSpent);
+        eventPayload.put("stabilizedRoll", stabilizedRoll);
+        eventPayload.put("remainingHullPoints", remainingHull);
+        eventPayload.put("remainingShieldPoints", remainingShields);
+        eventPayload.put("arc", attackPlan.arc());
+        eventPayload.put("targetZone", targetZone);
+        eventPayload.put("rangeBand", attackPlan.rangeBand());
+        eventPayload.put("diceByColor", diceByColor);
         String nextStatus = state.status();
         String nextPhase = state.phaseCode();
         Long nextActivePlayerId = state.activePlayerId();
@@ -635,17 +671,95 @@ public final class AuthoritativeGameEngine implements GameEngine {
         return Math.min(1, definition.maximumSpeed());
     }
 
-    private static boolean canAttack(GameDefinition definition, GameState state, UnitState attacker, UnitState target) {
-        UnitDefinition profile = unitDefinition(definition, attacker.unitCode());
-        if (definition != null && !definition.unitDefinitions().isEmpty() && profile == null) {
-            return false;
+    private static AttackPlan attackPlan(GameDefinition definition, GameState state,
+                                         UnitState attacker, UnitState target) {
+        UnitDefinition attackerProfile = unitDefinition(definition, attacker.unitCode());
+        UnitDefinition targetProfile = unitDefinition(definition, target.unitCode());
+        if (definition != null && !definition.unitDefinitions().isEmpty()
+                && (attackerProfile == null || targetProfile == null)) {
+            return null;
         }
-        double maximumRange = profile == null
+        String arc = firingArc(attacker, target);
+        boolean targetSquadron = targetProfile != null
+                && "squadron".equalsIgnoreCase(targetProfile.classification());
+        boolean attackerSquadron = attackerProfile != null
+                && "squadron".equalsIgnoreCase(attackerProfile.classification());
+        boolean genericProfile = attackerProfile != null && attackerProfile.batteryArcs().values().stream()
+                .flatMap(List::stream).anyMatch(die -> "generic".equalsIgnoreCase(die.color()));
+        List<AttackDie> profileDice;
+        if (attackerProfile == null) {
+            profileDice = List.of(new AttackDie("generic", 1));
+        } else if (targetSquadron) {
+            profileDice = attackerProfile.antiSquadronDice();
+        } else if (genericProfile) {
+            profileDice = attackerProfile.batteryArcs().getOrDefault("front", List.of());
+        } else if (attackerSquadron) {
+            profileDice = attackerProfile.batteryArcs().getOrDefault("front", List.of());
+        } else {
+            profileDice = attackerProfile.batteryArcs().getOrDefault(arc, List.of());
+        }
+        if (profileDice.isEmpty()) return null;
+        double distance = Math.hypot(target.positionX() - attacker.positionX(),
+                target.positionY() - attacker.positionY());
+        double maximumRange = attackerProfile == null
                 ? numericOption(state.values(), "maximumAttackRange", 100)
-                : profile.maximumAttackRange();
-        return Math.hypot(target.positionX() - attacker.positionX(), target.positionY() - attacker.positionY())
-                <= maximumRange;
+                : attackerProfile.maximumAttackRange();
+        String rangeBand = rangeBand(distance, state);
+        if (rangeBand == null || distance > maximumRange) return null;
+        List<AttackDie> dice = profileDice.stream()
+                .map(die -> new AttackDie(die.color(), eligibleDice(die.color(), die.count(), rangeBand)))
+                .filter(die -> die.count() > 0)
+                .toList();
+        if (dice.isEmpty()) return null;
+        boolean generic = dice.stream().anyMatch(die -> "generic".equalsIgnoreCase(die.color()));
+        return new AttackPlan(generic ? "front" : arc, rangeBand, dice, generic);
     }
+
+    private static int eligibleDice(String color, int count, String rangeBand) {
+        if ("generic".equalsIgnoreCase(color)) return count;
+        if ("short".equals(rangeBand)) return count;
+        if ("medium".equals(rangeBand)) return "red".equalsIgnoreCase(color) || "blue".equalsIgnoreCase(color)
+                ? count : 0;
+        return "red".equalsIgnoreCase(color) ? count : 0;
+    }
+
+    private static String rangeBand(double distance, GameState state) {
+        double shortRange = numericOption(state.values(), "shortRange", 100);
+        double mediumRange = numericOption(state.values(), "mediumRange", 200);
+        double longRange = numericOption(state.values(), "longRange", 300);
+        if (distance <= shortRange) return "short";
+        if (distance <= mediumRange) return "medium";
+        if (distance <= longRange) return "long";
+        return null;
+    }
+
+    private static String firingArc(UnitState source, UnitState target) {
+        double angle = Math.toDegrees(Math.atan2(target.positionY() - source.positionY(),
+                target.positionX() - source.positionX()));
+        return zoneForBearing(normalizeBearing(angle - source.facing()));
+    }
+
+    private static String targetZone(UnitState target, UnitState attacker) {
+        double angle = Math.toDegrees(Math.atan2(attacker.positionY() - target.positionY(),
+                attacker.positionX() - target.positionX()));
+        return zoneForBearing(normalizeBearing(angle - target.facing()));
+    }
+
+    private static String zoneForBearing(double bearing) {
+        if (bearing >= -45 && bearing <= 45) return "front";
+        if (bearing > 45 && bearing < 135) return "left";
+        if (bearing < -45 && bearing > -135) return "right";
+        return "rear";
+    }
+
+    private static double normalizeBearing(double bearing) {
+        double normalized = bearing % 360;
+        if (normalized > 180) normalized -= 360;
+        if (normalized < -180) normalized += 360;
+        return normalized;
+    }
+
+    private record AttackPlan(String arc, String rangeBand, List<AttackDie> dice, boolean generic) {}
 
     public static final class InvalidSetupException extends RuntimeException {
         private final SetupValidation validation;

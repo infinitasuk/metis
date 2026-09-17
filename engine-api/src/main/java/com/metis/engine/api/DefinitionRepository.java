@@ -2,6 +2,7 @@ package com.metis.engine.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.metis.engine.core.AttackDie;
 import com.metis.engine.core.UnitDefinition;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.CallableStatementCreator;
@@ -83,8 +84,12 @@ public class DefinitionRepository {
                              unit.hasNonNull("displayName") ? unit.get("displayName").asText() : unit.get("code").asText(),
                              unit.hasNonNull("classification") ? unit.get("classification").asText() : "Unit",
                              parseManeuverProfiles(unit.get("maneuverProfiles")),
-                             unit.hasNonNull("baseRadius") ? unit.get("baseRadius").asDouble() : defaultBaseRadius(unit)))
-                    .toList();
+                             unit.hasNonNull("baseRadius") ? unit.get("baseRadius").asDouble() : defaultBaseRadius(unit),
+                             parseAttackArcs(unit.get("batteryArcs")),
+                             parseAttackDice(unit.get("antiSquadronDice")),
+                             parseIntegerMap(unit.get("shieldZones")),
+                             parseStrings(unit.get("defenseTokenTypes"))))
+                     .toList();
         } catch (Exception exception) {
             throw new IllegalStateException("Engine definition unit data is invalid", exception);
         }
@@ -102,6 +107,32 @@ public class DefinitionRepository {
             profiles.put(speed, new com.metis.engine.core.ManeuverProfile(speed, yaw));
         });
         return profiles;
+    }
+
+    private Map<String, List<AttackDie>> parseAttackArcs(JsonNode json) {
+        if (json == null || !json.isObject()) return Map.of();
+        Map<String, List<AttackDie>> arcs = new LinkedHashMap<>();
+        json.fields().forEachRemaining(entry -> arcs.put(entry.getKey(), parseAttackDice(entry.getValue())));
+        return arcs;
+    }
+
+    private List<AttackDie> parseAttackDice(JsonNode json) {
+        if (json == null || !json.isArray()) return List.of();
+        return StreamSupport.stream(json.spliterator(), false)
+                .map(die -> new AttackDie(die.path("color").asText("generic"), die.path("count").asInt()))
+                .toList();
+    }
+
+    private Map<String, Integer> parseIntegerMap(JsonNode json) {
+        if (json == null || !json.isObject()) return Map.of();
+        Map<String, Integer> values = new LinkedHashMap<>();
+        json.fields().forEachRemaining(entry -> values.put(entry.getKey(), entry.getValue().asInt()));
+        return values;
+    }
+
+    private List<String> parseStrings(JsonNode json) {
+        if (json == null || !json.isArray()) return List.of();
+        return StreamSupport.stream(json.spliterator(), false).map(JsonNode::asText).toList();
     }
 
     private double defaultBaseRadius(JsonNode unit) {

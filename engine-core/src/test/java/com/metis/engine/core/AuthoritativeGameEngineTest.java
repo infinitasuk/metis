@@ -327,6 +327,65 @@ class AuthoritativeGameEngineTest {
     }
 
     @Test
+    void usesColoredArcDiceRangeBandsAndTargetShieldZones() {
+        UnitDefinition attacker = new UnitDefinition("attacker", "rebel", 3, 300, 1, 4,
+                2, 0, 0, "Attacker", "Ship", Map.of(), 50,
+                Map.of("front", List.of(new AttackDie("red", 2))), List.of(), Map.of(), List.of());
+        UnitDefinition target = new UnitDefinition("target", "empire", 3, 300, 1, 4,
+                1, 10, 0, "Target", "Ship", Map.of(), 50,
+                Map.of("front", List.of(new AttackDie("red", 1))), List.of(),
+                Map.of("front", 2, "left", 3, "right", 3, "rear", 2), List.of());
+        GameDefinition catalogue = new GameDefinition(1, "armada", "Armada", 4, "armada_1_5",
+                2, 2, 0, 2, List.of("rebel", "empire"), List.of(attacker, target));
+        GameSetup setup = new GameSetup(2, 0, List.of(
+                new Player(10, 1, "human", "rebel"), new Player(11, 2, "human", "empire")),
+                new BoardState("standard", 500, 500), null);
+        GameState state = engine.createInitialState(99, catalogue, setup);
+        state = engine.applyAction(catalogue, state, new Action("start_game", 0, null)).resultingState();
+        state = engine.applyAction(catalogue, state, new Action("deploy_unit", 10, Map.of(
+                "unitId", 100L, "unitCode", "attacker", "positionX", 100, "positionY", 100, "facing", 0))).resultingState();
+        state = engine.applyAction(catalogue, state, new Action("deploy_unit", 11, Map.of(
+                "unitId", 101L, "unitCode", "target", "positionX", 250, "positionY", 100, "facing", 180))).resultingState();
+        state = engine.applyAction(catalogue, state, new Action("advance_phase", 0, null)).resultingState();
+        state = engine.applyAction(catalogue, state, new Action("advance_phase", 0, null)).resultingState();
+
+        ActionResult attack = engine.applyAction(catalogue, state, new Action("attack_unit", 10, Map.of(
+                "unitId", 100L, "targetUnitId", 101L)));
+
+        assertTrue(attack.accepted());
+        assertEquals("front", attack.resultingState().events().getLast().payload().get("arc"));
+        assertEquals("medium", attack.resultingState().events().getLast().payload().get("rangeBand"));
+        assertEquals("front", attack.resultingState().events().getLast().payload().get("targetZone"));
+        assertEquals(0, attack.resultingState().units().get(1).shieldZones().get("front"));
+        assertEquals(8, attack.resultingState().units().get(1).shieldPoints());
+    }
+
+    @Test
+    void rejectsAnAttackOutsideTheWeaponArc() {
+        UnitDefinition attacker = new UnitDefinition("attacker", "rebel", 3, 300, 1, 4,
+                1, 0, 0, "Attacker", "Ship", Map.of(), 50,
+                Map.of("front", List.of(new AttackDie("red", 1))), List.of(), Map.of(), List.of());
+        UnitDefinition target = new UnitDefinition("target", "empire", 3, 300, 1, 4);
+        GameDefinition catalogue = new GameDefinition(1, "armada", "Armada", 4, "armada_1_5",
+                2, 2, 0, 2, List.of("rebel", "empire"), List.of(attacker, target));
+        GameSetup setup = new GameSetup(2, 0, List.of(
+                new Player(10, 1, "human", "rebel"), new Player(11, 2, "human", "empire")),
+                new BoardState("standard", 500, 500), null);
+        GameState state = engine.createInitialState(99, catalogue, setup);
+        state = engine.applyAction(catalogue, state, new Action("start_game", 0, null)).resultingState();
+        state = engine.applyAction(catalogue, state, new Action("deploy_unit", 10, Map.of(
+                "unitId", 100L, "unitCode", "attacker", "positionX", 100, "positionY", 100, "facing", 0))).resultingState();
+        state = engine.applyAction(catalogue, state, new Action("deploy_unit", 11, Map.of(
+                "unitId", 101L, "unitCode", "target", "positionX", 100, "positionY", 250, "facing", 0))).resultingState();
+        state = engine.applyAction(catalogue, state, new Action("advance_phase", 0, null)).resultingState();
+        state = engine.applyAction(catalogue, state, new Action("advance_phase", 0, null)).resultingState();
+
+        assertFalse(engine.canAttack(catalogue, state, state.units().get(0), state.units().get(1)));
+        assertTrue(engine.legalActions(catalogue, state).stream()
+                .noneMatch(action -> "attack_unit".equals(action.type())));
+    }
+
+    @Test
     void resolvesAttackDiceAgainstDefenseTokensAndShields() {
         GameDefinition catalogue = new GameDefinition(
                 1, "armada", "Armada", 4, "armada_1_5", 2, 2, 0, 2,

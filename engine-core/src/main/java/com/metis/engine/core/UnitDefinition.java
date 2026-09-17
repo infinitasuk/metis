@@ -1,6 +1,7 @@
 package com.metis.engine.core;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Static unit profile supplied by one immutable game-definition revision. */
@@ -8,7 +9,11 @@ public record UnitDefinition(String code, String factionCode, double maximumMove
                               double maximumAttackRange, int attackDamage, int maximumHullPoints,
                               int attackDice, int maximumShieldPoints, int defenseTokenCount,
                               String displayName, String classification,
-                              Map<Integer, ManeuverProfile> maneuverProfiles, double baseRadius) {
+                              Map<Integer, ManeuverProfile> maneuverProfiles, double baseRadius,
+                              Map<String, List<AttackDie>> batteryArcs,
+                              List<AttackDie> antiSquadronDice,
+                              Map<String, Integer> shieldZones,
+                              List<String> defenseTokenTypes) {
     public UnitDefinition(String code, String factionCode, double maximumMovementDistance) {
         this(code, factionCode, maximumMovementDistance, 100, 1, 1, 1, 0, 0,
                 code, "Unit");
@@ -52,9 +57,37 @@ public record UnitDefinition(String code, String factionCode, double maximumMove
         }
         maneuverProfiles = maneuverProfiles == null || maneuverProfiles.isEmpty()
                 ? defaultManeuverProfiles(maximumMovementDistance) : Map.copyOf(maneuverProfiles);
+        batteryArcs = copyAttackArcs(batteryArcs, attackDice);
+        antiSquadronDice = antiSquadronDice == null ? List.of() : List.copyOf(antiSquadronDice);
+        shieldZones = shieldZones == null ? Map.of() : Map.copyOf(shieldZones);
+        defenseTokenTypes = defenseTokenTypes == null ? List.of() : List.copyOf(defenseTokenTypes);
         if (!(baseRadius > 0)) {
             throw new IllegalArgumentException("base radius must be positive");
         }
+    }
+
+    public UnitDefinition(String code, String factionCode, double maximumMovementDistance,
+                          double maximumAttackRange, int attackDamage, int maximumHullPoints,
+                          int attackDice, int maximumShieldPoints, int defenseTokenCount,
+                          String displayName, String classification,
+                          Map<Integer, ManeuverProfile> maneuverProfiles, double baseRadius) {
+        this(code, factionCode, maximumMovementDistance, maximumAttackRange, attackDamage,
+                maximumHullPoints, attackDice, maximumShieldPoints, defenseTokenCount,
+                displayName, classification, maneuverProfiles, baseRadius,
+                Map.of("front", List.of(new AttackDie("generic", attackDice))), List.of(),
+                Map.of(), List.of());
+    }
+
+    private static Map<String, List<AttackDie>> copyAttackArcs(Map<String, List<AttackDie>> arcs,
+                                                                int attackDice) {
+        Map<String, List<AttackDie>> result = new LinkedHashMap<>();
+        if (arcs != null) {
+            arcs.forEach((arc, dice) -> result.put(arc, dice == null ? List.of() : List.copyOf(dice)));
+        }
+        if (result.isEmpty()) {
+            result.put("front", List.of(new AttackDie("generic", attackDice)));
+        }
+        return Map.copyOf(result);
     }
 
     public int maximumSpeed() {
