@@ -1,5 +1,8 @@
 package com.metis.web;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.metis.engine.core.GameState;
 import com.metis.engine.api.BattleRepository;
 import com.metis.engine.api.BattleRepository.BattleSessionDetail;
 import com.metis.engine.api.DefinitionRepository;
@@ -15,6 +18,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -25,12 +29,14 @@ public class CatalogController {
     private final CatalogRepository catalog;
     private final BattleRepository battle;
     private final DefinitionRepository definitions;
+    private final ObjectMapper objectMapper;
 
     public CatalogController(CatalogRepository catalog, BattleRepository battle,
-                             DefinitionRepository definitions) {
+                             DefinitionRepository definitions, ObjectMapper objectMapper) {
         this.catalog = catalog;
         this.battle = battle;
         this.definitions = definitions;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping("/")
@@ -54,9 +60,32 @@ public class CatalogController {
         return "games";
     }
 
+    @GetMapping("/admin/engine-logs")
+    public String engineLogs(Model model) {
+        model.addAttribute("sessions", battle.findSessions(null, null));
+        return "engine-logs";
+    }
+
+    @GetMapping("/admin/engine-logs/sessions/{sessionId}")
+    @ResponseBody
+    public List<BattleRepository.EngineLog> engineLogs(@PathVariable long sessionId,
+                                                       @RequestParam(defaultValue = "0") long afterLogId) {
+        if (battle.findSession(sessionId).isEmpty()) {
+            throw notFound();
+        }
+        return battle.findEngineLogs(sessionId, afterLogId);
+    }
+
     @GetMapping("/simulator")
     public String simulator(Model model) {
         model.addAttribute("games", catalog.findGames());
+        model.addAttribute("runningGames", battle.findSessions(null, "running").stream()
+                .filter(session -> "public".equals(session.visibility()))
+                .toList());
+        model.addAttribute("oldGames", battle.findSessions(null, null).stream()
+                .filter(session -> "public".equals(session.visibility()))
+                .filter(session -> !"running".equals(session.status()))
+                .toList());
         return "simulator";
     }
 
@@ -67,19 +96,33 @@ public class CatalogController {
         model.addAttribute("gameModes", catalog.findGameModes(gameId));
         model.addAttribute("scenarios", catalog.findScenarios(gameId));
         model.addAttribute("fleetFormats", catalog.findFleetFormats(gameId));
+        model.addAttribute("factions", catalog.findFactions(gameId));
+        model.addAttribute("boards", catalog.findBoards(gameId));
         return "simulator-game";
     }
 
     @GetMapping("/simulator/sessions/{sessionId}")
     public String simulatorSession(@PathVariable long sessionId, Model model) {
         BattleSessionDetail session = battle.findSession(sessionId).orElseThrow(this::notFound);
-        model.addAttribute("session", session);
+        long definitionId = session.gameVersionId() == null
+                ? catalog.publishedDefinitionId(session.gameId()) : session.gameVersionId();
+        model.addAttribute("battleSession", session);
         model.addAttribute("players", battle.findPlayers(sessionId));
         model.addAttribute("units", battle.findUnits(sessionId));
         model.addAttribute("fleets", battle.findFleets(sessionId));
         model.addAttribute("boards", battle.findBoards(sessionId));
         model.addAttribute("turns", battle.findTurns(sessionId));
         model.addAttribute("events", battle.findEvents(sessionId, 0));
+        model.addAttribute("engineState", engineState(session));
+        model.addAttribute("enginePhase", enginePhase(session));
+        model.addAttribute("engineDefinition", definitions.findEngineDefinition(session.gameVersionId()).orElse(null));
+        model.addAttribute("factions", catalog.findFactions(session.gameId(), session.gameVersionId()));
+        model.addAttribute("scenarioName", catalog.findScenarios(session.gameId(), definitionId).stream()
+                .filter(scenario -> session.scenarioId() != null && scenario.scenarioId() == session.scenarioId())
+                .map(CatalogRepository.Scenario::name).findFirst().orElse("Standard Battle"));
+        model.addAttribute("modeName", catalog.findGameModes(session.gameId(), definitionId).stream()
+                .filter(mode -> session.gameModeId() != null && mode.gameModeId() == session.gameModeId())
+                .map(CatalogRepository.GameMode::name).findFirst().orElse("Standard"));
         return "simulator-session";
     }
 
@@ -105,7 +148,7 @@ public class CatalogController {
         model.addAttribute("versions", versions);
         model.addAttribute("selectedVersion", selectedVersion);
         model.addAttribute("versionId", selectedVersionId);
-        model.addAttribute("canEditGame", false);
+        model.addAttribute("canEditGame", "draft".equals(selectedVersion.status()));
         return "game";
     }
 
@@ -133,9 +176,10 @@ public class CatalogController {
     }
 
     @GetMapping("/admin/games/{gameId}/edit")
-    public String editGame(@PathVariable long gameId, Model model) {
-        requireEditableDefinition(gameId);
-        model.addAttribute("game", catalog.findGame(gameId).orElseThrow(this::notFound));
+    public String editGame(@PathVariable long gameId, @RequestParam long versionId, Model model) {
+        requireDraftVersion(gameId, versionId);
+        model.addAttribute("game", catalog.findGame(gameId, versionId).orElseThrow(this::notFound));
+        model.addAttribute("versionId", versionId);
         return "edit-game";
     }
 
@@ -146,11 +190,12 @@ public class CatalogController {
                              @RequestParam int minimumPlayers,
                              @RequestParam int maximumPlayers,
                              @RequestParam int minimumCpu,
-                              @RequestParam int maximumCpu) {
-        requireEditableDefinition(gameId);
-        catalog.updateGame(gameId, gameName, gameDescription, minimumPlayers,
+                              @RequestParam int maximumCpu,
+                              @RequestParam long versionId) {
+        requireDraftVersion(gameId, versionId);
+        definitions.updateGame(versionId, gameName, gameDescription, minimumPlayers,
                 maximumPlayers, minimumCpu, maximumCpu);
-        return "redirect:/admin/games/" + gameId + "?saved=true";
+        return "redirect:/admin/games/" + gameId + "?versionId=" + versionId + "&saved=true";
     }
 
     @GetMapping({"/games/{gameId}/objects", "/admin/games/{gameId}/objects"})
@@ -227,16 +272,12 @@ public class CatalogController {
         return definitions.findVersion(definitionId).orElseThrow(this::notFound);
     }
 
-    private void requireEditableDefinition(long gameId) {
-        if (!canEditDefinition(definitions.findVersions(gameId))) {
+    private void requireDraftVersion(long gameId, long versionId) {
+        DefinitionVersion version = definitions.findVersion(versionId).orElseThrow(this::notFound);
+        if (version.gameId() != gameId || !"draft".equals(version.status())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Create or select a draft definition before editing catalogue content");
+                    "Only the selected draft definition can be edited");
         }
-    }
-
-    private boolean canEditDefinition(List<DefinitionVersion> versions) {
-        return versions.stream().noneMatch(version -> "published".equals(version.status()))
-                && versions.stream().anyMatch(version -> "draft".equals(version.status()));
     }
 
     private DefinitionVersion selectVersion(long gameId, Long versionId,
@@ -256,6 +297,22 @@ public class CatalogController {
         if (!"draft".equals(version.status())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Only objects in a draft definition can be edited");
+        }
+    }
+
+    private String enginePhase(BattleSessionDetail session) {
+        GameState state = engineState(session);
+        return state == null ? "" : state.phaseCode();
+    }
+
+    private GameState engineState(BattleSessionDetail session) {
+        if (session.state() == null || "{}".equals(session.state().trim())) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(session.state(), GameState.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Stored session state is invalid", exception);
         }
     }
 }

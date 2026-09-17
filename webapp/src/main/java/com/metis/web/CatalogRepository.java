@@ -67,14 +67,19 @@ public class CatalogRepository {
 
     public Optional<GameSummary> findGame(long gameId, long definitionId) {
         return jdbc.query("""
-                SELECT g.game_id, g.game_name, g.game_description,
-                       g.minimum_number_of_players, g.maximum_number_of_players,
-                       g.minimum_number_of_cpu, g.maximum_number_of_cpu,
+                SELECT g.game_id,
+                       COALESCE(gv.definition_game_name, g.game_name) AS game_name,
+                       COALESCE(gv.definition_game_description, g.game_description) AS game_description,
+                       COALESCE(gv.definition_min_players, g.minimum_number_of_players) AS minimum_number_of_players,
+                       COALESCE(gv.definition_max_players, g.maximum_number_of_players) AS maximum_number_of_players,
+                       COALESCE(gv.definition_min_cpu, g.minimum_number_of_cpu) AS minimum_number_of_cpu,
+                       COALESCE(gv.definition_max_cpu, g.maximum_number_of_cpu) AS maximum_number_of_cpu,
                        count(DISTINCT f.faction_id) AS faction_count,
                        count(DISTINCT ut.unit_type_id) AS unit_type_count,
                        count(DISTINCT uv.unit_variant_id) AS variant_count,
                        count(DISTINCT go.game_object_id) AS object_count
                 FROM game_engine.game g
+                 JOIN game_engine.game_version gv ON gv.game_version_id = ? AND gv.game_id = g.game_id
                  LEFT JOIN game_engine.faction f ON f.game_id = g.game_id
                      AND f.game_version_id = ?
                 LEFT JOIN game_engine.unit_classification uc ON uc.faction_id = f.faction_id
@@ -83,8 +88,10 @@ public class CatalogRepository {
                  LEFT JOIN game_engine.game_object go ON go.game_id = g.game_id
                      AND go.game_version_id = ?
                  WHERE g.game_id = ?
-                 GROUP BY g.game_id
-                """, rs -> rs.next()
+                 GROUP BY g.game_id, gv.definition_game_name, gv.definition_game_description,
+                          gv.definition_min_players, gv.definition_max_players,
+                          gv.definition_min_cpu, gv.definition_max_cpu
+                 """, rs -> rs.next()
                 ? Optional.of(new GameSummary(
                         rs.getLong("game_id"),
                         rs.getString("game_name"),
@@ -98,7 +105,7 @@ public class CatalogRepository {
                         rs.getLong("variant_count"),
                         rs.getLong("object_count")
                 ))
-                : Optional.empty(), definitionId, definitionId, gameId);
+                : Optional.empty(), definitionId, definitionId, definitionId, gameId);
     }
 
     public List<FactionSummary> findFactions(long gameId) {
@@ -180,6 +187,7 @@ public class CatalogRepository {
                  FROM game_engine.game_mode
                  WHERE game_id = ?
                    AND game_version_id = ?
+                   AND game_mode_code <> 'fleet_battle'
                  ORDER BY game_mode_name
                 """, (rs, rowNum) -> new GameMode(
                 rs.getLong("game_mode_id"),
@@ -300,8 +308,8 @@ public class CatalogRepository {
 
     public List<FleetFormat> findFleetFormats(long gameId, long definitionId) {
         return jdbc.query("""
-                SELECT ff.fleet_format_id, ff.format_code, ff.format_name,
-                       ff.points_limit, gm.game_mode_name,
+                 SELECT ff.fleet_format_id, ff.format_code, ff.format_name,
+                        ff.points_limit, gm.game_mode_id, gm.game_mode_name,
                        ff.format_config_json::text AS format_config_json,
                        count(DISTINCT fff.faction_id) AS faction_count,
                        count(DISTINCT ful.fleet_unit_limit_id) AS limit_count,
@@ -319,14 +327,15 @@ public class CatalogRepository {
                     ON ful.fleet_format_id = ff.fleet_format_id
                  LEFT JOIN game_engine.unit_classification uc
                      ON uc.unit_classification_id = ful.unit_classification_id
-                 WHERE gm.game_id = ?
-                   AND gm.game_version_id = ?
-                 GROUP BY ff.fleet_format_id, gm.game_mode_name
+                  WHERE gm.game_id = ?
+                    AND gm.game_version_id = ?
+                    AND gm.game_mode_code <> 'fleet_battle'
+                  GROUP BY ff.fleet_format_id, gm.game_mode_id, gm.game_mode_name
                 ORDER BY ff.format_name, gm.game_mode_name
                 """, (rs, rowNum) -> new FleetFormat(
                 rs.getLong("fleet_format_id"), rs.getString("format_code"),
-                rs.getString("format_name"), rs.getInt("points_limit"),
-                rs.getString("game_mode_name"), rs.getString("format_config_json"),
+                 rs.getString("format_name"), rs.getInt("points_limit"), rs.getLong("game_mode_id"),
+                 rs.getString("game_mode_name"), rs.getString("format_config_json"),
                 rs.getLong("faction_count"), rs.getLong("limit_count"),
                 rs.getString("limits")
          ), gameId, definitionId);
@@ -647,8 +656,8 @@ public class CatalogRepository {
     }
 
     public record FleetFormat(long fleetFormatId, String code, String name,
-                              int pointsLimit, String gameModeName, String configuration,
-                              long factionCount, long limitCount, String limits) {
+                               int pointsLimit, long gameModeId, String gameModeName, String configuration,
+                               long factionCount, long limitCount, String limits) {
     }
 
     public record GameObjectTypeSummary(long typeId, String code, String name,

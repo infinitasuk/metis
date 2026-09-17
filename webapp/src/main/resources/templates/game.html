@@ -19,7 +19,7 @@
             <span class="tag" th:text="|${game.minimumNumberOfCpu}-${game.maximumNumberOfCpu} CPU players|"></span>
             <span class="tag accent" th:text="|${selectedVersion.status} revision|"></span>
         </div>
-        <div class="hero-actions"><a class="button" th:href="@{/admin/games/{id}/objects(id=${game.gameId},versionId=${versionId})}">Browse every object <span>-&gt;</span></a><a class="button secondary-button" th:if="${canEditGame}" th:href="@{/admin/games/{id}/edit(id=${game.gameId})}">Edit definition</a></div>
+        <div class="hero-actions"><a class="button" th:href="@{/admin/games/{id}/objects(id=${game.gameId},versionId=${versionId})}">Browse every object <span>-&gt;</span></a><a class="button secondary-button" th:if="${canEditGame}" th:href="@{/admin/games/{id}/edit(id=${game.gameId},versionId=${versionId})}">Edit definition</a></div>
     </section>
     <p class="save-message" th:if="${param.saved != null}">Game definition saved.</p>
 

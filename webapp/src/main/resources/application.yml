@@ -20,3 +20,6 @@ metis:
     schema-version: ${METIS_EVENT_SCHEMA_VERSION:1}
   git:
     sha: ${METIS_GIT_SHA:unknown}
+  cpu:
+    tick-ms: ${METIS_CPU_TICK_MS:1800}
+    initial-delay-ms: ${METIS_CPU_INITIAL_DELAY_MS:1000}

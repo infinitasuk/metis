@@ -68,6 +68,11 @@ Implemented under `/api/v1`:
 - `PATCH/DELETE /players/{playerId}`
 - `GET /sessions/{sessionId}/units`
 - `GET /sessions/{sessionId}/events?afterSequence=`
+- `POST /sessions/{sessionId}/start`
+- `GET /sessions/{sessionId}/state`
+- `GET /sessions/{sessionId}/legal-actions`
+- `POST /sessions/{sessionId}/actions`
+- `GET /definitions/{definitionId}/engine`
 - `GET/POST /sessions/{sessionId}/fleets`
 - `PATCH/DELETE /fleets/{fleetId}`
 - `GET/POST /fleets/{fleetId}/units`
@@ -79,8 +84,16 @@ Implemented under `/api/v1`:
 - `POST /sessions/{sessionId}/events`
 
 The simulator UI can now create a session, add players and display the runtime
-fleet/board/unit/turn state. The next vertical slice is connecting these
-resources to validated game actions and automatic event generation.
+fleet/board/unit/turn state. The authoritative API can validate setup, start a
+session, deploy a unit, advance to movement, apply bounded movement and resolve
+profile-backed attacks; accepted transitions are persisted as state JSON and
+append-only events. Legal actions include only in-range attacks by ready units,
+and each accepted attack resolves seeded attack dice, defense-token mitigation,
+shields and catalogue-backed hull damage.
+The engine core also includes deterministic CPU-vs-CPU self-play simulators for
+regression testing setup, deployment, movement and turn sequencing.
+The `GameEngine` interface is the infrastructure-free contract used by those
+simulators and by future persistence and HTTP adapters.
 
 ## Database Routine Contract
 
@@ -96,6 +109,11 @@ Runtime routines currently include:
 - `sp_unit_create`, `sp_unit_update`, `sp_unit_delete`
 - `sp_board_create`, `sp_board_update`, `sp_board_delete`
 - `sp_turn_create`, `sp_turn_update`, `sp_turn_delete`, `sp_event_append`
+- `sp_engine_state_save`
+
+Authoritative engine transitions use `sp_engine_state_save` rather than the
+generic session update procedure. It checks the expected state version, writes
+the next state and appends its event under one transaction.
 
 New entities must add their read functions, mutation procedures and REST
 resource together. The static Admin repository is the remaining legacy direct

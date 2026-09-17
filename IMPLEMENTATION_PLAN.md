@@ -38,6 +38,14 @@ Completed foundations:
 - Definition lifecycle metadata and Admin API operations for draft, published
   and retired revisions.
 - Architecture and runtime model documentation.
+- Framework-independent engine setup and movement state transitions with plain
+  Java tests.
+- API setup/start/action boundary with persisted state and event generation.
+- Legal-action discovery and active-player turn sequencing for the movement slice.
+- Atomic state-version checks for engine state and event persistence.
+- Deterministic CPU-vs-CPU self-play regression simulations across multiple seeds.
+- Plain-Java `GameEngine` contract test covering setup validation and initial state creation.
+- Definition-backed attack legality, hull damage and destroyed-unit state transitions.
 
 Known gaps:
 
@@ -48,8 +56,10 @@ Known gaps:
 - Base game metadata and global characteristic types are not yet revision-owned.
 - Build SHA injection is available for Docker deployments but is not yet part of
   an automated release pipeline.
-- The engine does not yet validate or execute game actions.
-- No automated tests currently exist in the repository.
+- Remaining catalogue mutation coverage is not fully revision-aware for all
+  relationship and unit-definition records.
+- The engine does not yet load complete Armada rules or generate all legal
+  actions; the current combat slice is intentionally a minimal attack model.
 
 ## Phase 0: Architecture And Delivery Foundation
 
@@ -130,6 +140,11 @@ Work:
 - Add state versioning for optimistic concurrency.
 - Add deterministic randomness abstraction.
 - Add stable rejection codes and rule explanations.
+
+Current implementation includes immutable core setup/player/unit/board/event
+types, setup validation, seeded randomness, deployment, phase advancement and
+bounded movement transitions. The API start/action endpoints are the first
+adapter around this core.
 
 Exit criteria:
 

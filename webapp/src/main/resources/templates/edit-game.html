@@ -9,9 +9,10 @@
 <body>
 <header th:replace="~{fragments :: header}"></header>
 <main class="shell">
-    <a class="back-link" th:href="@{/admin/games/{id}(id=${game.gameId})}">&lt;- Game definition</a>
+    <a class="back-link" th:href="@{/admin/games/{id}(id=${game.gameId},versionId=${versionId})}">&lt;- Game definition</a>
     <section class="intro compact-intro"><p class="eyebrow">ADMIN / EDIT GAME</p><h1>Edit the<br><em>game engine.</em></h1><p class="lede">Changes apply to the static game definition used by future simulations.</p></section>
     <form class="edit-form" method="post" th:action="@{/admin/games/{id}/edit(id=${game.gameId})}">
+        <input type="hidden" name="versionId" th:value="${versionId}">
         <label>Game name<input name="gameName" required th:value="${game.gameName}"></label>
         <label>Description<textarea name="gameDescription" rows="4" th:text="${game.gameDescription}"></textarea></label>
         <div class="form-grid">

@@ -19,8 +19,9 @@ Open `http://localhost:8080` and choose either **Game Simulator** or **Admin**.
 
 The Game Simulator currently provides game and match setup surfaces. The Admin
 area provides the static engine catalogue plus edit forms for game definitions
-and generic game objects. The runtime foundation is being built behind the
-versioned API boundary.
+and generic game objects. The first authoritative engine slice is available
+through the versioned API boundary: start a session, inspect its state, and
+submit deployment, phase and bounded movement actions.
 
 Definition lifecycle operations are available through the Admin API under
 `/api/v1/admin`: revisions can be created as drafts, validated, published and

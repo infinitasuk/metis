@@ -10,37 +10,255 @@
 <header th:replace="~{fragments :: header}"></header>
 <main class="shell">
     <a class="back-link" href="/simulator">&lt;- Game Simulator</a>
-    <section class="hero-panel compact-hero">
-        <p class="eyebrow">SIMULATION SETUP</p>
+    <section class="setup-heading">
+        <p class="eyebrow">NEW GAME INSTANCE</p>
         <h1 th:text="${game.gameName}"></h1>
-        <p class="lede">Configure the match using the loaded game engine.</p>
-        <div class="tag-row"><span class="tag" th:text="|${game.minimumNumberOfPlayers}-${game.maximumNumberOfPlayers} players|"></span><span class="tag" th:text="|up to ${game.maximumNumberOfCpu} CPU players|"></span></div>
+        <p class="lede">Work through the setup, then start the battle when everything is ready.</p>
     </section>
-    <form class="data-panel setup-panel" id="setup-form" th:attr="data-game-id=${game.gameId}">
-        <div class="section-heading compact"><div><p class="eyebrow">MATCH CONFIGURATION</p><h2>Prepare a game</h2></div></div>
-        <div class="setup-grid">
-            <label>Game mode<select id="game-mode"><option value="">Choose a mode</option><option th:each="mode : ${gameModes}" th:value="${mode.gameModeId}" th:text="${mode.name}"></option></select></label>
-            <label>Scenario<select id="scenario"><option value="">Choose a scenario</option><option th:each="scenario : ${scenarios}" th:value="${scenario.scenarioId}" th:text="${scenario.name}"></option></select></label>
-            <label>Fleet format<select id="fleet-format"><option th:each="format : ${fleetFormats}" th:value="${format.fleetFormatId}" th:text="${format.name}"></option></select></label>
+
+    <form class="wizard" id="setup-form"
+          th:attr="data-game-id=${game.gameId},data-min-players=${game.minimumNumberOfPlayers},data-max-players=${game.maximumNumberOfPlayers}">
+        <nav class="wizard-tabs" aria-label="Game setup steps">
+            <button class="wizard-tab active" type="button" data-step="0"><span>01</span>Match</button>
+            <button class="wizard-tab" type="button" data-step="1"><span>02</span>Commanders</button>
+            <button class="wizard-tab" type="button" data-step="2"><span>03</span>Fleets</button>
+            <button class="wizard-tab" type="button" data-step="3"><span>04</span>Battlefield</button>
+            <button class="wizard-tab" type="button" data-step="4"><span>05</span>Review</button>
+        </nav>
+
+        <section class="wizard-step active" data-step-panel="0">
+            <div class="wizard-card-heading">
+                <div><p class="eyebrow">MATCH DETAILS</p><h2>Name and rules</h2></div>
+                <span class="step-count">1 / 5</span>
+            </div>
+            <div class="wizard-form-grid">
+                <label>Match name<input id="session-name" type="text" maxlength="120" placeholder="Name your match" required></label>
+                <label>Visibility<select id="visibility"><option value="public">Public</option><option value="private">Private</option></select></label>
+                <label>Game mode<select id="game-mode" required><option value="">Choose a mode</option><option th:each="mode : ${gameModes}" th:value="${mode.gameModeId}" th:attr="data-config=${mode.configuration},data-description=${mode.description}" th:text="${mode.name}"></option></select></label>
+                <label>Scenario<select id="scenario" required><option value="">Choose a scenario</option><option th:each="scenario : ${scenarios}" th:value="${scenario.scenarioId}" th:text="${scenario.name}"></option></select></label>
+                <label>Fleet format<select id="fleet-format" required><option value="">Choose a format</option><option th:each="format : ${fleetFormats}" th:value="${format.fleetFormatId}" th:attr="data-mode-id=${format.gameModeId},data-config=${format.configuration}" th:text="|${format.name} / ${format.pointsLimit} points|"></option></select></label>
+            </div>
+            <div class="wizard-help"><strong id="game-mode-label">Start with the basics.</strong><span id="game-mode-description">These settings define the match and can be changed any time before the battle starts.</span></div>
+        </section>
+
+        <section class="wizard-step" data-step-panel="1" hidden>
+            <div class="wizard-card-heading">
+                <div><p class="eyebrow">COMMANDERS</p><h2>Who is playing?</h2></div>
+                <span class="step-count" id="player-count"></span>
+            </div>
+            <div class="setup-card-list" id="player-list"></div>
+            <button class="button secondary-button wizard-add" id="add-player" type="button">+ Add commander</button>
+            <p class="form-message" id="player-message" aria-live="polite"></p>
+        </section>
+
+        <section class="wizard-step" data-step-panel="2" hidden>
+            <div class="wizard-card-heading">
+                <div><p class="eyebrow">FLEETS</p><h2>Prepare the forces</h2></div>
+                <span class="step-count">3 / 5</span>
+            </div>
+            <div class="wizard-summary-card">
+                <span class="card-kicker">SELECTED FORMAT</span>
+                <h3 id="fleet-format-summary">Choose a fleet format in Match</h3>
+                <p>Give each commander a fleet name and starting points. Units can be deployed once the battle begins.</p>
+            </div>
+            <div class="setup-card-list" id="fleet-list"></div>
+        </section>
+
+        <section class="wizard-step" data-step-panel="3" hidden>
+            <div class="wizard-card-heading">
+                <div><p class="eyebrow">BATTLEFIELD</p><h2>Choose the arena</h2></div>
+                <span class="step-count">4 / 5</span>
+            </div>
+            <div class="wizard-form-grid battlefield-form">
+                <label>Board<select id="board-code" required><option value="">Choose a board</option><option th:each="board : ${boards}" th:value="${board.code}" th:attr="data-board-id=${board.boardId},data-width=${board.width},data-height=${board.height}" th:text="${board.name}"></option></select></label>
+                <label>Width<input id="board-width" type="number" min="1" value="1800" required></label>
+                <label>Height<input id="board-height" type="number" min="1" value="900" required></label>
+                 <label>Distance per speed (mm)<input id="movement-limit" type="number" min="1" value="100" required></label>
+            </div>
+             <div class="wizard-help"><strong>Set the tactical space.</strong><span>CPU fleets deploy from opposite long edges and use the movement limit to navigate into the engagement.</span></div>
+        </section>
+
+        <section class="wizard-step" data-step-panel="4" hidden>
+            <div class="wizard-card-heading">
+                <div><p class="eyebrow">FINAL CHECK</p><h2>Review and start</h2></div>
+                <span class="step-count">5 / 5</span>
+            </div>
+            <div class="review-grid" id="review-grid"></div>
+            <div class="start-banner"><div><strong>Ready to enter the battle?</strong><span>Starting creates the game instance and locks in this setup.</span></div><button class="button start-button" type="submit">Start battle <span>-&gt;</span></button></div>
+            <p class="form-message" id="setup-message" aria-live="polite"></p>
+        </section>
+
+        <div class="wizard-actions">
+            <button class="button secondary-button" id="previous-step" type="button" hidden>Back</button>
+            <button class="button" id="next-step" type="button">Continue <span>-&gt;</span></button>
         </div>
-        <div class="simulator-note"><span class="eyebrow">RUNTIME LAYER</span><p>The match board and turn engine will appear here when the game-instance runtime is connected to this game definition.</p></div>
-        <button class="button" type="submit">Create simulation <span>-&gt;</span></button>
-        <p class="form-message" id="setup-message" aria-live="polite"></p>
     </form>
+
+    <select id="faction-options" hidden><option value="">Choose faction</option><option th:each="faction : ${factions}" th:value="${faction.factionId}" th:text="${faction.factionName}"></option></select>
 </main>
 <footer th:replace="~{fragments :: footer}"></footer>
 <script>
     const setupForm = document.querySelector('#setup-form');
-    const setupMessage = document.querySelector('#setup-message');
-    setupForm.addEventListener('submit', async (event) => {
+    const steps = [...document.querySelectorAll('[data-step-panel]')];
+    const tabs = [...document.querySelectorAll('.wizard-tab')];
+    const previous = document.querySelector('#previous-step');
+    const next = document.querySelector('#next-step');
+    const playerList = document.querySelector('#player-list');
+    const fleetList = document.querySelector('#fleet-list');
+    const factionOptions = document.querySelector('#faction-options').innerHTML;
+    const minPlayers = Number(setupForm.dataset.minPlayers);
+    const maxPlayers = Number(setupForm.dataset.maxPlayers);
+    let currentStep = 0;
+    let playerNumber = 0;
+
+    const field = id => document.querySelector(id);
+    const value = id => field(id).value;
+    const escapeHtml = text => String(text).replace(/[&<>'"]/g, character => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'}[character]));
+    const selectedModeConfig = () => {
+        try { return JSON.parse(field('#game-mode').selectedOptions[0]?.dataset.config || '{}'); }
+        catch (error) { return {}; }
+    };
+    const applyModeDefaults = () => {
+        const config = selectedModeConfig();
+        const selectedMode = field('#game-mode').selectedOptions[0];
+        field('#game-mode-label').textContent = selectedMode?.textContent || 'Start with the basics.';
+        field('#game-mode-description').textContent = selectedMode?.dataset.description || 'These settings define the match and can be changed any time before the battle starts.';
+        if (config.board) {
+            field('#board-width').value = config.board.width;
+            field('#board-height').value = config.board.height;
+        }
+        if (config.maximumMovementDistance) field('#movement-limit').value = config.maximumMovementDistance;
+        const format = field('#fleet-format');
+        [...format.options].forEach(option => {
+            option.hidden = option.value !== '' && option.dataset.modeId !== selectedMode?.value;
+        });
+        if (format.selectedOptions[0]?.hidden) format.value = '';
+    };
+
+    const addPlayer = () => {
+        if (playerList.children.length >= maxPlayers) return;
+        playerNumber += 1;
+        const card = document.createElement('article');
+        card.className = 'setup-card player-card';
+        card.dataset.playerNumber = playerNumber;
+        card.innerHTML = `<div class="setup-card-heading"><div><span class="card-kicker">SEAT ${playerNumber}</span><h3>Commander ${playerNumber}</h3></div><button class="text-button remove-player" type="button">Remove</button></div>
+            <div class="wizard-form-grid"><label>Display name<input data-field="name" placeholder="Player name" required></label><label>Type<select data-field="kind"><option value="human">Human</option><option value="cpu">CPU</option></select></label><label>Faction<select data-field="faction" required>${factionOptions}</select></label></div>`;
+        card.querySelector('.remove-player').addEventListener('click', () => {
+            if (playerList.children.length <= minPlayers) return;
+            card.remove();
+            refreshSetupCards();
+        });
+        playerList.appendChild(card);
+        refreshSetupCards();
+    };
+
+    const refreshSetupCards = () => {
+        [...playerList.children].forEach((card, index) => {
+            const seat = index + 1;
+            card.dataset.playerNumber = seat;
+            card.querySelector('.card-kicker').textContent = `SEAT ${seat}`;
+            card.querySelector('h3').textContent = `Commander ${seat}`;
+            card.querySelector('.remove-player').disabled = playerList.children.length <= minPlayers;
+        });
+        document.querySelector('#player-count').textContent = `${playerList.children.length} / ${maxPlayers}`;
+        fleetList.replaceChildren(...[...playerList.children].map(card => {
+            const fleet = document.createElement('article');
+            fleet.className = 'setup-card fleet-card';
+            fleet.dataset.playerNumber = card.dataset.playerNumber;
+            fleet.innerHTML = `<span class="card-kicker">SEAT ${card.dataset.playerNumber}</span><h3 class="fleet-player-name">Commander ${card.dataset.playerNumber}</h3><div class="wizard-form-grid"><label>Fleet name<input data-field="fleet-name" value="Fleet ${card.dataset.playerNumber}" required></label><label>Starting points<input data-field="points" type="number" min="0" value="0" required></label></div>`;
+            return fleet;
+        }));
+    };
+
+    for (let index = 0; index < minPlayers; index += 1) addPlayer();
+    document.querySelector('#add-player').addEventListener('click', addPlayer);
+    document.querySelector('#game-mode').addEventListener('change', applyModeDefaults);
+    document.querySelector('#fleet-format').addEventListener('change', () => {
+        field('#fleet-format-summary').textContent = field('#fleet-format').selectedOptions[0]?.textContent || 'Choose a fleet format in Match';
+    });
+    document.querySelector('#board-code').addEventListener('change', event => {
+        const option = event.target.selectedOptions[0];
+        if (option.dataset.width) field('#board-width').value = option.dataset.width;
+        if (option.dataset.height) field('#board-height').value = option.dataset.height;
+    });
+
+    const validStep = () => {
+        const active = steps[currentStep];
+        const invalid = [...active.querySelectorAll('input, select')].find(input => !input.checkValidity());
+        if (invalid) { invalid.reportValidity(); return false; }
+        if (currentStep === 1 && playerList.children.length < minPlayers) {
+            document.querySelector('#player-message').textContent = `Add at least ${minPlayers} commanders.`;
+            return false;
+        }
+        return true;
+    };
+    const renderReview = () => {
+        const selected = id => field(id).selectedOptions[0]?.textContent || 'Not selected';
+        const players = [...playerList.children].map(card => `${escapeHtml(card.querySelector('[data-field=name]').value)} / ${escapeHtml(card.querySelector('[data-field=faction]').selectedOptions[0]?.textContent || 'No faction')}`).join('<br>');
+        field('#review-grid').innerHTML = `<div><span class="card-kicker">MATCH</span><strong>${escapeHtml(value('#session-name'))}</strong><span>${selected('#game-mode')} / ${selected('#scenario')}</span><span>${value('#visibility')} / ${selected('#fleet-format')}</span></div><div><span class="card-kicker">COMMANDERS</span><strong>${players}</strong><span>${playerList.children.length} seats configured</span></div><div><span class="card-kicker">BATTLEFIELD</span><strong>${selected('#board-code')}</strong><span>${value('#board-width')} x ${value('#board-height')} / movement ${value('#movement-limit')}</span></div>`;
+    };
+    const showStep = step => {
+        currentStep = step;
+        steps.forEach((panel, index) => { panel.hidden = index !== step; panel.classList.toggle('active', index === step); });
+        tabs.forEach((tab, index) => { tab.classList.toggle('active', index === step); tab.classList.toggle('complete', index < step); });
+        previous.hidden = step === 0;
+        next.hidden = step === steps.length - 1;
+        if (step === 2) refreshSetupCards();
+        if (step === 4) renderReview();
+        window.scrollTo({ top: setupForm.offsetTop - 25, behavior: 'smooth' });
+    };
+    const moveTo = step => {
+        if (step > currentStep + 1) return;
+        if (step > currentStep && !validStep()) return;
+        showStep(Math.max(0, Math.min(steps.length - 1, step)));
+    };
+    next.addEventListener('click', () => moveTo(currentStep + 1));
+    previous.addEventListener('click', () => moveTo(currentStep - 1));
+    tabs.forEach(tab => tab.addEventListener('click', () => moveTo(Number(tab.dataset.step))));
+
+    setupForm.addEventListener('submit', async event => {
         event.preventDefault();
-        setupMessage.textContent = 'Creating simulation...';
-        const value = id => document.querySelector(id).value;
-        const body = { name: `${setupForm.dataset.gameId} simulation`, gameModeId: value('#game-mode') || null, scenarioId: value('#scenario') || null, fleetFormatId: value('#fleet-format') || null };
-        const response = await fetch(`/api/v1/games/${setupForm.dataset.gameId}/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        if (!response.ok) { setupMessage.textContent = 'Could not create the simulation.'; return; }
-        const session = await response.json();
-        window.location.assign(`/simulator/sessions/${session.sessionId}`);
+        if (!validStep()) return;
+        const message = field('#setup-message');
+        const startButton = document.querySelector('.start-button');
+        startButton.disabled = true;
+        message.textContent = 'Creating battle...';
+        try {
+            const createResponse = await fetch(`/api/v1/games/${setupForm.dataset.gameId}/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: value('#session-name').trim(), visibility: value('#visibility'), gameModeId: Number(value('#game-mode')), scenarioId: Number(value('#scenario')), fleetFormatId: Number(value('#fleet-format')) }) });
+            if (!createResponse.ok) throw new Error('Could not create the game instance.');
+            const session = await createResponse.json();
+            const playerIds = [];
+            for (const card of playerList.children) {
+                const playerResponse = await fetch(`/api/v1/sessions/${session.sessionId}/players`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seatNumber: Number(card.dataset.playerNumber), displayName: card.querySelector('[data-field=name]').value.trim(), playerKind: card.querySelector('[data-field=kind]').value, factionId: Number(card.querySelector('[data-field=faction]').value) }) });
+                if (!playerResponse.ok) throw new Error('Could not save a commander.');
+                playerIds.push(await playerResponse.json());
+            }
+            for (let index = 0; index < playerIds.length; index += 1) {
+                const card = fleetList.children[index];
+                const fleetResponse = await fetch(`/api/v1/players/${playerIds[index].sessionPlayerId}/fleets`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fleetFormatId: Number(value('#fleet-format')), fleetName: card.querySelector('[data-field=fleet-name]').value.trim(), pointsTotal: Number(card.querySelector('[data-field=points]').value) }) });
+                if (!fleetResponse.ok) throw new Error('Could not save a fleet.');
+            }
+            const board = field('#board-code').selectedOptions[0];
+            if (board.dataset.boardId) {
+                const boardResponse = await fetch(`/api/v1/sessions/${session.sessionId}/boards`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ boardDefinitionId: Number(board.dataset.boardId), role: 'primary' }) });
+                if (!boardResponse.ok) throw new Error('Could not save the battlefield.');
+            }
+             const modeConfig = selectedModeConfig();
+              const formatOption = field('#fleet-format').selectedOptions[0];
+              let formatConfig = {};
+              try { formatConfig = JSON.parse(formatOption?.dataset.config || '{}'); } catch (error) { formatConfig = {}; }
+               const options = { distancePerSpeed: Number(value('#movement-limit')) };
+              if (Number.isInteger(formatConfig.ship_limit)) options.maximumShipsPerPlayer = formatConfig.ship_limit;
+              if (Number.isInteger(formatConfig.squadron_limit)) options.maximumSquadronsPerPlayer = formatConfig.squadron_limit;
+             if (modeConfig.unlimitedRounds) options.unlimitedRounds = true;
+             else if (Number.isInteger(modeConfig.roundLimit)) options.maximumRounds = modeConfig.roundLimit;
+             const startResponse = await fetch(`/api/v1/sessions/${session.sessionId}/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ boardCode: value('#board-code'), width: Number(value('#board-width')), height: Number(value('#board-height')), options }) });
+            if (!startResponse.ok) throw new Error('Could not start the battle.');
+            window.location.assign(`/simulator/sessions/${session.sessionId}`);
+        } catch (error) {
+            startButton.disabled = false;
+            message.textContent = error.message;
+        }
     });
 </script>
 </body>

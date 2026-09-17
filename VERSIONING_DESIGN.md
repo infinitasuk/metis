@@ -41,6 +41,9 @@ Database migrations are append-only and independently numbered:
 011_definition_lifecycle.sql
 012_scope_catalogue_to_definition.sql
 013_revision_scoped_object_updates.sql
+014_complete_definition_editing.sql
+015_engine_definition_read.sql
+016_atomic_engine_state_save.sql
 ```
 
 The database schema version is not the same as a software or game-definition
@@ -94,6 +97,8 @@ database or catalogue releases.
 - Maven modules share `0.1.0-SNAPSHOT`.
 - Runtime endpoints use `/api/v1`.
 - Runtime sessions record engine, API, event-schema and game-version metadata.
+- Authoritative runtime transitions use a database state version checked and
+  saved atomically with the corresponding event.
 - Database scripts are numbered in `docker/init/sql`.
 - `GET /api/v1/meta` exposes the active API and engine version values.
 - `GET/POST/PATCH /api/v1/admin/...` manages definition metadata and lifecycle.

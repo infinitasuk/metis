@@ -59,6 +59,12 @@ public class DefinitionApiController {
         return definitions.validate(definitionId);
     }
 
+    @GetMapping("/definitions/{definitionId}/audit")
+    public List<DefinitionRepository.DefinitionAudit> audit(@PathVariable long definitionId) {
+        definition(definitionId);
+        return definitions.findAudit(definitionId);
+    }
+
     @PostMapping("/definitions/{definitionId}/publish")
     public DefinitionRepository.DefinitionVersion publish(@PathVariable long definitionId) {
         definitions.publishVersion(definitionId);
@@ -81,6 +87,79 @@ public class DefinitionApiController {
         return definition(definitionId);
     }
 
+    @PatchMapping("/definitions/{definitionId}/game")
+    public DefinitionRepository.DefinitionVersion updateGame(@PathVariable long definitionId,
+                                                             @RequestBody GameUpdateRequest request) {
+        definition(definitionId);
+        definitions.updateGame(definitionId, request.name(), request.description(), request.minPlayers(),
+                request.maxPlayers(), request.minCpu(), request.maxCpu());
+        return definition(definitionId);
+    }
+
+    @PatchMapping("/definitions/{definitionId}/factions/{factionId}")
+    public DefinitionRepository.DefinitionVersion updateFaction(@PathVariable long definitionId,
+                                                                 @PathVariable long factionId,
+                                                                 @RequestBody NamedContentRequest request) {
+        definition(definitionId);
+        definitions.updateFaction(definitionId, factionId, request.name(), request.description());
+        return definition(definitionId);
+    }
+
+    @PatchMapping("/definitions/{definitionId}/rules/{ruleId}")
+    public DefinitionRepository.DefinitionVersion updateRule(@PathVariable long definitionId,
+                                                              @PathVariable long ruleId,
+                                                              @RequestBody ConfiguredContentRequest request) {
+        definition(definitionId);
+        definitions.updateRule(definitionId, ruleId, request.name(), request.description(), json(request.configuration()));
+        return definition(definitionId);
+    }
+
+    @PatchMapping("/definitions/{definitionId}/modes/{modeId}")
+    public DefinitionRepository.DefinitionVersion updateMode(@PathVariable long definitionId,
+                                                              @PathVariable long modeId,
+                                                              @RequestBody ConfiguredContentRequest request) {
+        definition(definitionId);
+        definitions.updateMode(definitionId, modeId, request.name(), request.description(), json(request.configuration()));
+        return definition(definitionId);
+    }
+
+    @PatchMapping("/definitions/{definitionId}/phases/{phaseId}")
+    public DefinitionRepository.DefinitionVersion updatePhase(@PathVariable long definitionId,
+                                                               @PathVariable long phaseId,
+                                                               @RequestBody ConfiguredContentRequest request) {
+        definition(definitionId);
+        definitions.updatePhase(definitionId, phaseId, request.name(), request.description(), json(request.configuration()));
+        return definition(definitionId);
+    }
+
+    @PatchMapping("/definitions/{definitionId}/actions/{actionId}")
+    public DefinitionRepository.DefinitionVersion updateAction(@PathVariable long definitionId,
+                                                                @PathVariable long actionId,
+                                                                @RequestBody ConfiguredContentRequest request) {
+        definition(definitionId);
+        definitions.updateAction(definitionId, actionId, request.name(), request.description(), json(request.configuration()));
+        return definition(definitionId);
+    }
+
+    @PatchMapping("/definitions/{definitionId}/scenarios/{scenarioId}")
+    public DefinitionRepository.DefinitionVersion updateScenario(@PathVariable long definitionId,
+                                                                  @PathVariable long scenarioId,
+                                                                  @RequestBody ConfiguredContentRequest request) {
+        definition(definitionId);
+        definitions.updateScenario(definitionId, scenarioId, request.name(), request.description(), json(request.configuration()));
+        return definition(definitionId);
+    }
+
+    @PatchMapping("/definitions/{definitionId}/boards/{boardId}")
+    public DefinitionRepository.DefinitionVersion updateBoard(@PathVariable long definitionId,
+                                                               @PathVariable long boardId,
+                                                               @RequestBody BoardUpdateRequest request) {
+        definition(definitionId);
+        definitions.updateBoard(definitionId, boardId, request.name(), request.width(), request.height(),
+                request.coordinateSystem(), json(request.configuration()));
+        return definition(definitionId);
+    }
+
     @ExceptionHandler(DefinitionNotFoundException.class)
     public ResponseEntity<Map<String, String>> notFound(DefinitionNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", exception.getMessage()));
@@ -95,6 +174,16 @@ public class DefinitionApiController {
 
     public record ObjectUpdateRequest(String name, String description, String displayText,
                                       JsonNode objectData, JsonNode sourceReference) {}
+
+    public record GameUpdateRequest(String name, String description, int minPlayers, int maxPlayers,
+                                    int minCpu, int maxCpu) {}
+
+    public record NamedContentRequest(String name, String description) {}
+
+    public record ConfiguredContentRequest(String name, String description, JsonNode configuration) {}
+
+    public record BoardUpdateRequest(String name, java.math.BigDecimal width, java.math.BigDecimal height,
+                                     String coordinateSystem, JsonNode configuration) {}
 
     private static String json(JsonNode value) {
         return value == null ? null : value.toString();

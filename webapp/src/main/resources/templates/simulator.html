@@ -28,7 +28,122 @@
             <span class="arrow">Configure match <span>-&gt;</span></span>
         </a>
     </section>
+    <section class="section-heading live-games-heading">
+        <div><p class="eyebrow">ACTIVE MATCHES</p><h2>View a game</h2></div>
+        <span class="count" id="running-game-count" th:text="${runningGames.size()} + ' running'"></span>
+    </section>
+     <section class="game-grid live-games" id="running-games">
+         <article class="game-card live-game-card" th:each="gameSession : ${runningGames}" th:attr="data-session-id=${gameSession.sessionId}">
+             <a class="session-card-link" th:href="@{/simulator/sessions/{id}(id=${gameSession.sessionId})}">
+                 <div class="card-kicker">LIVE MATCH <span th:text="${gameSession.sessionCode}"></span></div>
+                 <h3 th:text="${gameSession.sessionName}"></h3>
+                 <p th:text="${gameSession.gameName}"></p>
+                 <div class="metric-row"><span><b th:text="|Round ${gameSession.currentRound}|"></b></span><span><b th:text="${gameSession.playerCount}"></b> players</span></div>
+                 <span class="arrow">View game <span>-&gt;</span></span>
+             </a>
+             <button class="text-button delete-session" type="button" th:attr="data-session-id=${gameSession.sessionId}">Delete session</button>
+         </article>
+    </section>
+    <p class="muted live-games-empty" id="running-games-empty">No games are running right now. Configure a match above to start one.</p>
+    <section class="section-heading old-games-heading">
+        <div><p class="eyebrow">MATCH HISTORY</p><h2>Old sessions</h2></div>
+        <span class="count" id="old-game-count" th:text="${oldGames.size()} + ' saved'"></span>
+    </section>
+    <section class="game-grid old-games" id="old-games">
+        <article class="game-card live-game-card" th:each="gameSession : ${oldGames}" th:attr="data-session-id=${gameSession.sessionId}">
+            <a class="session-card-link" th:href="@{/simulator/sessions/{id}(id=${gameSession.sessionId})}">
+                <div class="card-kicker"><span th:text="${gameSession.status == 'finished' ? 'COMPLETED' : 'SAVED SESSION'}"></span> <span th:text="${gameSession.sessionCode}"></span></div>
+                <h3 th:text="${gameSession.sessionName}"></h3>
+                <p th:text="${gameSession.gameName}"></p>
+                <div class="metric-row"><span><b th:text="|Round ${gameSession.currentRound}|"></b></span><span><b th:text="${gameSession.playerCount}"></b> players</span></div>
+                <span class="arrow">Open session <span>-&gt;</span></span>
+            </a>
+            <button class="text-button delete-session" type="button" th:attr="data-session-id=${gameSession.sessionId}">Delete session</button>
+        </article>
+    </section>
+    <p class="muted old-games-empty" id="old-games-empty" th:hidden="${!oldGames.isEmpty()}">No old sessions saved.</p>
 </main>
 <footer th:replace="~{fragments :: footer}"></footer>
+<script>
+    const runningGames = document.querySelector('#running-games');
+    const runningGamesEmpty = document.querySelector('#running-games-empty');
+    const runningGameCount = document.querySelector('#running-game-count');
+    const oldGames = document.querySelector('#old-games');
+    const oldGamesEmpty = document.querySelector('#old-games-empty');
+    const oldGameCount = document.querySelector('#old-game-count');
+    const removeSessionCard = (container, count, empty, sessionId, suffix) => {
+        container.querySelector(`[data-session-id="${sessionId}"]`)?.remove();
+        const remaining = container.children.length;
+        count.textContent = remaining + suffix;
+        container.hidden = remaining === 0;
+        if (empty) empty.hidden = remaining > 0;
+    };
+    const deleteSession = async button => {
+        const sessionId = button.dataset.sessionId;
+        if (!window.confirm('Delete this session and all of its recorded battle data?')) return;
+        button.disabled = true;
+        const response = await fetch('/api/v1/sessions/' + sessionId, { method: 'DELETE' });
+        if (!response.ok) {
+            button.disabled = false;
+            window.alert('The session could not be deleted.');
+            return;
+        }
+        if (button.closest('#running-games')) {
+            removeSessionCard(runningGames, runningGameCount, runningGamesEmpty, sessionId, ' running');
+        } else {
+            removeSessionCard(oldGames, oldGameCount, oldGamesEmpty, sessionId, ' saved');
+        }
+    };
+    const refreshRunningGames = async () => {
+        if (!runningGames) return;
+        const response = await fetch('/api/v1/sessions?status=running', { cache: 'no-store' });
+        if (!response.ok) return;
+        const sessions = await response.json();
+        runningGameCount.textContent = sessions.length + ' running';
+        runningGames.replaceChildren(...sessions.map(gameSession => {
+            const card = document.createElement('article');
+            card.className = 'game-card live-game-card';
+            card.dataset.sessionId = gameSession.sessionId;
+            const sessionLink = document.createElement('a');
+            sessionLink.className = 'session-card-link';
+            sessionLink.href = '/simulator/sessions/' + gameSession.sessionId;
+            const kicker = document.createElement('div');
+            kicker.className = 'card-kicker';
+            kicker.textContent = 'LIVE MATCH ' + gameSession.sessionCode;
+            const name = document.createElement('h3');
+            name.textContent = gameSession.sessionName;
+            const game = document.createElement('p');
+            game.textContent = gameSession.gameName;
+            const metrics = document.createElement('div');
+            metrics.className = 'metric-row';
+            metrics.textContent = 'Round ' + gameSession.currentRound + ' / ' + gameSession.playerCount + ' players';
+            const link = document.createElement('span');
+            link.className = 'arrow';
+            link.textContent = 'View game ->';
+            sessionLink.append(kicker, name, game, metrics, link);
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'text-button delete-session';
+            deleteButton.type = 'button';
+            deleteButton.dataset.sessionId = gameSession.sessionId;
+            deleteButton.textContent = 'Delete session';
+            card.append(sessionLink, deleteButton);
+            return card;
+        }));
+        runningGames.hidden = sessions.length === 0;
+        if (runningGamesEmpty) runningGamesEmpty.hidden = sessions.length > 0;
+    };
+    runningGames?.addEventListener('click', event => {
+        const button = event.target.closest('.delete-session');
+        if (button) { event.preventDefault(); deleteSession(button); }
+    });
+    oldGames?.addEventListener('click', event => {
+        const button = event.target.closest('.delete-session');
+        if (!button) return;
+        event.preventDefault();
+        deleteSession(button);
+    });
+    refreshRunningGames();
+    window.setInterval(refreshRunningGames, 10000);
+</script>
 </body>
 </html>

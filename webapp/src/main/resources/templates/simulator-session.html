@@ -3,68 +3,1063 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title th:text="'METIS / Simulation / ' + ${session.sessionName}"></title>
+    <title th:text="'METIS / Simulation / ' + ${battleSession.sessionName}"></title>
     <link rel="stylesheet" href="/styles.css">
 </head>
-<body>
-<header th:replace="~{fragments :: header}"></header>
-<main class="shell">
-    <a class="back-link" href="/simulator">&lt;- Game Simulator</a>
-    <section class="hero-panel compact-hero">
-        <p class="eyebrow">LIVE SIMULATION</p>
-        <h1 th:text="${session.sessionName}"></h1>
-        <p class="lede" th:text="|${session.gameName} / ${session.sessionCode}|"></p>
-        <div class="tag-row"><span class="tag accent" th:text="${session.status}"></span><span class="tag" th:text="|Round ${session.currentRound}|"></span><span class="tag" th:text="|Game definition ${session.gameVersionCode != null ? session.gameVersionCode : 'unassigned'}|"></span></div>
-        <p class="muted" th:text="|Engine ${session.engineVersion} / API ${session.apiVersion} / Events ${session.eventSchemaVersion}|"></p>
-    </section>
-    <div class="two-column">
-        <section class="data-panel">
-            <div class="section-heading compact"><div><p class="eyebrow">PLAYERS</p><h2>Fleet commanders</h2></div><span class="count" th:text="${players.size()}"></span></div>
-            <div class="data-list" th:if="${!players.isEmpty()}"><article class="data-item" th:each="player : ${players}"><div><span class="card-kicker" th:text="|SEAT ${player.seatNumber}|"></span><h3 th:text="${player.displayName}"></h3><p th:text="${player.playerKind}"></p></div><span class="tag" th:text="${player.ready ? 'ready' : 'not ready'}"></span></article></div>
-            <p class="muted" th:if="${players.isEmpty()}">Add players to prepare this simulation.</p>
-            <form class="inline-form" id="player-form" th:attr="data-session-id=${session.sessionId}">
-                <input name="displayName" placeholder="Player name" required>
-                <input name="seatNumber" type="number" min="1" placeholder="Seat" required>
-                <select name="playerKind"><option value="human">Human</option><option value="cpu">CPU</option></select>
-                <button class="button" type="submit">Add player</button>
-            </form>
-            <p class="form-message" id="player-message" aria-live="polite"></p>
+<body class="tactical-screen-page">
+<header class="tactical-hud">
+    <a class="tactical-brand" href="/simulator"><strong>METIS</strong><span>BATTLE SIMULATOR / V0.1</span></a>
+    <div class="tactical-system">MODULAR ENGINE FOR<br>TABLETOP INTELLIGENCE &amp; STRATEGY</div>
+    <div class="tactical-readout"><div><span>GAME</span><strong th:text="${battleSession.gameName}"></strong></div><div><span>SCENARIO</span><strong th:text="${scenarioName}"></strong></div><div><span>TURN</span><strong id="session-round" th:text="|${engineState != null ? engineState.round : battleSession.currentRound} / ${engineState != null and engineState.values['maximumRounds'] != null ? engineState.values['maximumRounds'] : 6}|"></strong></div><div><span>PHASE</span><strong id="session-status" th:text="${engineState != null ? engineState.phaseCode : battleSession.status}"></strong></div></div>
+</header>
+<main class="tactical-shell">
+    <div class="tactical-screen-grid">
+        <aside class="tactical-sidebar tactical-left">
+            <section class="tactical-card roster-card">
+                <p class="tactical-kicker">PLAYERS</p>
+                <article class="tactical-player" th:each="player : ${players}" th:attr="data-player-id=${player.sessionPlayerId}">
+                    <button class="tactical-player-toggle" data-roster-toggle type="button" aria-expanded="true">
+                        <span class="tactical-player-heading"><span class="player-symbol" th:text="${player.seatNumber == 1 ? 'O' : '*'}"></span><span><strong th:text="${player.factionName != null ? player.factionName : player.displayName}"></strong><small th:text="${player.playerKind == 'cpu' ? 'AI' : 'PLAYER'}"></small></span></span>
+                        <span class="roster-chevron" aria-hidden="true">-</span>
+                    </button>
+                    <div class="tactical-player-units" data-roster-panel><p class="roster-empty">No units deployed.</p><button class="roster-unit tactical-roster-unit" th:each="unit : ${engineState != null ? engineState.units : {}}" th:if="${unit.playerId == player.sessionPlayerId}" th:attr="data-select-unit=${unit.unitId},data-unit-code=${unit.unitCode}"><span class="unit-art-placeholder"></span><span class="unit-label" th:text="${unit.unitCode}"></span><small th:text="|H${unit.hullPoints}|"></small></button></div>
+                </article>
+            </section>
+            <section class="tactical-card map-layers"><p class="tactical-kicker">MAP LAYERS</p><label><span>Units</span><input data-layer-toggle="units" type="checkbox" checked></label><label><span>Movement range</span><input data-layer-toggle="movement" type="checkbox" checked></label><label><span>Trajectories</span><input data-layer-toggle="trajectories" type="checkbox" checked></label><label><span>Firing arcs</span><input data-layer-toggle="arcs" type="checkbox" checked></label><label><span>Range rings</span><input data-layer-toggle="range" type="checkbox" checked></label><label><span>Objectives</span><input data-layer-toggle="objectives" type="checkbox" checked></label><label><span>Terrain</span><input data-layer-toggle="terrain" type="checkbox" checked></label><label><span>Grid</span><input data-layer-toggle="grid" type="checkbox" checked></label></section>
+            <section class="tactical-card tactical-tools"><p class="tactical-kicker">TOOLS</p><div><button class="tool-button active" data-tool="select" type="button"><span class="tool-icon">&#8598;</span><small>Select</small></button><button class="tool-button" data-tool="measure" type="button"><span class="tool-icon">&#8761;</span><small>Measure</small></button><button class="tool-button" data-tool="pan" type="button"><span class="tool-icon">&#10022;</span><small>Pan</small></button><button class="tool-button" data-tool="zoom-in" type="button"><span class="tool-icon">+</span><small>Zoom</small></button><button class="tool-button" data-tool="clear" type="button"><span class="tool-icon">&times;</span><small>Clear</small></button></div><div class="map-scale"><span class="compass"><b>N</b><i></i><b>S</b></span><span><b>0</b><b>100</b><b>200</b><b>300</b><b>400</b><small>Distance (mm)</small></span></div></section>
+        </aside>
+
+        <section class="tactical-center">
+            <section class="tactical-board-panel" id="live-board-panel" th:if="${engineState != null}" th:attr="data-session-id=${battleSession.sessionId}">
+                <div class="tactical-board-heading"><div><p class="tactical-kicker">TACTICAL DISPLAY</p><h1>BATTLEFIELD</h1></div><div class="board-meta"><span th:text="${modeName}"></span><span>LIVE ENGINE</span></div></div>
+                  <div class="board-status tactical-status"><span class="tactical-chip" id="board-phase" th:text="|PHASE ${engineState.phaseCode}|"></span><span class="tactical-chip" id="board-version" th:text="|STATE ${engineState.stateVersion}|"></span><span class="tactical-chip" id="board-active-player" th:if="${engineState.activePlayerId != null}" th:text="|ACTIVE PLAYER ${engineState.activePlayerId}|"></span></div><div class="replay-controls" id="replay-controls" th:if="${battleSession.status != 'running'}"><div class="replay-heading"><p class="tactical-kicker">HISTORICAL PLAYBACK</p><strong id="replay-position-label">FINAL STATE</strong></div><input id="replay-slider" type="range" min="0" max="0" value="0" step="1" disabled aria-label="Replay game history"><div class="replay-meta"><span id="replay-event-label">No recorded events</span><span>Drag to inspect each round and phase</span></div></div><div class="cpu-activity" id="cpu-activity" aria-live="polite"><span class="cpu-pulse"></span><strong id="cpu-activity-label">TACTICAL AI STANDBY</strong><span id="cpu-activity-detail">Waiting for the active commander.</span></div>
+                   <div class="battlefield-wrap tactical-map-frame"><div class="battlefield-label"><span><strong>GRID:</strong> 100mm <b>//</b> <strong>SCALE:</strong> <em id="scale-level">1.0x</em></span><span class="zoom-controls"><button id="zoom-out" type="button">-</button><strong id="zoom-level">100%</strong><button id="zoom-in" type="button">+</button></span></div><div class="battlefield-viewport" id="battlefield-viewport"><div class="battlefield" id="battlefield" th:style="|aspect-ratio: ${engineState.board.width} / ${engineState.board.height}|"><div class="battle-grid"></div><svg class="tactical-overlay" id="tactical-overlay" aria-hidden="true"></svg><svg class="battle-effects" id="battle-effects" aria-hidden="true"></svg><div class="battlefield-empty" id="battlefield-empty" th:if="${engineState.units.isEmpty()}"><strong>NO UNITS DEPLOYED</strong><span>Waiting for fleet deployment.</span></div><div class="battle-unit" th:each="unit : ${engineState.units}" th:attr="data-unit-id=${unit.unitId},data-player-id=${unit.playerId}" th:classappend="${unit.status == 'destroyed' ? ' destroyed' : ''}" th:style="|left: ${unit.positionX * 100 / engineState.board.width}%; bottom: ${unit.positionY * 100 / engineState.board.height}%;|"><span class="unit-art-placeholder"></span><span class="unit-label" th:text="${unit.unitCode}"></span><small th:text="|H${unit.hullPoints} / S${unit.shieldPoints}|"></small></div></div></div></div>
+                  <div class="tactical-log" id="message-log"><div class="tactical-log-heading"><div><p class="tactical-kicker">MESSAGE LOG</p><span>PLAN &gt; ADAPT &gt; OUTTHINK &gt; WIN</span></div><button class="tactical-button" data-panel-toggle="log" type="button" aria-expanded="true">COLLAPSE</button></div><p class="muted" id="live-event-message">Waiting for events...</p><ul class="live-events" id="live-events"></ul><div class="log-footer"><div class="log-radar"><i></i></div><p>&quot;STRATEGY FAVOURS<br>THE PREPARED MIND.&quot;<br><strong>- METIS -</strong></p></div><div class="spectator-actions" th:if="${battleSession.status == 'running'}"><p class="tactical-kicker">LEGAL ACTIONS</p><p class="muted" id="legal-actions-message">Loading current actions...</p><ul class="legal-actions" id="legal-actions" th:attr="data-session-id=${battleSession.sessionId}"></ul></div></div>
+            </section>
+            <p class="tactical-empty" th:if="${engineState == null}">Battle state has not started.</p>
+            <details class="setup-drawer" id="engine-controls"><summary>ENGINE CONTROLS</summary><p class="form-message" id="engine-message" aria-live="polite"></p><form class="inline-form" id="player-form" th:if="${battleSession.status == 'setup'}" th:attr="data-session-id=${battleSession.sessionId}"><input name="displayName" placeholder="Player name" required><input name="seatNumber" type="number" min="1" placeholder="Seat" required><select name="playerKind"><option value="human">Human</option><option value="cpu">CPU</option></select><select name="factionId" required><option value="">Faction</option><option th:each="faction : ${factions}" th:value="${faction.factionId}" th:text="${faction.factionName}"></option></select><button class="button" type="submit">Add player</button></form><p class="form-message" id="player-message" aria-live="polite"></p><form class="inline-form" id="start-form" th:if="${battleSession.status == 'setup'}" th:attr="data-session-id=${battleSession.sessionId}"><input name="boardCode" value="standard_6x3" placeholder="Board code" required><input name="width" type="number" min="1" value="1800" placeholder="Width" required><input name="height" type="number" min="1" value="900" placeholder="Height" required><input name="maximumMovementDistance" type="number" min="1" value="100" placeholder="Move limit" required><button class="button" type="submit">Start session</button></form><div th:if="${battleSession.status == 'running'}"><form class="inline-form" id="deploy-form" th:if="${enginePhase == 'deployment'}" th:attr="data-session-id=${battleSession.sessionId}"><select name="actorPlayerId" required><option th:each="player : ${players}" th:value="${player.sessionPlayerId}" th:text="${player.displayName}"></option></select><input name="unitId" type="number" min="1" value="1" placeholder="Unit id" required><select name="unitCode" required><option value="">Unit profile</option><option th:each="unit : ${engineDefinition.unitDefinitions}" th:value="${unit.code}" th:text="|${unit.code} / ${unit.factionCode} / hull ${unit.maximumHullPoints}|"></option></select><input name="positionX" type="number" min="0" value="100" placeholder="X" required><input name="positionY" type="number" min="0" value="100" placeholder="Y" required><button class="button" type="submit">Deploy unit</button></form><button class="button" id="advance-phase" th:if="${enginePhase == 'deployment'}" th:attr="data-session-id=${battleSession.sessionId}" type="button">Advance to movement</button><form class="inline-form" id="move-form" th:if="${enginePhase == 'movement'}" th:attr="data-session-id=${battleSession.sessionId}"><select name="actorPlayerId" required><option th:each="player : ${players}" th:value="${player.sessionPlayerId}" th:text="${player.displayName}"></option></select><input name="unitId" type="number" min="1" value="1" placeholder="Unit id" required><input name="positionX" type="number" min="0" value="150" placeholder="X" required><input name="positionY" type="number" min="0" value="100" placeholder="Y" required><input name="facing" type="number" value="0" placeholder="Facing" required><button class="button" type="submit">Move unit</button></form><form class="inline-form" id="attack-form" th:if="${enginePhase == 'movement'}" th:attr="data-session-id=${battleSession.sessionId}"><select name="actorPlayerId" required><option th:each="player : ${players}" th:value="${player.sessionPlayerId}" th:text="${player.displayName}"></option></select><select name="unitId" required><option value="">Attacker</option><option th:each="unit : ${engineState.units}" th:if="${unit.status == 'ready' and unit.hullPoints > 0}" th:value="${unit.unitId}" th:text="|${unit.unitId} / ${unit.unitCode}|"></option></select><select name="targetUnitId" required><option value="">Target</option><option th:each="unit : ${engineState.units}" th:if="${unit.hullPoints > 0}" th:value="${unit.unitId}" th:text="|${unit.unitId} / ${unit.unitCode} / hull ${unit.hullPoints}|"></option></select><button class="button" type="submit">Attack</button></form></div></details>
         </section>
-        <section class="data-panel">
-            <div class="section-heading compact"><div><p class="eyebrow">BATTLEFIELD</p><h2>Unit state</h2></div><span class="count" th:text="${units.size()}"></span></div>
-            <p class="muted" th:if="${units.isEmpty()}">Units will appear here when fleet construction is connected to the runtime.</p>
-            <div class="data-list" th:if="${!units.isEmpty()}"><article class="data-item" th:each="unit : ${units}"><div><h3 th:text="${unit.unitName}"></h3><p th:text="${unit.status}"></p></div><code th:text="|${unit.positionX}, ${unit.positionY}|"></code></article></div>
-        </section>
+
+        <aside class="tactical-sidebar tactical-right">
+             <section class="tactical-card selected-unit-card"><div class="tactical-card-heading"><p class="tactical-kicker">SELECTED UNIT</p><span class="player-badge" id="selected-unit-badge">PLAYER</span></div><div id="selected-unit-art" class="selected-unit-art"></div><h2 id="selected-unit-name">SELECT A UNIT</h2><p class="muted" id="selected-unit-owner">Click a unit on the battlefield.</p><div class="selected-resources" id="selected-unit-resources"></div><section class="inspector-section"><h3>MOVEMENT</h3><div class="inspector-stats"><span>MAX SPEED</span><strong id="selected-max-speed">-</strong><span>MIN SPEED</span><strong id="selected-min-speed">1</strong><span>TURN RATE</span><strong id="selected-turn-rate">-</strong></div></section><section class="inspector-section"><h3>CAPABILITIES</h3><div class="pip-stats" id="selected-pip-stats"></div></section><section class="inspector-section firing-arc-inspector"><h3>FIRING ARCS</h3><div class="inspector-arc-diagram"><svg viewBox="0 0 120 120" aria-label="Firing arc diagram"><circle cx="60" cy="60" r="46"></circle><path d="M60 60 60 12 A48 48 0 0 1 108 60 Z"></path><path d="M60 60 108 60"></path><path d="M60 60 60 108"></path><path d="M60 60 12 60"></path><path d="M60 60 60 12"></path><path class="arc-ship" d="M60 26 68 60 60 94 52 60 Z"></path></svg><div><span><i class="arc-key front"></i>Front</span><span><i class="arc-key side"></i>Left / Right</span><span><i class="arc-key rear"></i>Rear</span></div></div></section><div class="selected-actions"><button class="tactical-button" id="set-move" type="button" disabled>Set move</button><button class="tactical-button" id="set-attack" type="button" disabled>Set attack</button><button class="tactical-button" id="end-activation" type="button" disabled>End activation</button><button class="tactical-button inspector-details" id="view-details" type="button">View details</button></div><p class="form-message" id="interaction-message" aria-live="polite">Select a ready unit to begin.</p></section>
+            <details class="engine-status tactical-engine-status" id="engine-status" th:attr="data-session-id=${battleSession.sessionId}"><summary><span class="engine-status-dot"></span><span>ENGINE STATUS</span><strong id="engine-status-label" th:text="${battleSession.status}"></strong><span class="engine-status-toggle">VIEW</span></summary><div class="engine-status-body"><div class="engine-status-grid"><div><span>PHASE</span><strong id="engine-status-phase" th:text="${engineState != null ? engineState.phaseCode : 'not started'}"></strong></div><div><span>ACTIVE PLAYER</span><strong id="engine-status-player" th:text="${engineState != null and engineState.activePlayerId != null ? engineState.activePlayerId : '-'}"></strong></div><div><span>STATE VERSION</span><strong id="engine-status-version" th:text="${engineState != null ? engineState.stateVersion : 0}"></strong></div><div><span>LEGAL ACTIONS</span><strong id="engine-status-actions">-</strong></div><div><span>EVENTS</span><strong id="engine-status-events" th:text="${events.size()}"></strong></div><div><span>LAST CHECK</span><strong id="engine-status-refresh">Not checked</strong></div></div><p class="engine-status-message" id="engine-status-message">Checking the current engine state...</p></div></details>
+        </aside>
     </div>
-    <div class="two-column">
-        <section class="data-panel">
-            <div class="section-heading compact"><div><p class="eyebrow">FLEETS</p><h2>Army lists</h2></div><span class="count" th:text="${fleets.size()}"></span></div>
-            <div class="data-list" th:if="${!fleets.isEmpty()}"><article class="data-item" th:each="fleet : ${fleets}"><div><span class="card-kicker" th:text="${fleet.playerName}"></span><h3 th:text="${fleet.fleetName}"></h3><p th:text="${fleet.fleetFormatName != null ? fleet.fleetFormatName : 'No format selected'}"></p></div><code th:text="|${fleet.unitCount} units / ${fleet.pointsTotal != null ? fleet.pointsTotal : '-'} points|"></code></article></div>
-            <p class="muted" th:if="${fleets.isEmpty()}">Fleet construction will add army lists here.</p>
-        </section>
-        <section class="data-panel">
-            <div class="section-heading compact"><div><p class="eyebrow">BOARDS</p><h2>Battlefield</h2></div><span class="count" th:text="${boards.size()}"></span></div>
-            <div class="data-list" th:if="${!boards.isEmpty()}"><article class="data-item" th:each="board : ${boards}"><div><h3 th:text="${board.boardName}"></h3><p th:text="${board.role}"></p></div><code th:text="|${board.width} x ${board.height}|"></code></article></div>
-            <p class="muted" th:if="${boards.isEmpty()}">Choose a board to establish the battlefield.</p>
-        </section>
-    </div>
-    <section class="data-panel runtime-panel">
-        <div class="section-heading compact"><div><p class="eyebrow">TURN LOG</p><h2>Timeline</h2></div><span class="count" th:text="|${turns.size()} turns / ${events.size()} events|"></span></div>
-        <div class="data-list" th:if="${!turns.isEmpty()}"><article class="data-item" th:each="turn : ${turns}"><div><span class="card-kicker" th:text="|SEQUENCE ${turn.sequence}|"></span><h3 th:text="|Round ${turn.roundNumber} / ${turn.phaseName != null ? turn.phaseName : 'Unassigned phase'}|"></h3></div><code th:text="${turn.endedAt == null ? 'active' : 'ended'}"></code></article></div>
-        <p class="muted" th:if="${turns.isEmpty()}">Turn records will appear when the phase engine starts.</p>
-    </section>
-    <section class="data-panel runtime-panel"><p class="eyebrow">NEXT RUNTIME STEP</p><h2>Turn engine</h2><p class="lede">The session and player state are now persistent. Next, actions will create turns and append events here so the match can be replayed.</p></section>
 </main>
-<footer th:replace="~{fragments :: footer}"></footer>
-<script>
-    const playerForm = document.querySelector('#player-form');
+ <script th:inline="javascript">
+     const unitProfiles = /*[[${engineDefinition != null ? engineDefinition.unitDefinitions : {}}]]*/ [];
+     const unitProfileByCode = new Map(unitProfiles.map(profile => [String(profile.code), profile]));
+      const unitProfile = unit => unitProfileByCode.get(String(unit.unitCode));
+      const phaseLabel = phase => ({ deployment: 'Deployment', command: 'Command', ship: 'Movement', squadron: 'Squadron', status: 'Status', victory: 'Victory' }[phase] || phase || 'Setup');
+      const unitColour = (unit, state) => {
+          const playerIndex = state?.players?.findIndex(player => player.playerId === unit.playerId) ?? 0;
+          return playerIndex === 0 ? '#53d9ff' : '#ff6670';
+      };
+      const unitArtwork = (unit, state) => {
+          const profile = unitProfile(unit);
+          const shape = [...String(unit.unitCode)].reduce((total, character) => total + character.charCodeAt(0), 0) % 6;
+          const isSquadron = (profile?.classification || '').toLowerCase() === 'squadron';
+          const colour = unitColour(unit, state);
+         const squadronShapes = [
+             '<path d="M50 4 62 38 96 50 62 62 50 96 38 62 4 50 38 38Z"/>',
+             '<path d="M46 5h8l7 34 28 11-28 11-7 34h-8l-7-34L11 50l28-11Z"/>',
+             '<path d="M47 7h6l5 30 31 13-31 13-5 30h-6l-5-30-31-13 31-13Z"/><path d="M18 42h64v16H18Z" opacity=".7"/>',
+             '<path d="M31 10h38l9 40-9 40H31l-9-40Z"/><path d="M5 46h90v8H5Z" opacity=".7"/>',
+             '<path d="M50 5c22 0 35 17 35 45S72 95 50 95 15 78 15 50 28 5 50 5Z"/><path d="M12 46h76v8H12Z" opacity=".7"/>',
+             '<path d="M50 4 82 28 72 80 50 96 28 80 18 28Z"/><path d="M31 33h38v34H31Z" opacity=".7"/>'
+         ];
+         const shipShapes = [
+             '<path d="M5 50 88 13 72 50 88 87Z"/><path d="M28 46h62v8H28Z" opacity=".65"/>',
+             '<path d="M6 37 28 20h45l21 17-12 26H18Z"/><path d="M19 46h62v8H19Z" opacity=".65"/>',
+             '<path d="M8 42 25 20h50l17 22v16L75 80H25L8 58Z"/><path d="M25 46h50v8H25Z" opacity=".65"/>',
+             '<path d="M7 44 22 29h68L75 71H22Z"/><path d="M20 46h62v8H20Z" opacity=".65"/>',
+             '<path d="M9 50 28 17h44l19 33-19 33H28Z"/><path d="M24 46h52v8H24Z" opacity=".65"/>',
+             '<path d="M5 35h90v30H5Z"/><path d="M20 24h60v52H20Z" opacity=".55"/>'
+         ];
+         const art = document.createElement('span');
+         art.className = `unit-art ${isSquadron ? 'squadron' : 'ship'}`;
+         art.title = profile?.displayName || unit.unitCode;
+          const facing = Number(unit.facing) || 0;
+          art.innerHTML = `<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" role="img" aria-label="${isSquadron ? 'Squadron' : 'Ship'} silhouette" style="color:${colour};transform:rotate(${-facing}deg)">${(isSquadron ? squadronShapes : shipShapes)[shape]}</svg>`;
+         return art;
+     };
+     const unitLabel = unit => unitProfile(unit)?.displayName || `Variant ${unit.unitCode}`;
+      const renderRoster = state => document.querySelectorAll('.tactical-player').forEach(roster => {
+          const panel = roster.querySelector('[data-roster-panel]');
+          if (!panel) return;
+          const playerId = Number(roster.dataset.playerId);
+          const units = state.units.filter(unit => unit.playerId === playerId);
+          panel.replaceChildren(...(units.length ? units : [null]).map(unit => {
+              if (!unit) {
+                  const empty = document.createElement('p');
+                  empty.className = 'roster-empty';
+                  empty.textContent = 'No units deployed.';
+                  return empty;
+              }
+              const control = document.createElement('button');
+              control.type = 'button';
+              control.className = `roster-unit tactical-roster-unit${unit.status === 'destroyed' ? ' destroyed' : ''}${unit.unitId === selectedUnitId ? ' selected' : ''}`;
+              control.dataset.selectUnit = unit.unitId;
+              control.append(unitArtwork(unit, state));
+              const label = document.createElement('span');
+              label.className = 'unit-label';
+              label.textContent = unitLabel(unit);
+              const hull = document.createElement('small');
+              hull.textContent = `H${unit.hullPoints}`;
+              control.append(label, hull);
+              return control;
+          }));
+      });
+     const svgNamespace = 'http://www.w3.org/2000/svg';
+     const layerState = Object.fromEntries([...document.querySelectorAll('[data-layer-toggle]')]
+         .map(input => [input.dataset.layerToggle, input.checked]));
+      const svgNode = (name, attributes) => {
+          const node = document.createElementNS(svgNamespace, name);
+          Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, value));
+          return node;
+      };
+      const inspectorArcSvg = document.querySelector('.inspector-arc-diagram svg');
+      const inspectorArcGeometry = inspectorArcSvg ? document.createElementNS(svgNamespace, 'g') : null;
+      if (inspectorArcSvg && inspectorArcGeometry) {
+          while (inspectorArcSvg.firstChild) inspectorArcGeometry.append(inspectorArcSvg.firstChild);
+          inspectorArcSvg.append(inspectorArcGeometry);
+      }
+     const boardPoint = (unit, state) => ({ x: unit.positionX, y: state.board.height - unit.positionY });
+     const unitDistance = (first, second) => Math.hypot(second.positionX - first.positionX, second.positionY - first.positionY);
+      const tacticalArc = (unit, state, radius, centerAngle, spread = 45) => {
+          const center = boardPoint(unit, state);
+          const toPoint = angle => {
+              const radians = angle * Math.PI / 180;
+              // Engine positions use mathematical board coordinates; SVG Y grows downward.
+              return { x: center.x + Math.cos(radians) * radius, y: center.y - Math.sin(radians) * radius };
+          };
+          const start = toPoint(centerAngle - spread);
+          const end = toPoint(centerAngle + spread);
+          return `M ${center.x} ${center.y} L ${start.x} ${start.y} A ${radius} ${radius} 0 0 0 ${end.x} ${end.y} Z`;
+      };
+      const replayStateAt = (source, eventCount) => {
+          if (!source) return null;
+          const events = (source.events || []).slice(0, eventCount);
+          const finalUnits = new Map((source.units || []).map(unit => [Number(unit.unitId), unit]));
+          const units = new Map();
+          let status = 'setup';
+          let round = 1;
+          let phaseCode = 'setup';
+          let activePlayerId = null;
+          const initialUnit = (base, payload, playerId) => {
+              const profile = unitProfile(base);
+              const maximumSpeed = Number(profile?.maximumMovementDistance ?? base.currentSpeed ?? 0);
+              return { ...base, playerId: Number(playerId ?? base.playerId),
+                  positionX: Number(payload.positionX), positionY: Number(payload.positionY), facing: 0,
+                  status: 'ready', hullPoints: Number(profile?.maximumHullPoints ?? base.hullPoints),
+                  shieldPoints: Number(profile?.maximumShieldPoints ?? base.shieldPoints),
+                  defenseTokens: Number(profile?.defenseTokenCount ?? base.defenseTokens),
+                  currentSpeed: Math.min(1, maximumSpeed) };
+          };
+          events.forEach(event => {
+              const payload = event.payload || {};
+              const type = event.type;
+              if (type === 'game_started') {
+                  status = 'running';
+                  phaseCode = payload.phase || 'deployment';
+                  round = 1;
+                  activePlayerId = null;
+              } else if (type === 'unit_deployed') {
+                  const unitId = Number(payload.unitId);
+                  const base = finalUnits.get(unitId);
+                  if (base) units.set(unitId, initialUnit(base, payload, event.actorPlayerId));
+              } else if (type === 'unit_moved') {
+                  const unit = units.get(Number(payload.unitId));
+                  if (unit) units.set(Number(payload.unitId), { ...unit,
+                      positionX: Number(payload.positionX), positionY: Number(payload.positionY),
+                      facing: payload.facing == null ? unit.facing : Number(payload.facing),
+                      currentSpeed: payload.speed == null ? unit.currentSpeed : Number(payload.speed),
+                      status: 'activated' });
+              } else if (type === 'unit_attacked' || type === 'game_won') {
+                  const attackerId = Number(payload.unitId);
+                  const targetId = Number(payload.targetUnitId);
+                  const attacker = units.get(attackerId);
+                  const target = units.get(targetId);
+                  if (attacker) units.set(attackerId, { ...attacker, status: 'activated' });
+                  if (target) units.set(targetId, { ...target,
+                      hullPoints: Number(payload.remainingHullPoints ?? target.hullPoints),
+                      shieldPoints: Number(payload.remainingShieldPoints ?? target.shieldPoints),
+                      status: Number(payload.remainingHullPoints ?? target.hullPoints) === 0 ? 'destroyed' : target.status });
+                  if (type === 'game_won') {
+                      status = 'finished';
+                      phaseCode = 'victory';
+                      activePlayerId = null;
+                  }
+              } else if (type === 'phase_changed') {
+                  status = 'running';
+                  phaseCode = payload.to || phaseCode;
+                  activePlayerId = payload.activePlayerId == null ? null : Number(payload.activePlayerId);
+              } else if (type === 'turn_started') {
+                  phaseCode = payload.phase || phaseCode;
+                  activePlayerId = payload.activePlayerId == null ? null : Number(payload.activePlayerId);
+              } else if (type === 'round_started') {
+                  status = 'running';
+                  round = Number(payload.round || round + 1);
+                  phaseCode = payload.phase || 'command';
+                  activePlayerId = null;
+                  units.forEach((unit, unitId) => {
+                      if (unit.hullPoints > 0) units.set(unitId, { ...unit, status: 'ready' });
+                  });
+              } else if (type === 'round_limit_reached') {
+                  status = 'finished';
+                  phaseCode = 'victory';
+                  activePlayerId = null;
+              }
+          });
+          return { ...source, status, round, phaseCode, activePlayerId,
+              stateVersion: eventCount, units: [...units.values()], events };
+      };
+      const replayDescription = state => {
+          if (!state) return 'No recorded events';
+          return `ROUND ${state.round} / ${phaseLabel(state.phaseCode).toUpperCase()}`;
+      };
+      const updateReplayLabel = state => {
+          if (!replaySlider || !state) return;
+          const max = Number(replaySlider.max);
+          const historical = replayIndex < max;
+          replayPositionLabel.textContent = historical ? `EVENT ${replayIndex} / ${max}` : 'FINAL STATE';
+          replayEventLabel.textContent = `${replayDescription(state)} // ${state.events.length} recorded event${state.events.length === 1 ? '' : 's'}`;
+      };
+      const renderReplayEffects = state => {
+          const effects = document.querySelector('#battle-effects');
+          if (!effects || !state?.board) return;
+          effects.replaceChildren();
+          const event = state.events.at(-1);
+          if (!event) return;
+          const payload = event.payload || {};
+          const attacker = state.units.find(unit => unit.unitId === Number(payload.unitId));
+          const target = state.units.find(unit => unit.unitId === Number(payload.targetUnitId));
+          if ((event.type === 'unit_attacked' || event.type === 'game_won') && attacker && target) {
+              const from = effectPoint(attacker, state);
+              const to = effectPoint(target, state);
+              effects.setAttribute('viewBox', `0 0 ${state.board.width} ${state.board.height}`);
+              effects.append(svgNode('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: 'firing-beam' }),
+                  svgNode('circle', { cx: to.x, cy: to.y, r: 20, class: 'impact-pulse' }));
+          }
+      };
+      const renderTacticalOverlay = state => {
+         const map = document.querySelector('#battlefield');
+         const overlay = document.querySelector('#tactical-overlay');
+         if (!map || !overlay || !state?.board) return;
+         map.classList.toggle('layer-units-hidden', !layerState.units);
+         map.querySelector('.battle-grid')?.classList.toggle('layer-hidden', !layerState.grid);
+         overlay.setAttribute('viewBox', `0 0 ${state.board.width} ${state.board.height}`);
+         overlay.replaceChildren();
+          const movement = svgNode('g', { class: 'overlay-movement' });
+          const trajectories = svgNode('g', { class: 'overlay-trajectories' });
+          const ranges = svgNode('g', { class: 'overlay-range' });
+          const arcs = svgNode('g', { class: 'overlay-arcs' });
+          const terrain = svgNode('g', { class: 'overlay-terrain' });
+          const plans = svgNode('g', { class: 'overlay-plans' });
+          const measurementLayer = svgNode('g', { class: 'overlay-measurement' });
+          const trajectoryPoints = new Map();
+          (state.events || []).filter(event => event.type === 'unit_deployed' || event.type === 'unit_moved')
+              .forEach(event => {
+                  const unitId = Number(event.payload?.unitId);
+                  const x = Number(event.payload?.positionX);
+                  const y = Number(event.payload?.positionY);
+                  if (!Number.isFinite(unitId) || !Number.isFinite(x) || !Number.isFinite(y)) return;
+                  const points = trajectoryPoints.get(unitId) || [];
+                  const point = { x, y: state.board.height - y };
+                  const previous = points.at(-1);
+                  if (!previous || previous.x !== point.x || previous.y !== point.y) points.push(point);
+                  trajectoryPoints.set(unitId, points);
+              });
+          if (layerState.trajectories) {
+              state.units.forEach(unit => {
+                  const points = trajectoryPoints.get(unit.unitId) || [];
+                  if (!points.length) return;
+                   const colour = unitColour(unit, state);
+                  if (points.length > 1) {
+                      trajectories.append(svgNode('polyline', {
+                          points: points.map(point => `${point.x},${point.y}`).join(' '),
+                          class: 'unit-trajectory', stroke: colour
+                      }));
+                  }
+                  trajectories.append(svgNode('circle', {
+                      cx: points[0].x, cy: points[0].y, r: 7,
+                      class: 'trajectory-origin', stroke: colour
+                  }));
+              });
+          }
+          if (layerState.terrain) {
+              [
+                  { x: .22, y: .24, rx: .045, ry: .09 },
+                  { x: .48, y: .68, rx: .055, ry: .08 },
+                  { x: .78, y: .32, rx: .05, ry: .07 },
+                  { x: .72, y: .78, rx: .04, ry: .075 }
+              ].forEach(feature => {
+                  terrain.append(svgNode('ellipse', { cx: state.board.width * feature.x, cy: state.board.height * feature.y,
+                      rx: state.board.width * feature.rx, ry: state.board.height * feature.ry, class: 'terrain-feature' }));
+              });
+          }
+          const focus = selectedUnit() || state.units.find(unit => unit.playerId === state.activePlayerId)
+             || state.units.find(unit => unit.hullPoints > 0);
+          const visibleUnits = state.units.filter(unit => unit.hullPoints > 0);
+         visibleUnits.forEach(unit => {
+             const profile = unitProfile(unit);
+              const distancePerSpeed = Number(state.values?.distancePerSpeed || state.values?.maximumMovementDistance || 100);
+              const moveRadius = (Number(unit.currentSpeed) || 0) * distancePerSpeed;
+             const rangeRadius = profile?.maximumAttackRange || 100;
+             const point = boardPoint(unit, state);
+             const colour = unitColour(unit, state);
+             if (layerState.movement && moveRadius > 0) {
+                 movement.append(svgNode('circle', { cx: point.x, cy: point.y, r: moveRadius, class: 'movement-ring', stroke: colour }));
+                 movement.append(svgNode('circle', { cx: point.x, cy: point.y, r: Math.max(18, moveRadius * .52), class: 'turning-ring', stroke: colour }));
+             }
+             if (layerState.range) {
+                 ranges.append(svgNode('circle', { cx: point.x, cy: point.y, r: rangeRadius, class: 'firing-range', stroke: colour }));
+             }
+          if (layerState.arcs && unit === focus) {
+              [{ name: 'front', offset: 0 }, { name: 'left', offset: 90 },
+                  { name: 'rear', offset: 180 }, { name: 'right', offset: -90 }]
+                  .forEach(zone => arcs.append(svgNode('path', {
+                      d: tacticalArc(unit, state, rangeRadius, Number(unit.facing) + zone.offset),
+                      class: `firing-arc firing-arc-${zone.name}`, fill: colour, stroke: colour
+                  })));
+          }
+         });
+         if (layerState.objectives) {
+             [
+                 { x: state.board.width * .2, y: state.board.height * .2, label: 'OBJ A' },
+                 { x: state.board.width * .5, y: state.board.height * .5, label: 'OBJ B' },
+                 { x: state.board.width * .8, y: state.board.height * .8, label: 'OBJ C' }
+             ].forEach(objective => {
+                 const marker = svgNode('g', { class: 'objective-marker' });
+                 marker.append(svgNode('circle', { cx: objective.x, cy: objective.y, r: 25 }));
+                 const label = svgNode('text', { x: objective.x + 34, y: objective.y + 4 });
+                 label.textContent = objective.label;
+                 marker.append(label);
+                 ranges.append(marker);
+             });
+         }
+         if (focus && focus.playerId === state.activePlayerId) {
+             const profile = unitProfile(focus);
+             const target = state.units.filter(unit => unit.playerId !== focus.playerId && unit.hullPoints > 0)
+                 .sort((first, second) => unitDistance(focus, first) - unitDistance(focus, second))[0];
+             if (target && profile) {
+                 const distance = unitDistance(focus, target);
+                  const travel = Math.min((Number(focus.currentSpeed) || 0)
+                      * Number(state.values?.distancePerSpeed || state.values?.maximumMovementDistance || 100), distance);
+                 const ratio = distance ? travel / distance : 0;
+                 const destination = distance <= (profile.maximumAttackRange || 100)
+                     ? target : { positionX: focus.positionX + (target.positionX - focus.positionX) * ratio,
+                         positionY: focus.positionY + (target.positionY - focus.positionY) * ratio };
+                 const start = boardPoint(focus, state);
+                 const end = boardPoint(destination, state);
+                 plans.append(svgNode('line', { x1: start.x, y1: start.y, x2: end.x, y2: end.y, class: 'planned-vector' }));
+                 plans.append(svgNode('circle', { cx: end.x, cy: end.y, r: 18, class: 'planned-destination' }));
+             }
+         }
+          if (measurement) {
+              measurementLayer.append(svgNode('line', { x1: measurement.start.x, y1: measurement.start.y,
+                  x2: measurement.end?.x || measurement.start.x, y2: measurement.end?.y || measurement.start.y, class: 'measurement-line' }));
+              if (measurement.end) {
+                  const distance = Math.hypot(measurement.end.x - measurement.start.x, measurement.end.y - measurement.start.y);
+                  const label = svgNode('text', { x: (measurement.start.x + measurement.end.x) / 2,
+                      y: (measurement.start.y + measurement.end.y) / 2 - 12, class: 'measurement-label' });
+                  label.textContent = `${Math.round(distance)}mm`;
+                  measurementLayer.append(label);
+              }
+          }
+          overlay.append(terrain, trajectories, movement, ranges, arcs, plans, measurementLayer);
+     };
+     const renderCpuActivity = state => {
+         const panel = document.querySelector('#cpu-activity');
+         const label = document.querySelector('#cpu-activity-label');
+         const detail = document.querySelector('#cpu-activity-detail');
+         if (!panel || !label || !detail) return;
+         const active = state.players?.find(player => player.playerId === state.activePlayerId);
+         const cpu = active?.kind === 'cpu';
+         panel.classList.toggle('human-active', !cpu);
+         if (state.status === 'finished') {
+             label.textContent = 'BATTLE COMPLETE';
+             detail.textContent = 'Authoritative result recorded.';
+             return;
+         }
+         if (!cpu) {
+             label.textContent = active ? `HUMAN TURN // ${active.factionCode}` : 'TACTICAL AI STANDBY';
+             detail.textContent = active ? 'Waiting for commander input.' : 'Waiting for the active commander.';
+             return;
+         }
+         const own = state.units.filter(unit => unit.playerId === active.playerId && unit.hullPoints > 0);
+         const ready = own.find(unit => unit.status === 'ready');
+         const target = ready && state.units.filter(unit => unit.playerId !== active.playerId && unit.hullPoints > 0)
+             .sort((first, second) => unitDistance(ready, first) - unitDistance(ready, second))[0];
+         label.textContent = `CPU TURN // ${active.factionCode}`;
+         if (state.phaseCode === 'deployment') detail.textContent = 'Selecting fleet profile and deployment vector...';
+         else if (!ready) detail.textContent = 'Reviewing activation order and passing control...';
+         else if (target && unitDistance(ready, target) <= (unitProfile(ready)?.maximumAttackRange || 100))
+             detail.textContent = `Firing solution // ${unitLabel(ready)} tracking ${unitLabel(target)}...`;
+         else if (target) detail.textContent = `Plotting approach // ${unitLabel(ready)} closing on ${unitLabel(target)}...`;
+         else detail.textContent = 'Scanning the tactical field for a viable approach...';
+     };
+     const effectPoint = (unit, state) => boardPoint(unit, state);
+     const addBattleEffect = (state, event) => {
+         const effects = document.querySelector('#battle-effects');
+         if (!effects || !state?.board) return;
+         effects.setAttribute('viewBox', `0 0 ${state.board.width} ${state.board.height}`);
+         if (event.type === 'unit_moved') {
+             const unit = state.units.find(item => item.unitId === Number(event.payload?.unitId));
+             if (!unit) return;
+             const previous = previousState?.units.find(item => item.unitId === unit.unitId);
+             if (!previous) return;
+             const from = effectPoint(previous, state);
+             const to = effectPoint(unit, state);
+             const trail = svgNode('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: 'movement-trail' });
+             effects.append(trail);
+             window.setTimeout(() => trail.remove(), 1200);
+         }
+         if (event.type === 'unit_attacked' || event.type === 'game_won') {
+             const attacker = state.units.find(item => item.unitId === Number(event.payload?.unitId));
+             const target = state.units.find(item => item.unitId === Number(event.payload?.targetUnitId));
+             if (!attacker || !target) return;
+             const from = effectPoint(attacker, state);
+             const to = effectPoint(target, state);
+             const beam = svgNode('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: 'firing-beam' });
+             const impact = svgNode('circle', { cx: to.x, cy: to.y, r: 20, class: 'impact-pulse' });
+             effects.append(beam, impact);
+             window.setTimeout(() => { beam.remove(); impact.remove(); }, 1000);
+         }
+     };
+     const eventDescription = (event, state) => {
+         const payload = event.payload || {};
+         const unit = state.units.find(item => item.unitId === Number(payload.unitId));
+         const target = state.units.find(item => item.unitId === Number(payload.targetUnitId));
+         const actor = state.players.find(item => item.playerId === event.actorPlayerId);
+         const actorName = actor?.factionCode || 'COMMAND';
+          if (event.type === 'unit_moved') return `${actorName} moved ${unit ? unitLabel(unit) : 'unit'} at speed ${payload.speed || unit?.currentSpeed || 0} to ${Math.round(payload.positionX)}, ${Math.round(payload.positionY)}`;
+         if (event.type === 'unit_attacked') return `${actorName} fired ${unit ? unitLabel(unit) : 'unit'} at ${target ? unitLabel(target) : 'target'} // ${payload.hits || 0} hits / ${payload.damage || 0} hull damage`;
+         if (event.type === 'game_won') return `${actorName} destroyed ${target ? unitLabel(target) : 'the final target'} // VICTORY`;
+         if (event.type === 'turn_started') {
+             const next = state.players.find(item => item.playerId === Number(payload.activePlayerId));
+             return `Turn passed to ${next?.factionCode || 'next commander'} // ${next?.kind === 'cpu' ? 'CPU planning' : 'commander input'}`;
+         }
+         if (event.type === 'phase_changed') return `Battlefield phase changed // ${payload.to || state.phaseCode}`;
+         if (event.type === 'round_limit_reached') return `Round limit reached // ${payload.maximumRounds || state.round} rounds // DRAW`;
+         if (event.type === 'unit_deployed') return `${actorName} deployed a unit at ${Math.round(payload.positionX)}, ${Math.round(payload.positionY)}`;
+         return event.type.replaceAll('_', ' ');
+     };
+     const playerForm = document.querySelector('#player-form');
     const playerMessage = document.querySelector('#player-message');
-    playerForm.addEventListener('submit', async (event) => {
+    playerForm?.addEventListener('submit', async (event) => {
         event.preventDefault();
         const form = new FormData(playerForm);
-        const response = await fetch(`/api/v1/sessions/${playerForm.dataset.sessionId}/players`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seatNumber: Number(form.get('seatNumber')), displayName: form.get('displayName'), playerKind: form.get('playerKind') }) });
+        const response = await fetch(`/api/v1/sessions/${playerForm.dataset.sessionId}/players`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seatNumber: Number(form.get('seatNumber')), displayName: form.get('displayName'), playerKind: form.get('playerKind'), factionId: Number(form.get('factionId')) }) });
         if (response.ok) window.location.reload(); else playerMessage.textContent = 'Could not add player.';
     });
+
+     const engineMessage = document.querySelector('#engine-message');
+     const tacticalLayout = document.querySelector('.tactical-screen-grid');
+     const panelLabels = { left: ['HIDE PLAYERS', 'SHOW PLAYERS'], log: ['HIDE LOG', 'SHOW LOG'], right: ['HIDE INSPECTOR', 'SHOW INSPECTOR'] };
+     const setPanelCollapsed = (panel, collapsed) => {
+         if (panel === 'log') document.querySelector('#message-log')?.classList.toggle('log-collapsed', collapsed);
+         else tacticalLayout?.classList.toggle(`${panel}-collapsed`, collapsed);
+         document.querySelectorAll(`[data-panel-toggle="${panel}"]`).forEach(button => {
+             button.setAttribute('aria-expanded', String(!collapsed));
+             if (button.closest('#message-log')) button.textContent = collapsed ? 'EXPAND' : 'COLLAPSE';
+             else button.textContent = panelLabels[panel][collapsed ? 1 : 0];
+         });
+     };
+     document.querySelectorAll('[data-panel-toggle]').forEach(button => button.addEventListener('click', () => {
+         const panel = button.dataset.panelToggle;
+         const collapsed = panel === 'log'
+             ? document.querySelector('#message-log')?.classList.contains('log-collapsed')
+             : tacticalLayout?.classList.contains(`${panel}-collapsed`);
+         setPanelCollapsed(panel, !collapsed);
+     }));
+     document.querySelector('#focus-battlefield')?.addEventListener('click', event => {
+         const focused = tacticalLayout?.classList.contains('left-collapsed')
+             && tacticalLayout?.classList.contains('right-collapsed')
+             && document.querySelector('#message-log')?.classList.contains('log-collapsed');
+         ['left', 'log', 'right'].forEach(panel => setPanelCollapsed(panel, !focused));
+         event.currentTarget.textContent = focused ? 'FOCUS BATTLEFIELD' : 'RESTORE PANELS';
+     });
+     const stateFor = async (sessionId) => {
+        const response = await fetch(`/api/v1/sessions/${sessionId}/state`);
+        return response.ok ? response.json() : null;
+    };
+    const submitAction = async (form, type, parameters) => {
+        const state = await stateFor(form.dataset.sessionId);
+        if (!state) {
+            engineMessage.textContent = 'The current game state is unavailable.';
+            return;
+        }
+        const response = await fetch(`/api/v1/sessions/${form.dataset.sessionId}/actions`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type, actorPlayerId: Number(parameters.actorPlayerId || 0),
+                expectedStateVersion: state.stateVersion, parameters })
+        });
+        const result = await response.json();
+        if (response.ok && result.accepted !== false) window.location.reload();
+        else engineMessage.textContent = result.message || result.error || result.code || 'The engine rejected the action.';
+    };
+    const startForm = document.querySelector('#start-form');
+    startForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const form = new FormData(startForm);
+        const response = await fetch(`/api/v1/sessions/${startForm.dataset.sessionId}/start`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ boardCode: form.get('boardCode'), width: Number(form.get('width')),
+                 height: Number(form.get('height')), options: { distancePerSpeed: Number(form.get('distancePerSpeed') || form.get('maximumMovementDistance')), maximumRounds: 6 } })
+        });
+        if (response.ok) window.location.reload(); else engineMessage.textContent = (await response.json()).error || 'Could not start session.';
+    });
+    const deployForm = document.querySelector('#deploy-form');
+    deployForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const form = new FormData(deployForm);
+        await submitAction(deployForm, 'deploy_unit', { actorPlayerId: Number(form.get('actorPlayerId')),
+            unitId: Number(form.get('unitId')), unitCode: form.get('unitCode'), positionX: Number(form.get('positionX')),
+            positionY: Number(form.get('positionY')), facing: 0 });
+    });
+    const advancePhase = document.querySelector('#advance-phase');
+    advancePhase?.addEventListener('click', () => submitAction(advancePhase, 'advance_phase', {}));
+    const moveForm = document.querySelector('#move-form');
+    moveForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const form = new FormData(moveForm);
+        await submitAction(moveForm, 'move_unit', { actorPlayerId: Number(form.get('actorPlayerId')),
+            unitId: Number(form.get('unitId')), positionX: Number(form.get('positionX')),
+            positionY: Number(form.get('positionY')), facing: Number(form.get('facing')) });
+    });
+    const attackForm = document.querySelector('#attack-form');
+    attackForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const form = new FormData(attackForm);
+        await submitAction(attackForm, 'attack_unit', { actorPlayerId: Number(form.get('actorPlayerId')),
+            unitId: Number(form.get('unitId')), targetUnitId: Number(form.get('targetUnitId')) });
+    });
+     document.querySelector('#refresh-game')?.addEventListener('click', () => window.location.reload());
+     document.querySelectorAll('[data-layer-toggle]').forEach(input => input.addEventListener('change', () => {
+         layerState[input.dataset.layerToggle] = input.checked;
+         if (currentState) renderTacticalOverlay(currentState);
+     }));
+    const legalActions = document.querySelector('#legal-actions');
+    const liveBoard = document.querySelector('#live-board-panel');
+    const engineStatus = document.querySelector('#engine-status');
+      const sessionId = liveBoard?.dataset.sessionId || engineStatus?.dataset.sessionId;
+      const replaySlider = document.querySelector('#replay-slider');
+      const replayPositionLabel = document.querySelector('#replay-position-label');
+      const replayEventLabel = document.querySelector('#replay-event-label');
+       let currentState = null;
+       let latestState = null;
+       let replayActive = false;
+       let replayIndex = 0;
+      let previousState = null;
+      let selectedUnitId = null;
+      let initializedSelection = false;
+      let measurement = null;
+      let interactionMode = 'select';
+     let panMode = false;
+     let zoomLevel = 1;
+     const setMapZoom = nextZoom => {
+         const viewport = document.querySelector('#battlefield-viewport');
+         const map = document.querySelector('#battlefield');
+         const level = document.querySelector('#zoom-level');
+         if (!viewport || !map) return;
+         const oldWidth = map.getBoundingClientRect().width || 1;
+         const centerX = (viewport.scrollLeft + viewport.clientWidth / 2) / oldWidth;
+         const centerY = (viewport.scrollTop + viewport.clientHeight / 2) / (map.getBoundingClientRect().height || 1);
+         zoomLevel = Math.max(1, Math.min(3, nextZoom));
+         map.style.width = `${zoomLevel * 100}%`;
+         if (level) level.textContent = `${Math.round(zoomLevel * 100)}%`;
+         window.requestAnimationFrame(() => {
+             viewport.scrollLeft = Math.max(0, centerX * map.offsetWidth - viewport.clientWidth / 2);
+             viewport.scrollTop = Math.max(0, centerY * map.offsetHeight - viewport.clientHeight / 2);
+         });
+     };
+     let legalActionTypes = new Set();
+     let legalTargetIds = new Set();
+     const movementCommand = document.createElement('div');
+     movementCommand.className = 'movement-command';
+     movementCommand.hidden = true;
+      movementCommand.innerHTML = '<label>Speed<select id="maneuver-speed"></select></label><span id="maneuver-yaw-controls"></span><button class="tactical-button" id="execute-maneuver" type="button">Execute maneuver</button>';
+      document.querySelector('.selected-actions')?.append(movementCommand);
+      const maneuverSpeed = movementCommand.querySelector('#maneuver-speed');
+      const maneuverYawControls = movementCommand.querySelector('#maneuver-yaw-controls');
+      let maneuverYaw = [];
+     const selectOptions = (select, values, selected) => {
+         if (!select) return;
+         select.replaceChildren(...values.map(value => {
+             const option = document.createElement('option');
+             option.value = value;
+             option.textContent = value;
+             option.selected = value === selected;
+             return option;
+         }));
+     };
+     const renderMovementCommand = unit => {
+         const profile = unit && unitProfile(unit);
+         if (!profile || !currentState || unit.playerId !== currentState.activePlayerId || unit.status !== 'ready') {
+             movementCommand.hidden = true;
+             return;
+         }
+         const profiles = profile.maneuverProfiles || {};
+         const speeds = Object.keys(profiles).map(Number).sort((first, second) => first - second);
+         const selectedSpeed = speeds.includes(Number(unit.currentSpeed)) ? Number(unit.currentSpeed) : speeds[0];
+         selectOptions(maneuverSpeed, speeds, selectedSpeed);
+          const chart = profiles[String(selectedSpeed)] || profiles[selectedSpeed] || { maximumYawClicks: [0] };
+          maneuverYawControls.replaceChildren();
+          maneuverYaw = (chart.maximumYawClicks || [0]).map((maximum, index) => {
+              const label = document.createElement('label');
+              label.textContent = `Yaw ${index + 1}`;
+              const select = document.createElement('select');
+              selectOptions(select, Array.from({ length: Number(maximum) * 2 + 1 }, (_, value) => value - Number(maximum)), 0);
+              label.append(select);
+              maneuverYawControls.append(label);
+              return select;
+          });
+         movementCommand.hidden = !legalActionTypes.has('move_unit');
+     };
+     maneuverSpeed?.addEventListener('change', () => renderMovementCommand(selectedUnit()));
+     document.querySelector('#execute-maneuver')?.addEventListener('click', () => {
+         const unit = selectedUnit();
+         if (!unit || !currentState?.activePlayerId) return;
+         submitAction(liveBoard, 'move_unit', {
+             actorPlayerId: currentState.activePlayerId,
+             unitId: unit.unitId,
+             speed: Number(maneuverSpeed.value),
+             yaw: maneuverYaw.map(select => Number(select.value))
+         });
+     });
+       const renderState = (state) => {
+         if (!state) return;
+         if (!initializedSelection && state.units.length) {
+             const lastAttack = [...state.events].reverse().find(event => event.type === 'unit_attacked' || event.type === 'game_won');
+             selectedUnitId = Number(lastAttack?.payload?.unitId) || state.units.find(unit => unit.playerId === state.activePlayerId && unit.hullPoints > 0)?.unitId
+                 || state.units.find(unit => unit.hullPoints > 0)?.unitId || null;
+             initializedSelection = true;
+         }
+         document.querySelector('#session-status').textContent = phaseLabel(state.phaseCode);
+         document.querySelector('#session-round').textContent = `${state.round} / ${state.values?.maximumRounds || 6}`;
+         document.querySelector('#board-phase').textContent = `PHASE ${phaseLabel(state.phaseCode)}`;
+        document.querySelector('#board-version').textContent = `State ${state.stateVersion}`;
+        const activePlayer = document.querySelector('#board-active-player');
+        if (state.activePlayerId == null) activePlayer?.remove();
+        else if (activePlayer) activePlayer.textContent = `Active player ${state.activePlayerId}`;
+        else {
+            const tag = document.createElement('span');
+            tag.className = 'tag';
+            tag.id = 'board-active-player';
+            tag.textContent = `Active player ${state.activePlayerId}`;
+            document.querySelector('.board-status').appendChild(tag);
+        }
+        const map = document.querySelector('#battlefield');
+        if (map && state.board) {
+            map.style.aspectRatio = `${state.board.width} / ${state.board.height}`;
+            const empty = document.querySelector('#battlefield-empty');
+            if (empty) {
+                empty.hidden = state.units.length > 0;
+                empty.querySelector('span').textContent = state.phaseCode === 'deployment'
+                    ? 'Use the deployment controls below to place the first unit.'
+                    : 'The battlefield has no active units.';
+            }
+             const existingMarkers = new Map();
+             map.querySelectorAll('.battle-unit').forEach(marker => {
+                 const unitId = Number(marker.dataset.unitId);
+                 if (existingMarkers.has(unitId)) marker.remove();
+                 else existingMarkers.set(unitId, marker);
+             });
+             const renderedIds = new Set();
+             state.units.forEach(unit => {
+                 const marker = existingMarkers.get(unit.unitId) || document.createElement('div');
+                 marker.className = `battle-unit player-${unit.playerId % 2}${unit.status === 'destroyed' ? ' destroyed' : ''}${unit.status === 'activated' ? ' activated' : ''}${unit.unitId === selectedUnitId ? ' selected' : ''}`;
+                 marker.dataset.unitId = unit.unitId;
+                 marker.style.left = `${unit.positionX * 100 / state.board.width}%`;
+                 marker.style.bottom = `${unit.positionY * 100 / state.board.height}%`;
+                 const name = document.createElement('span');
+                 name.className = 'unit-label';
+                 name.textContent = unitLabel(unit);
+                 const resources = document.createElement('small');
+                 resources.textContent = `H${unit.hullPoints} / S${unit.shieldPoints}`;
+                  marker.replaceChildren(unitArtwork(unit, state), name, resources);
+                 if (!existingMarkers.has(unit.unitId)) map.appendChild(marker);
+                 renderedIds.add(unit.unitId);
+             });
+             existingMarkers.forEach((marker, unitId) => { if (!renderedIds.has(unitId)) marker.remove(); });
+             renderRoster(state);
+             renderTacticalOverlay(state);
+             if (replayActive) renderReplayEffects(state);
+             if (previousState) state.events.filter(event => event.sequence > (previousState.events.at(-1)?.sequence || 0))
+                 .forEach(event => addBattleEffect(state, event));
+        }
+        const unitList = document.querySelector('#unit-state-list');
+        if (unitList) {
+            unitList.replaceChildren(...state.units.map(unit => {
+                const item = document.createElement('article');
+                item.className = 'data-item';
+                const detail = document.createElement('div');
+                const name = document.createElement('h3');
+                name.textContent = unit.unitCode;
+                const status = document.createElement('p');
+                status.textContent = `${unit.status} / hull ${unit.hullPoints} / shields ${unit.shieldPoints} / defense ${unit.defenseTokens}`;
+                detail.append(name, status);
+                const position = document.createElement('code');
+                position.textContent = `${unit.positionX}, ${unit.positionY}`;
+                item.append(detail, position);
+                return item;
+            }));
+        }
+        const events = document.querySelector('#live-events');
+        if (events) {
+            events.replaceChildren(...state.events.slice(-8).reverse().map(event => {
+                const item = document.createElement('li');
+                 item.textContent = `[${String(event.sequence).padStart(2, '0')}] ${eventDescription(event, state)}`;
+                return item;
+            }));
+             document.querySelector('#live-event-message').textContent = state.events.length
+                 ? `${state.events.length} event${state.events.length === 1 ? '' : 's'} recorded.`
+                 : 'No events recorded yet.';
+         }
+         renderCpuActivity(state);
+         renderSelectedUnit();
+    };
+    const syncControls = (actions, state) => {
+        const permitted = new Set(actions.map(action => action.type));
+        [{selector: '#deploy-form', type: 'deploy_unit'}, {selector: '#advance-phase', type: 'advance_phase'},
+            {selector: '#move-form', type: 'move_unit'}, {selector: '#attack-form', type: 'attack_unit'}]
+            .forEach(({selector, type}) => {
+            const control = document.querySelector(selector);
+            if (!control) return;
+            const button = control.matches('button') ? control : control.querySelector('button');
+            if (button) button.disabled = !permitted.has(type);
+        });
+        if (state.activePlayerId != null) {
+            document.querySelectorAll('select[name=actorPlayerId]').forEach(select => {
+                const active = String(state.activePlayerId);
+                select.value = active;
+                select.querySelectorAll('option').forEach(option => option.disabled = option.value !== active);
+            });
+            const moveUnit = state.units.find(unit => unit.playerId === state.activePlayerId
+                && unit.status === 'ready' && unit.hullPoints > 0);
+            const moveInput = document.querySelector('#move-form input[name=unitId]');
+            if (moveUnit && moveInput) moveInput.value = moveUnit.unitId;
+            const attackUnit = document.querySelector('#attack-form select[name=unitId]');
+            attackUnit?.querySelectorAll('option').forEach(option => {
+                option.disabled = option.value !== '' && !state.units.some(unit => String(unit.unitId) === option.value
+                    && unit.playerId === state.activePlayerId && unit.status === 'ready' && unit.hullPoints > 0);
+            });
+            const targetIds = new Set(actions.filter(action => action.type === 'attack_unit')
+                .map(action => action.description.match(/Attack unit (\d+)/)?.[1]).filter(Boolean));
+            document.querySelectorAll('#attack-form select[name=targetUnitId] option').forEach(option => {
+                option.disabled = option.value !== '' && !targetIds.has(option.value);
+            });
+        }
+    };
+     const selectedUnit = () => currentState?.units.find(unit => unit.unitId === selectedUnitId);
+     const resourceBar = (label, current, maximum) => {
+         const value = Math.max(0, Number(current) || 0);
+         const maximumValue = Math.max(0, Number(maximum) || 0);
+         const percentage = maximumValue ? Math.min(100, Math.round(value / maximumValue * 100)) : 0;
+         const row = document.createElement('div');
+         row.className = 'resource-bar';
+         const heading = document.createElement('div');
+         heading.className = 'resource-bar-heading';
+         const name = document.createElement('span');
+         name.textContent = label;
+         const amount = document.createElement('strong');
+         amount.textContent = `${value} / ${maximumValue} // ${percentage}%`;
+         heading.append(name, amount);
+         const track = document.createElement('div');
+         track.className = 'resource-bar-track';
+         const fill = document.createElement('span');
+         fill.className = 'resource-bar-fill';
+         fill.style.width = `${percentage}%`;
+         track.append(fill);
+         row.append(heading, track);
+         return row;
+     };
+     const pipRow = (label, value) => {
+         const row = document.createElement('div');
+         row.className = 'pip-row';
+         const name = document.createElement('span');
+         name.textContent = label;
+         const pips = document.createElement('span');
+         pips.className = 'pips';
+         for (let index = 0; index < 5; index += 1) {
+             const pip = document.createElement('i');
+             if (index < Math.min(5, Math.max(0, value))) pip.className = 'filled';
+             pips.append(pip);
+         }
+         const amount = document.createElement('strong');
+         amount.textContent = value;
+         row.append(name, pips, amount);
+         return row;
+     };
+     const renderSelectedUnit = () => {
+          const unit = selectedUnit();
+          inspectorArcGeometry?.setAttribute('transform', `rotate(${90 - (Number(unit?.facing) || 0)} 60 60)`);
+          const name = document.querySelector('#selected-unit-name');
+         const owner = document.querySelector('#selected-unit-owner');
+         const art = document.querySelector('#selected-unit-art');
+         const resources = document.querySelector('#selected-unit-resources');
+          const actions = document.querySelector('.selected-actions');
+          const badge = document.querySelector('#selected-unit-badge');
+          const maxSpeed = document.querySelector('#selected-max-speed');
+          const minSpeed = document.querySelector('#selected-min-speed');
+          const turnRate = document.querySelector('#selected-turn-rate');
+          const pipStats = document.querySelector('#selected-pip-stats');
+         const activePlayer = currentState?.players.find(item => item.playerId === currentState.activePlayerId);
+         const cpuTurn = activePlayer?.kind === 'cpu';
+         if (!unit) {
+              art.replaceChildren();
+              name.textContent = 'Select a unit';
+             owner.textContent = cpuTurn ? 'CPU controls the active fleet automatically.' : 'Click a unit on the battlefield.';
+              resources.textContent = '';
+               maxSpeed.textContent = '-';
+               minSpeed.textContent = '-';
+               turnRate.textContent = '-';
+               renderMovementCommand(null);
+              pipStats.replaceChildren();
+             actions.hidden = cpuTurn;
+             badge.textContent = cpuTurn ? 'AI' : 'PLAYER';
+             return;
+         }
+         const player = currentState.players.find(item => item.playerId === unit.playerId);
+         const profile = unitProfile(unit);
+         const cpuControlled = player?.kind === 'cpu' || cpuTurn;
+          art.replaceChildren(unitArtwork(unit, currentState));
+         name.textContent = unitLabel(unit);
+         owner.textContent = `${player?.factionCode || unitProfile(unit)?.factionCode || 'Unknown faction'} / ${unit.status}`;
+         badge.textContent = cpuControlled ? 'AI' : 'PLAYER';
+         actions.hidden = cpuControlled;
+          resources.replaceChildren(
+              resourceBar('HULL', unit.hullPoints, profile?.maximumHullPoints),
+              resourceBar('SHIELDS', unit.shieldPoints, profile?.maximumShieldPoints),
+              resourceBar('DEFENSE', unit.defenseTokens, profile?.defenseTokenCount)
+          );
+           maxSpeed.textContent = profile?.maximumMovementDistance ?? '-';
+           minSpeed.textContent = unit.currentSpeed ?? '-';
+           const maneuver = profile?.maneuverProfiles?.[String(unit.currentSpeed)];
+           turnRate.textContent = maneuver?.maximumYawClicks?.join(' / ') || '-';
+          pipStats.replaceChildren(
+              pipRow('COMMAND', profile?.attackDice || 1),
+              pipRow('SQUADRON', profile?.classification?.toLowerCase() === 'squadron' ? 4 : 2),
+              pipRow('ENGINEERING', Math.min(5, profile?.maximumShieldPoints || 1))
+          );
+           if (cpuControlled) document.querySelector('#interaction-message').textContent = 'CPU controls this unit automatically.';
+           renderMovementCommand(unit);
+     };
+    const syncSelectedActions = () => {
+        const unit = selectedUnit();
+        const active = unit && currentState?.activePlayerId === unit.playerId
+            && unit.status === 'ready' && unit.hullPoints > 0;
+        document.querySelector('#set-move').disabled = !active || !legalActionTypes.has('move_unit');
+        document.querySelector('#set-attack').disabled = !active || !legalTargetIds.size
+            || !legalActionTypes.has('attack_unit');
+        document.querySelector('#end-activation').disabled = !currentState?.activePlayerId
+            || !legalActionTypes.has('end_turn');
+    };
+    const renderLegalActions = (actions, state) => {
+        if (!legalActions) return;
+        legalActionTypes = new Set(actions.map(action => action.type));
+        legalTargetIds = new Set(actions.filter(action => action.type === 'attack_unit')
+            .map(action => action.description.match(/Attack unit (\d+)/)?.[1])
+            .filter(Boolean).map(Number));
+        legalActions.replaceChildren(...actions.map(action => {
+            const item = document.createElement('li');
+            item.textContent = `${action.type} / ${action.description}`;
+            return item;
+        }));
+        document.querySelector('#legal-actions-message').textContent = actions.length
+            ? `${actions.length} action${actions.length === 1 ? '' : 's'} available to the active player.`
+            : 'No actions are currently available.';
+        syncSelectedActions();
+        syncControls(actions, state);
+    };
+    const updateEngineStatus = (state, actions = []) => {
+        if (!engineStatus) return;
+        const label = document.querySelector('#engine-status-label');
+        const phase = document.querySelector('#engine-status-phase');
+        const player = document.querySelector('#engine-status-player');
+        const version = document.querySelector('#engine-status-version');
+        const actionCount = document.querySelector('#engine-status-actions');
+        const events = document.querySelector('#engine-status-events');
+        const refresh = document.querySelector('#engine-status-refresh');
+        const message = document.querySelector('#engine-status-message');
+        if (!state) {
+            message.textContent = 'The battle state is not available yet. The session is still in setup.';
+            refresh.textContent = new Date().toLocaleTimeString();
+            return;
+        }
+        label.textContent = state.status;
+         phase.textContent = phaseLabel(state.phaseCode);
+        player.textContent = state.activePlayerId ?? '-';
+        version.textContent = state.stateVersion;
+        actionCount.textContent = actions.length;
+        events.textContent = state.events?.length ?? 0;
+        refresh.textContent = new Date().toLocaleTimeString();
+        const cpuOnly = state.players?.length > 0 && state.players.every(item => item.kind === 'cpu');
+        if (state.status === 'running' && cpuOnly && actions.length > 0) {
+            message.textContent = 'CPU runner is choosing actions automatically.';
+        } else if (state.status === 'running' && actions.length > 0) {
+            message.textContent = 'Engine is running and waiting for the active player.';
+        } else if (state.status === 'finished') {
+            message.textContent = 'Battle complete.';
+        } else {
+            message.textContent = 'Engine is running with no legal actions currently available.';
+        }
+    };
+    const refreshLiveView = async () => {
+        if (!sessionId) return;
+        try {
+            const stateResponse = await fetch(`/api/v1/sessions/${sessionId}/state`, { cache: 'no-store' });
+            if (!stateResponse.ok) {
+                updateEngineStatus(null);
+                return;
+            }
+             previousState = latestState;
+             latestState = await stateResponse.json();
+             if (!replayActive) {
+                 currentState = latestState;
+                 replayIndex = latestState.events?.length || 0;
+                 if (replaySlider) {
+                     replaySlider.max = replayIndex;
+                     replaySlider.value = replayIndex;
+                     replaySlider.disabled = replayIndex === 0;
+                 }
+                 renderState(currentState);
+                 updateReplayLabel(currentState);
+             }
+            const actionsResponse = await fetch(`/api/v1/sessions/${sessionId}/legal-actions`, { cache: 'no-store' });
+            const actions = actionsResponse.ok ? await actionsResponse.json() : [];
+            renderLegalActions(actions, currentState);
+            updateEngineStatus(currentState, actions);
+        } catch (error) {
+            document.querySelector('#engine-status-message').textContent = 'Could not reach the engine status endpoint.';
+        }
+    };
+     replaySlider?.addEventListener('input', () => {
+         if (!latestState) return;
+         replayIndex = Number(replaySlider.value);
+         replayActive = replayIndex < (latestState.events?.length || 0);
+         currentState = replayActive ? replayStateAt(latestState, replayIndex) : latestState;
+         previousState = null;
+         renderState(currentState);
+         updateReplayLabel(currentState);
+     });
+     refreshLiveView();
+      if (sessionId) window.setInterval(refreshLiveView, 1200);
+     document.querySelector('#zoom-out')?.addEventListener('click', () => setMapZoom(zoomLevel - .25));
+     document.querySelector('#zoom-in')?.addEventListener('click', () => setMapZoom(zoomLevel + .25));
+      document.querySelectorAll('[data-tool]').forEach(button => button.addEventListener('click', () => {
+          const tool = button.dataset.tool;
+          if (tool === 'zoom-in') setMapZoom(zoomLevel + .25);
+          if (tool === 'pan') panMode = true;
+          if (tool === 'select' || tool === 'measure') panMode = false;
+          if (tool === 'clear') {
+              selectedUnitId = null;
+              measurement = null;
+              interactionMode = 'select';
+              renderState(currentState);
+          }
+          document.querySelectorAll('[data-tool]').forEach(item => item.classList.toggle('active', item === button));
+      }));
+      const mapViewport = document.querySelector('#battlefield-viewport');
+      let panStart = null;
+      let draggedMap = false;
+      mapViewport?.addEventListener('pointerdown', event => {
+          if (event.button !== 0) return;
+          panStart = { x: event.clientX, y: event.clientY, left: mapViewport.scrollLeft, top: mapViewport.scrollTop };
+          draggedMap = panMode;
+          if (draggedMap) {
+              mapViewport.classList.add('panning');
+              mapViewport.setPointerCapture(event.pointerId);
+          }
+      });
+      mapViewport?.addEventListener('pointermove', event => {
+          if (!panStart) return;
+          const distance = Math.hypot(event.clientX - panStart.x, event.clientY - panStart.y);
+          if (!draggedMap && distance < 5) return;
+          if (!draggedMap) {
+              draggedMap = true;
+              mapViewport.classList.add('panning');
+              mapViewport.setPointerCapture(event.pointerId);
+          }
+          mapViewport.scrollLeft = panStart.left - (event.clientX - panStart.x);
+          mapViewport.scrollTop = panStart.top - (event.clientY - panStart.y);
+      });
+      const finishPan = () => {
+          if (draggedMap) mapViewport.dataset.suppressClick = 'true';
+          panStart = null;
+          draggedMap = false;
+          mapViewport.classList.remove('panning');
+      };
+      mapViewport?.addEventListener('pointerup', finishPan);
+      mapViewport?.addEventListener('pointercancel', finishPan);
+     mapViewport?.addEventListener('wheel', event => {
+         if (!event.ctrlKey) return;
+         event.preventDefault();
+         setMapZoom(zoomLevel + (event.deltaY < 0 ? .15 : -.15));
+     }, { passive: false });
+    document.querySelector('.roster-card')?.addEventListener('click', event => {
+        const toggle = event.target.closest('[data-roster-toggle]');
+        if (toggle) {
+            const panel = toggle.closest('.tactical-player')?.querySelector('[data-roster-panel]');
+            const expanded = toggle.getAttribute('aria-expanded') === 'true';
+            toggle.setAttribute('aria-expanded', String(!expanded));
+            if (panel) panel.hidden = expanded;
+            const chevron = toggle.querySelector('.roster-chevron');
+            if (chevron) chevron.textContent = expanded ? '+' : '-';
+            return;
+        }
+        const control = event.target.closest('[data-select-unit]');
+        if (!control || !currentState) return;
+        selectedUnitId = Number(control.dataset.selectUnit);
+        interactionMode = 'select';
+        renderState(currentState);
+        document.querySelector('#interaction-message').textContent = 'Unit selected. Choose an action.';
+        syncSelectedActions();
+    });
+    document.querySelector('#battlefield')?.addEventListener('click', async event => {
+         if (!currentState || !sessionId || panMode) return;
+         if (mapViewport?.dataset.suppressClick === 'true') {
+             delete mapViewport.dataset.suppressClick;
+             return;
+         }
+        if (interactionMode === 'measure') {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            const point = { x: (event.clientX - bounds.left) / bounds.width * currentState.board.width,
+                y: (event.clientY - bounds.top) / bounds.height * currentState.board.height };
+            measurement = measurement?.end ? { start: point } : measurement ? { ...measurement, end: point } : { start: point };
+            renderTacticalOverlay(currentState);
+            document.querySelector('#interaction-message').textContent = measurement.end
+                ? 'Measurement complete. Click to start another measurement.' : 'Measurement started. Click a second point.';
+            return;
+        }
+        const marker = event.target.closest('.battle-unit');
+        const clickedUnit = marker ? currentState.units.find(unit => unit.unitId === Number(marker.dataset.unitId)) : null;
+        if (interactionMode === 'attack' && clickedUnit && selectedUnitId !== clickedUnit.unitId
+                && legalTargetIds.has(clickedUnit.unitId)) {
+            await submitAction(liveBoard, 'attack_unit', { actorPlayerId: currentState.activePlayerId,
+                unitId: selectedUnitId, targetUnitId: clickedUnit.unitId });
+            return;
+        }
+        if (clickedUnit) {
+            selectedUnitId = clickedUnit.unitId;
+            interactionMode = 'select';
+            renderState(currentState);
+            syncSelectedActions();
+            return;
+        }
+     });
+     document.querySelector('#set-move')?.addEventListener('click', () => {
+         interactionMode = 'maneuver';
+         movementCommand.hidden = false;
+         document.querySelector('#interaction-message').textContent = 'Choose speed and yaw, then execute the maneuver.';
+     });
+    document.querySelector('#set-attack')?.addEventListener('click', () => {
+        interactionMode = 'attack';
+        document.querySelector('#interaction-message').textContent = 'Attack mode: click a highlighted hostile unit.';
+    });
+    document.querySelector('#end-activation')?.addEventListener('click', () =>
+        submitAction(liveBoard, 'end_turn', { actorPlayerId: currentState.activePlayerId }));
 </script>
 </body>
 </html>

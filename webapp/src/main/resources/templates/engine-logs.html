@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>METIS / Engine Logs</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main class="shell engine-logs-page">
+    <section class="intro engine-logs-intro">
+        <p class="eyebrow">ADMIN / LIVE ENGINE TELEMETRY</p>
+        <h1>See what the<br><em>server</em> is doing.</h1>
+        <p class="lede">Select a battle session to stream authoritative actions, CPU decisions, validation failures, and engine context as they happen.</p>
+    </section>
+
+    <section class="engine-log-console">
+        <div class="engine-log-toolbar">
+            <label for="engine-log-session">Session
+                <select id="engine-log-session">
+                    <option value="">Choose a session</option>
+                    <option th:each="sessionRow : ${sessions}"
+                            th:value="${sessionRow.sessionId}"
+                            th:text="|${sessionRow.sessionId} / ${sessionRow.sessionName} / ${sessionRow.status}|"
+                            th:selected="${sessionRow.status == 'running'}"></option>
+                </select>
+            </label>
+            <div class="engine-log-connection"><i id="engine-log-pulse"></i><span id="engine-log-status">Waiting for a session</span></div>
+        </div>
+        <div class="engine-log-summary">
+            <span><b id="engine-log-count">0</b> entries</span>
+            <span id="engine-log-session-label">No session selected</span>
+        </div>
+        <div id="engine-log-stream" class="engine-log-stream" role="log" aria-live="polite">
+            <div class="engine-log-empty">Select a session to begin live telemetry.</div>
+        </div>
+    </section>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+<script>
+    const sessionSelect = document.querySelector('#engine-log-session');
+    const stream = document.querySelector('#engine-log-stream');
+    const status = document.querySelector('#engine-log-status');
+    const pulse = document.querySelector('#engine-log-pulse');
+    const count = document.querySelector('#engine-log-count');
+    const sessionLabel = document.querySelector('#engine-log-session-label');
+    let selectedSession = null;
+    let cursor = 0;
+    let entryCount = 0;
+    let pollTimer = null;
+
+    const contextText = context => {
+        if (!context) return '';
+        try { return JSON.stringify(JSON.parse(context), null, 2); }
+        catch (_) { return context; }
+    };
+    const appendLogs = logs => {
+        logs.forEach(log => {
+            const row = document.createElement('article');
+            row.className = `engine-log-entry level-${String(log.level || 'INFO').toLowerCase()}`;
+            const heading = document.createElement('div');
+            heading.className = 'engine-log-entry-heading';
+            const time = document.createElement('time');
+            time.textContent = log.createdAt || '';
+            const source = document.createElement('strong');
+            source.textContent = `${log.level} / ${log.source}`;
+            const id = document.createElement('code');
+            id.textContent = `#${log.logId}`;
+            heading.append(time, source, id);
+            const message = document.createElement('p');
+            message.textContent = log.message;
+            row.append(heading, message);
+            const context = contextText(log.context);
+            if (context && context !== '{}') {
+                const details = document.createElement('details');
+                const summary = document.createElement('summary');
+                summary.textContent = 'Inspect context';
+                const pre = document.createElement('pre');
+                pre.textContent = context;
+                details.append(summary, pre);
+                row.append(details);
+            }
+            stream.append(row);
+            cursor = Math.max(cursor, Number(log.logId) || 0);
+            entryCount += 1;
+        });
+        count.textContent = entryCount;
+        if (logs.length) stream.scrollTop = stream.scrollHeight;
+    };
+    const poll = async () => {
+        if (!selectedSession) return;
+        try {
+            const response = await fetch(`/admin/engine-logs/sessions/${selectedSession}?afterLogId=${cursor}`);
+            if (!response.ok) throw new Error('log stream unavailable');
+            appendLogs(await response.json());
+            status.textContent = 'LIVE / polling every 1.5s';
+            pulse.classList.add('connected');
+        } catch (error) {
+            status.textContent = 'STREAM ERROR / retrying';
+            pulse.classList.remove('connected');
+        }
+    };
+    const selectSession = () => {
+        if (pollTimer) window.clearInterval(pollTimer);
+        selectedSession = sessionSelect.value || null;
+        cursor = 0;
+        entryCount = 0;
+        count.textContent = '0';
+        stream.replaceChildren();
+        const option = sessionSelect.options[sessionSelect.selectedIndex];
+        sessionLabel.textContent = selectedSession ? option.textContent : 'No session selected';
+        status.textContent = selectedSession ? 'Connecting...' : 'Waiting for a session';
+        pulse.classList.remove('connected');
+        if (selectedSession) {
+            poll();
+            pollTimer = window.setInterval(poll, 1500);
+        } else {
+            const empty = document.createElement('div');
+            empty.className = 'engine-log-empty';
+            empty.textContent = 'Select a session to begin live telemetry.';
+            stream.append(empty);
+        }
+    };
+    sessionSelect.addEventListener('change', selectSession);
+    if (sessionSelect.value) selectSession();
+</script>
+</body>
+</html>

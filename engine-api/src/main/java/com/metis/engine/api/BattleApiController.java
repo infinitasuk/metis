@@ -1,6 +1,17 @@
 package com.metis.engine.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.metis.engine.core.Action;
+import com.metis.engine.core.ActionResult;
+import com.metis.engine.core.AuthoritativeGameEngine;
+import com.metis.engine.core.BoardState;
+import com.metis.engine.core.GameDefinition;
+import com.metis.engine.core.GameSetup;
+import com.metis.engine.core.GameState;
+import com.metis.engine.core.LegalAction;
+import com.metis.engine.core.Player;
 import com.metis.engine.api.BattleRepository.BattleSession;
 import com.metis.engine.api.BattleRepository.BattleSessionDetail;
 import com.metis.engine.api.BattleRepository.SessionEvent;
@@ -24,6 +35,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URI;
 import java.math.BigDecimal;
@@ -35,17 +47,23 @@ import java.util.Map;
 public class BattleApiController {
 
     private final BattleRepository battle;
+    private final DefinitionRepository definitions;
+    private final ObjectMapper objectMapper;
+    private final AuthoritativeGameEngine engine;
     private final String engineVersion;
     private final String apiVersion;
     private final int eventSchemaVersion;
     private final String gitSha;
 
-    public BattleApiController(BattleRepository battle,
+    public BattleApiController(BattleRepository battle, DefinitionRepository definitions, ObjectMapper objectMapper,
                                @Value("${metis.engine.version:0.1.0-SNAPSHOT}") String engineVersion,
                                @Value("${metis.api.version:v1}") String apiVersion,
                                @Value("${metis.event.schema-version:1}") int eventSchemaVersion,
                                @Value("${metis.git.sha:unknown}") String gitSha) {
         this.battle = battle;
+        this.definitions = definitions;
+        this.objectMapper = objectMapper;
+        this.engine = new AuthoritativeGameEngine();
         this.engineVersion = engineVersion;
         this.apiVersion = apiVersion;
         this.eventSchemaVersion = eventSchemaVersion;
@@ -58,17 +76,30 @@ public class BattleApiController {
                 "eventSchemaVersion", eventSchemaVersion, "gitSha", gitSha);
     }
 
+    @GetMapping("/definitions/{definitionId}/engine")
+    public GameDefinition engineDefinition(@PathVariable long definitionId) {
+        DefinitionRepository.DefinitionVersion version = definitions.findVersion(definitionId)
+                .orElseThrow(() -> new ApiNotFoundException("Definition " + definitionId + " does not exist"));
+        if (!"published".equals(version.status())) {
+            throw new ApiNotFoundException("Definition " + definitionId + " is not published");
+        }
+        return definitions.findEngineDefinition(definitionId)
+                .orElseThrow(() -> new ApiNotFoundException("Definition " + definitionId + " does not exist"));
+    }
+
     @GetMapping("/sessions")
     public List<BattleSession> sessions(@RequestParam(required = false) Long gameId,
                                         @RequestParam(required = false) String status) {
-        return battle.findSessions(gameId, status);
+        return battle.findSessions(gameId, status).stream()
+                .filter(session -> "public".equals(session.visibility()))
+                .toList();
     }
 
     @PostMapping("/games/{gameId}/sessions")
     public ResponseEntity<BattleSessionDetail> createSession(@PathVariable long gameId,
                                                               @RequestBody CreateSessionRequest request) {
         long sessionId = battle.createSession(gameId, request.name(), request.gameModeId(), request.scenarioId(),
-                request.fleetFormatId(), engineVersion, apiVersion, eventSchemaVersion);
+                request.fleetFormatId(), request.visibility(), engineVersion, apiVersion, eventSchemaVersion);
         return ResponseEntity.created(URI.create("/api/v1/sessions/" + sessionId))
                 .body(getSession(sessionId));
     }
@@ -87,8 +118,108 @@ public class BattleApiController {
         return getSession(sessionId);
     }
 
+    @PostMapping("/sessions/{sessionId}/start")
+    @Transactional
+    public BattleSessionDetail startSession(@PathVariable long sessionId,
+                                            @RequestBody StartSessionRequest request) {
+        BattleSessionDetail session = getSession(sessionId);
+        if (!"setup".equals(session.status())) {
+            throw new ApiConflictException("Session " + sessionId + " is not in setup");
+        }
+        if (request == null || request.boardCode() == null || request.width() == null || request.height() == null) {
+            throw new IllegalArgumentException("boardCode, width and height are required");
+        }
+        GameDefinition definition = definitions
+                .findEngineDefinition(session.gameVersionId())
+                .orElseThrow(() -> new ApiNotFoundException("Definition for session " + sessionId + " does not exist"));
+        List<SessionPlayer> players = battle.findPlayers(sessionId);
+        List<Player> enginePlayers = players.stream()
+                .map(player -> new Player(player.sessionPlayerId(), player.seatNumber(), player.playerKind(),
+                        player.factionName()))
+                .toList();
+        BoardState board = new BoardState(request.boardCode(), request.width().doubleValue(), request.height().doubleValue());
+        GameSetup setup = new GameSetup(enginePlayers.size(),
+                (int) enginePlayers.stream().filter(player -> "cpu".equals(player.kind())).count(),
+                enginePlayers, board, request.options());
+        GameState state = engine.createInitialState(sessionId, definition, setup);
+        state = engine.applyAction(state, new Action("start_game", 0, null)).resultingState();
+        persistState(sessionId, session.stateVersion(), state, state.events().getLast());
+        return getSession(sessionId);
+    }
+
+    @PostMapping("/sessions/{sessionId}/actions")
+    @Transactional
+    public ActionResult submitAction(@PathVariable long sessionId, @RequestBody ActionRequest request) {
+        BattleSessionDetail session = getSession(sessionId);
+        if (session.state() == null || "{}".equals(session.state().trim())) {
+            throw new ApiConflictException("Session " + sessionId + " has not been started");
+        }
+        try {
+            GameState state = objectMapper.readValue(session.state(), GameState.class);
+            appendActionLog(sessionId, request, "INFO", "ACTION_RECEIVED",
+                    "Action submitted to authoritative engine");
+            if (request.expectedStateVersion() == null) {
+                appendActionLog(sessionId, request, "WARN", "ACTION_REJECTED",
+                        "The state version is required when submitting an action");
+                return new ActionResult(false, "STATE_VERSION_REQUIRED",
+                        "The state version is required when submitting an action", null);
+            }
+            if (request.expectedStateVersion() != state.stateVersion()) {
+                appendActionLog(sessionId, request, "WARN", "STALE_STATE",
+                        "The submitted state version does not match the current game state");
+                return new ActionResult(false, "STALE_STATE",
+                        "The submitted state version does not match the current game state", null);
+            }
+            GameDefinition definition = definitions.findEngineDefinition(session.gameVersionId())
+                    .orElseThrow(() -> new ApiNotFoundException("Definition for session " + sessionId + " does not exist"));
+            ActionResult result = engine.applyAction(definition, state,
+                    new Action(request.type(), request.actorPlayerId(), request.parameters()));
+            appendActionLog(sessionId, request, result.accepted() ? "INFO" : "WARN",
+                    result.accepted() ? "ACTION_ACCEPTED" : "ACTION_REJECTED", result.message());
+            if (result.accepted()) {
+                persistState(sessionId, state.stateVersion(), result.resultingState(),
+                        result.resultingState().events().getLast());
+            }
+            return result;
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Stored session state is invalid", exception);
+        }
+    }
+
+    @GetMapping("/sessions/{sessionId}/state")
+    public GameState state(@PathVariable long sessionId) {
+        BattleSessionDetail session = getSession(sessionId);
+        if (session.state() == null || "{}".equals(session.state().trim())) {
+            throw new ApiConflictException("Session " + sessionId + " has not been started");
+        }
+        try {
+            return objectMapper.readValue(session.state(), GameState.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Stored session state is invalid", exception);
+        }
+    }
+
+    @GetMapping("/sessions/{sessionId}/legal-actions")
+    public List<LegalAction> legalActions(@PathVariable long sessionId) {
+        BattleSessionDetail session = getSession(sessionId);
+        GameState state = state(sessionId);
+        GameDefinition definition = definitions.findEngineDefinition(session.gameVersionId())
+                .orElseThrow(() -> new ApiNotFoundException("Definition for session " + sessionId + " does not exist"));
+        return engine.legalActions(definition, state);
+    }
+
+    @GetMapping("/admin/sessions/{sessionId}/engine-logs")
+    public List<BattleRepository.EngineLog> engineLogs(
+            @PathVariable long sessionId,
+            @RequestParam(defaultValue = "0") long afterLogId) {
+        requireSession(sessionId);
+        return battle.findEngineLogs(sessionId, afterLogId);
+    }
+
     @DeleteMapping("/sessions/{sessionId}")
+    @Transactional
     public ResponseEntity<Void> deleteSession(@PathVariable long sessionId) {
+        getSession(sessionId);
         battle.deleteSession(sessionId);
         return ResponseEntity.noContent().build();
     }
@@ -257,8 +388,29 @@ public class BattleApiController {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", exception.getMessage()));
     }
 
+    @ExceptionHandler(ApiConflictException.class)
+    public ResponseEntity<Map<String, String>> conflict(ApiConflictException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", exception.getMessage()));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> invalidRequest(IllegalArgumentException exception) {
+        return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage()));
+    }
+
+    @ExceptionHandler(AuthoritativeGameEngine.InvalidSetupException.class)
+    public ResponseEntity<Map<String, Object>> invalidSetup(AuthoritativeGameEngine.InvalidSetupException exception) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(Map.of("error", exception.getMessage(), "violations", exception.validation().violations()));
+    }
+
     @ExceptionHandler(DataAccessException.class)
     public ResponseEntity<Map<String, String>> dataError(DataAccessException exception) {
+        if (exception.getMostSpecificCause() instanceof java.sql.SQLException sql
+                && "40001".equals(sql.getSQLState())) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "The session changed; reload the current state and retry"));
+        }
         return ResponseEntity.badRequest().body(Map.of("error", exception.getMostSpecificCause().getMessage()));
     }
 
@@ -272,7 +424,45 @@ public class BattleApiController {
         return node == null ? null : node.toString();
     }
 
-    public record CreateSessionRequest(String name, Long gameModeId, Long scenarioId, Long fleetFormatId) {}
+    private void persistState(long sessionId, long expectedStateVersion, GameState state,
+                              com.metis.engine.core.GameEvent event) {
+        try {
+            battle.saveEngineState(sessionId, expectedStateVersion, state.status(), state.round(), null,
+                    objectMapper.writeValueAsString(state), event.type(), event.actorPlayerId(),
+                    objectMapper.writeValueAsString(event.payload()));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Could not serialize engine state", exception);
+        }
+    }
+
+    private void appendActionLog(long sessionId, ActionRequest request, String level,
+                                 String outcome, String message) {
+        try {
+            Map<String, Object> context = new java.util.LinkedHashMap<>();
+            context.put("outcome", outcome);
+            context.put("actionType", request.type());
+            context.put("actorPlayerId", request.actorPlayerId());
+            context.put("expectedStateVersion", request.expectedStateVersion());
+            context.put("parameters", request.parameters());
+            battle.appendEngineLog(sessionId, level, "HTTP", message,
+                    objectMapper.writeValueAsString(context));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Could not serialize engine log", exception);
+        }
+    }
+
+    public record CreateSessionRequest(String name, Long gameModeId, Long scenarioId, Long fleetFormatId,
+                                       String visibility) {
+        public CreateSessionRequest {
+            if (name == null || name.isBlank()) {
+                throw new IllegalArgumentException("A session name is required");
+            }
+            visibility = visibility == null || visibility.isBlank() ? "public" : visibility;
+            if (!"public".equals(visibility) && !"private".equals(visibility)) {
+                throw new IllegalArgumentException("Visibility must be public or private");
+            }
+        }
+    }
 
     public record UpdateSessionRequest(String status, Integer currentRound,
                                        Long currentPhaseId, JsonNode state) {}
@@ -297,6 +487,12 @@ public class BattleApiController {
 
     public record UpdateBoardRequest(String role, JsonNode state) {}
 
+    public record StartSessionRequest(String boardCode, java.math.BigDecimal width,
+                                      java.math.BigDecimal height, Map<String, Object> options) {}
+
+    public record ActionRequest(String type, long actorPlayerId, Long expectedStateVersion,
+                                Map<String, Object> parameters) {}
+
     public record CreateTurnRequest(int roundNumber, Long phaseId, Long activePlayerId) {}
 
     public record UpdateTurnRequest(Boolean ended, JsonNode state) {}
@@ -305,6 +501,12 @@ public class BattleApiController {
 
     private static final class ApiNotFoundException extends RuntimeException {
         private ApiNotFoundException(String message) {
+            super(message);
+        }
+    }
+
+    private static final class ApiConflictException extends RuntimeException {
+        private ApiConflictException(String message) {
             super(message);
         }
     }

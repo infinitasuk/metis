@@ -24,7 +24,8 @@ public class BattleRepository {
                 new BattleSession(
                         rs.getLong("session_id"), rs.getLong("game_id"),
                         rs.getString("game_name"), rs.getString("session_name"),
-                        rs.getString("session_code"), rs.getString("status"),
+                        rs.getString("session_code"), rs.getString("visibility"),
+                        rs.getString("status"),
                         rs.getInt("current_round"), rs.getLong("player_count"),
                         rs.getString("created_at"), rs.getString("updated_at")
                 ), gameId, status);
@@ -36,14 +37,15 @@ public class BattleRepository {
                         rs.getLong("session_id"), rs.getLong("game_id"),
                         rs.getString("game_name"), rs.getObject("game_version_id", Long.class),
                         rs.getString("game_version_code"),
-                        rs.getObject("game_mode_id", Long.class), rs.getObject("scenario_id", Long.class),
-                        rs.getObject("fleet_format_id", Long.class),
-                        rs.getString("session_name"), rs.getString("session_code"),
-                        rs.getString("status"), rs.getInt("current_round"),
-                        rs.getObject("current_phase_id", Long.class),
-                        rs.getString("state_json"), rs.getString("engine_version"),
-                        rs.getString("api_version"), rs.getInt("event_schema_version"),
-                        rs.getString("created_at"), rs.getString("updated_at")
+                         rs.getObject("game_mode_id", Long.class), rs.getObject("scenario_id", Long.class),
+                         rs.getObject("fleet_format_id", Long.class),
+                         rs.getString("session_name"), rs.getString("session_code"),
+                         rs.getString("visibility"),
+                         rs.getString("status"), rs.getInt("current_round"),
+                         rs.getObject("current_phase_id", Long.class),
+                         rs.getString("state_json"), rs.getLong("state_version"), rs.getString("engine_version"),
+                         rs.getString("api_version"), rs.getInt("event_schema_version"),
+                         rs.getString("created_at"), rs.getString("updated_at")
                 ))
                 : Optional.empty(), sessionId);
     }
@@ -90,6 +92,16 @@ public class BattleRepository {
                         rs.getString("event_type"), rs.getObject("actor_player_id", Long.class),
                         rs.getString("payload_json"), rs.getString("created_at")
                 ), sessionId, afterSequence);
+    }
+
+    public List<EngineLog> findEngineLogs(long sessionId, long afterLogId) {
+        return jdbc.query("SELECT * FROM game_instance.fn_session_engine_logs(?, ?)", (rs, rowNum) ->
+                new EngineLog(
+                        rs.getLong("log_id"), rs.getLong("session_id"),
+                        rs.getString("log_level"), rs.getString("log_source"),
+                        rs.getString("message"), rs.getString("context_json"),
+                        rs.getString("created_at")
+                ), sessionId, afterLogId);
     }
 
     public List<FleetSummary> findFleets(long sessionId) {
@@ -147,24 +159,25 @@ public class BattleRepository {
     }
 
     public long createSession(long gameId, String name, Long gameModeId, Long scenarioId,
-                              Long fleetFormatId, String engineVersion, String apiVersion,
+                              Long fleetFormatId, String visibility, String engineVersion, String apiVersion,
                               int eventSchemaVersion) {
         return jdbc.execute((CallableStatementCreator) connection -> {
             CallableStatement statement = connection.prepareCall(
-                    "{call game_instance.sp_session_create(?,?,?,?,?,?,?,?,?)}");
+                    "{call game_instance.sp_session_create(?,?,?,?,?,?,?,?,?,?)}");
             statement.setLong(1, gameId);
             statement.setString(2, name);
             setNullableLong(statement, 3, gameModeId);
             setNullableLong(statement, 4, scenarioId);
             setNullableLong(statement, 5, fleetFormatId);
-            setNullableString(statement, 6, engineVersion);
-            setNullableString(statement, 7, apiVersion);
-            statement.setInt(8, eventSchemaVersion);
-            statement.registerOutParameter(9, Types.BIGINT);
+            statement.setString(6, visibility);
+            setNullableString(statement, 7, engineVersion);
+            setNullableString(statement, 8, apiVersion);
+            statement.setInt(9, eventSchemaVersion);
+            statement.registerOutParameter(10, Types.BIGINT);
             return statement;
         }, (CallableStatementCallback<Long>) statement -> {
             statement.execute();
-            return statement.getLong(9);
+            return statement.getLong(10);
         });
     }
 
@@ -274,6 +287,21 @@ public class BattleRepository {
         });
     }
 
+    public long appendEngineLog(long sessionId, String level, String source,
+                                String message, String contextJson) {
+        return callId("{call game_instance.sp_engine_log_append(?,?,?,?,?,?)}", 6, statement -> {
+            statement.setLong(1, sessionId);
+            statement.setString(2, level);
+            statement.setString(3, source);
+            statement.setString(4, message);
+            if (contextJson == null) {
+                statement.setNull(5, Types.OTHER);
+            } else {
+                statement.setObject(5, contextJson, Types.OTHER);
+            }
+        });
+    }
+
     private long callId(String call, int outIndex, StatementConfigurer configurer) {
         return jdbc.execute((CallableStatementCreator) connection -> {
             CallableStatement statement = connection.prepareCall(call);
@@ -294,6 +322,22 @@ public class BattleRepository {
             setNullableInt(statement, 3, currentRound);
             setNullableLong(statement, 4, currentPhaseId);
             setNullableString(statement, 5, stateJson);
+        });
+    }
+
+    public void saveEngineState(long sessionId, long expectedStateVersion, String status,
+                                int currentRound, Long currentPhaseId, String stateJson,
+                                String eventType, Long actorPlayerId, String payloadJson) {
+        execute("{call game_instance.sp_engine_state_save(?,?,?,?,?,?,?,?,?)}", statement -> {
+            statement.setLong(1, sessionId);
+            statement.setLong(2, expectedStateVersion);
+            statement.setString(3, status);
+            statement.setInt(4, currentRound);
+            setNullableLong(statement, 5, currentPhaseId);
+            statement.setString(6, stateJson);
+            statement.setString(7, eventType);
+            setNullableLong(statement, 8, actorPlayerId);
+            setNullableString(statement, 9, payloadJson);
         });
     }
 
@@ -368,7 +412,7 @@ public class BattleRepository {
     }
 
     public record BattleSession(long sessionId, long gameId, String gameName,
-                                String sessionName, String sessionCode, String status,
+                                String sessionName, String sessionCode, String visibility, String status,
                                 int currentRound, long playerCount,
                                 String createdAt, String updatedAt) {}
 
@@ -376,8 +420,8 @@ public class BattleRepository {
                                       Long gameVersionId, String gameVersionCode,
                                       Long gameModeId, Long scenarioId,
                                       Long fleetFormatId,
-                                      String sessionName, String sessionCode, String status,
-                                      int currentRound, Long currentPhaseId, String state,
+                                       String sessionName, String sessionCode, String visibility, String status,
+                                       int currentRound, Long currentPhaseId, String state, long stateVersion,
                                       String engineVersion, String apiVersion,
                                       int eventSchemaVersion, String createdAt, String updatedAt) {}
 
@@ -392,6 +436,9 @@ public class BattleRepository {
 
     public record SessionEvent(long eventId, long sequence, String type,
                                Long actorPlayerId, String payload, String createdAt) {}
+
+    public record EngineLog(long logId, long sessionId, String level, String source,
+                            String message, String context, String createdAt) {}
 
     public record FleetSummary(long fleetId, long sessionId, long sessionPlayerId,
                                String playerName, Long fleetFormatId, String fleetFormatName,
