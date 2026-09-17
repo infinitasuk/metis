@@ -59,6 +59,13 @@ public class DefinitionRepository {
                 : Optional.empty(), definitionId);
     }
 
+    public List<Faction> findFactions(long definitionId) {
+        return jdbc.query("SELECT faction_id, faction_name FROM game_engine.faction "
+                        + "WHERE game_version_id = ? ORDER BY faction_id",
+                (rs, rowNum) -> new Faction(rs.getLong("faction_id"), rs.getString("faction_name")),
+                definitionId);
+    }
+
     private List<String> parseFactionCodes(String json) {
         try {
             return StreamSupport.stream(objectMapper.readTree(json).spliterator(), false)
@@ -267,6 +274,8 @@ public class DefinitionRepository {
                                     String validationErrors) {}
 
     public record ValidationResult(boolean valid, String errors) {}
+
+    public record Faction(long factionId, String factionName) {}
 
     public record DefinitionAudit(long auditId, String action, String entityType, Long entityId,
                                   String details, String occurredAt) {}

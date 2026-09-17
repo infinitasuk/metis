@@ -50,6 +50,25 @@ Open `http://localhost:8080`.
 The default database settings match `docker/.env`. Override them with `DB_URL`,
 `DB_USER`, `DB_PASSWORD`, or `PORT` when required.
 
+## Load repeatable test games
+
+The test-fixture endpoint creates ten private, started sessions named
+`METIS-TEST-GAME-01` through `METIS-TEST-GAME-10`. Existing fixture sessions are
+reset by default, while unrelated sessions are left untouched:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v1/test-fixtures/games/1" -ContentType "application/json" -Body '{}'
+```
+
+To reuse the existing ten sessions without resetting their state:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v1/test-fixtures/games/1" -ContentType "application/json" -Body '{"resetExisting":false}'
+```
+
+The response contains the stable fixture keys and current session IDs for test
+clients. The numeric game ID is the catalogue game ID, not a session ID.
+
 ## Design documentation
 
 - `METIS_Project_Handover.md` contains the broader project design context.
