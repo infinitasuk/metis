@@ -88,7 +88,11 @@ public class DefinitionRepository {
                              parseAttackArcs(unit.get("batteryArcs")),
                              parseAttackDice(unit.get("antiSquadronDice")),
                              parseIntegerMap(unit.get("shieldZones")),
-                             parseStrings(unit.get("defenseTokenTypes"))))
+                             parseStrings(unit.get("defenseTokenTypes")),
+                             parseIntegerMap(unit.get("defenseTokenCounts")),
+                             unit.path("commandValue").asInt(),
+                             unit.path("engineeringValue").asInt(),
+                             unit.path("squadronValue").asInt()))
                      .toList();
         } catch (Exception exception) {
             throw new IllegalStateException("Engine definition unit data is invalid", exception);

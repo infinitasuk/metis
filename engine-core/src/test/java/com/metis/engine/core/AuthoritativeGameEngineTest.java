@@ -418,6 +418,85 @@ class AuthoritativeGameEngineTest {
     }
 
     @Test
+    void spendsTheSelectedDefenseTokenAndReadiesItAtStatus() {
+        UnitDefinition attacker = new UnitDefinition("attacker", "rebel", 3, 300, 1, 4,
+                2, 0, 0, "Attacker", "Ship", Map.of(), 50,
+                Map.of("front", List.of(new AttackDie("red", 2))), List.of(), Map.of(), List.of(),
+                Map.of(), 3, 4, 2);
+        UnitDefinition target = new UnitDefinition("target", "empire", 3, 300, 1, 4,
+                1, 0, 0, "Target", "Ship", Map.of(), 50,
+                Map.of("front", List.of(new AttackDie("red", 1))), List.of(), Map.of(), List.of(),
+                Map.of("brace", 1, "evade", 1), 2, 3, 1);
+        assertEquals(2, target.commandValue());
+        assertEquals(3, target.engineeringValue());
+        assertEquals(1, target.squadronValue());
+        GameDefinition catalogue = new GameDefinition(1, "armada", "Armada", 4, "armada_1_5",
+                2, 2, 0, 2, List.of("rebel", "empire"), List.of(attacker, target));
+        GameSetup setup = new GameSetup(2, 0, List.of(
+                new Player(10, 1, "human", "rebel"), new Player(11, 2, "human", "empire")),
+                new BoardState("standard", 500, 500), null);
+        GameState state = engine.createInitialState(99, catalogue, setup);
+        state = engine.applyAction(catalogue, state, new Action("start_game", 0, null)).resultingState();
+        state = engine.applyAction(catalogue, state, new Action("deploy_unit", 10, Map.of(
+                "unitId", 100L, "unitCode", "attacker", "positionX", 100, "positionY", 100, "facing", 0))).resultingState();
+        state = engine.applyAction(catalogue, state, new Action("deploy_unit", 11, Map.of(
+                "unitId", 101L, "unitCode", "target", "positionX", 150, "positionY", 100, "facing", 180))).resultingState();
+        state = engine.applyAction(catalogue, state, new Action("advance_phase", 0, null)).resultingState();
+        state = engine.applyAction(catalogue, state, new Action("advance_phase", 0, null)).resultingState();
+
+        ActionResult attack = engine.applyAction(catalogue, state, new Action("attack_unit", 10, Map.of(
+                "unitId", 100L, "targetUnitId", 101L, "defenseTokenType", "brace")));
+        UnitState damaged = attack.resultingState().units().get(1);
+
+        assertTrue(attack.accepted());
+        assertEquals("brace", attack.resultingState().events().getLast().payload().get("defenseTokenType"));
+        assertEquals(0, damaged.readyDefenseTokens().getOrDefault("brace", 0));
+        assertEquals(1, damaged.readyDefenseTokens().get("evade"));
+        assertEquals(1, damaged.exhaustedDefenseTokens().get("brace"));
+        assertEquals(1, damaged.defenseTokens());
+
+        GameState status = new GameState(99, 4, "running", 1, "status", null,
+                attack.resultingState().stateVersion(), attack.resultingState().players(),
+                attack.resultingState().units(), attack.resultingState().board(),
+                attack.resultingState().events(), Map.of("maximumRounds", 6));
+        ActionResult refreshed = engine.applyAction(catalogue, status, new Action("advance_phase", 0, Map.of()));
+        UnitState readied = refreshed.resultingState().units().get(1);
+
+        assertTrue(refreshed.accepted());
+        assertEquals(1, readied.readyDefenseTokens().get("brace"));
+        assertEquals(1, readied.readyDefenseTokens().get("evade"));
+        assertTrue(readied.exhaustedDefenseTokens().isEmpty());
+        assertEquals(2, readied.defenseTokens());
+    }
+
+    @Test
+    void rejectsADefenseTokenThatIsNotReady() {
+        UnitDefinition attacker = new UnitDefinition("attacker", "rebel", 3, 300, 1, 4,
+                1, 0, 0, "Attacker", "Ship", Map.of(), 50,
+                Map.of("front", List.of(new AttackDie("red", 1))), List.of(), Map.of(), List.of(),
+                Map.of(), 2, 3, 1);
+        UnitDefinition target = new UnitDefinition("target", "empire", 3, 300, 1, 4,
+                1, 0, 0, "Target", "Ship", Map.of(), 50,
+                Map.of("front", List.of(new AttackDie("red", 1))), List.of(), Map.of(), List.of(),
+                Map.of("brace", 1), 2, 3, 1);
+        GameState state = new GameState(99, 4, "running", 1, "ship", 10L, 0,
+                List.of(new Player(10, 1, "human", "rebel"), new Player(11, 2, "human", "empire")),
+                List.of(new UnitState(100, 10, "attacker", 100, 100, 0, "ready", 4, 0, 0, 1,
+                                Map.of(), Map.of(), Map.of()),
+                        new UnitState(101, 11, "target", 150, 100, 180, "ready", 4, 0, 0, 1,
+                                Map.of(), Map.of(), Map.of("brace", 1))),
+                new BoardState("standard", 500, 500), List.of(), Map.of());
+        GameDefinition catalogue = new GameDefinition(1, "armada", "Armada", 4, "armada_1_5",
+                2, 2, 0, 2, List.of("rebel", "empire"), List.of(attacker, target));
+
+        ActionResult result = engine.applyAction(catalogue, state, new Action("attack_unit", 10, Map.of(
+                "unitId", 100L, "targetUnitId", 101L, "defenseTokenType", "evade")));
+
+        assertFalse(result.accepted());
+        assertEquals("DEFENSE_TOKEN_NOT_READY", result.code());
+    }
+
+    @Test
     void endsTheMatchWhenTheLastOpposingUnitIsDestroyed() {
         GameDefinition catalogue = new GameDefinition(
                 1, "armada", "Armada", 4, "armada_1_5", 2, 2, 0, 2,

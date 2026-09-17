@@ -208,7 +208,8 @@ public final class AuthoritativeGameEngine implements GameEngine {
                     .map(unit -> unit.hullPoints() > 0
                         ? new UnitState(unit.unitId(), unit.playerId(), unit.unitCode(), unit.positionX(),
                              unit.positionY(), unit.facing(), "ready", unit.hullPoints(), unit.shieldPoints(),
-                             unit.defenseTokens(), unit.currentSpeed(), unit.shieldZones())
+                             readyDefenseTokenCount(unit), unit.currentSpeed(), unit.shieldZones(),
+                             readiedDefenseTokens(unit), Map.of())
                             : unit)
                     .toList();
             String nextStatus = roundLimitReached ? "finished" : "running";
@@ -294,7 +295,9 @@ public final class AuthoritativeGameEngine implements GameEngine {
         int currentSpeed = unitDefinition == null ? 0 : defaultSpeed(unitDefinition);
         UnitState unit = new UnitState(unitId, player.playerId(), unitCode, x, y, facing, "ready",
                 hullPoints, shieldPoints, defenseTokens, currentSpeed,
-                unitDefinition == null ? Map.of() : unitDefinition.shieldZones());
+                unitDefinition == null ? Map.of() : unitDefinition.shieldZones(),
+                unitDefinition == null ? genericDefenseTokens(defenseTokens) : unitDefinition.defenseTokenCounts(),
+                Map.of());
         GameEvent event = event(state, "unit_deployed", action.actorPlayerId(),
                 Map.of("unitId", unitId, "positionX", x, "positionY", y));
         List<UnitState> units = new ArrayList<>(state.units());
@@ -350,7 +353,7 @@ public final class AuthoritativeGameEngine implements GameEngine {
         double facing = doubleParameter(action.parameters(), "facing");
         UnitState moved = new UnitState(unit.unitId(), unit.playerId(), unit.unitCode(), x, y, facing,
                 "activated", unit.hullPoints(), unit.shieldPoints(), unit.defenseTokens(), unit.currentSpeed(),
-                unit.shieldZones());
+                unit.shieldZones(), unit.readyDefenseTokens(), unit.exhaustedDefenseTokens());
         List<UnitState> units = new ArrayList<>(state.units());
         units.set(units.indexOf(unit), moved);
         GameEvent event = event(state, "unit_moved", action.actorPlayerId(),
@@ -400,7 +403,7 @@ public final class AuthoritativeGameEngine implements GameEngine {
         MovementCalculator.Pose pose = MovementCalculator.finalPose(path, facing);
         UnitState moved = new UnitState(unit.unitId(), unit.playerId(), unit.unitCode(), pose.x(), pose.y(),
                 pose.facing(), "activated", unit.hullPoints(), unit.shieldPoints(), unit.defenseTokens(), speed,
-                unit.shieldZones());
+                unit.shieldZones(), unit.readyDefenseTokens(), unit.exhaustedDefenseTokens());
         List<UnitState> units = new ArrayList<>(state.units());
         units.set(units.indexOf(unit), moved);
         GameEvent event = event(state, "unit_moved", action.actorPlayerId(), Map.of(
@@ -475,7 +478,11 @@ public final class AuthoritativeGameEngine implements GameEngine {
         values.put("noDamageAttacks", noDamageAttacks);
         int rolledDamage = hits * (attackPlan.generic() && attackerDefinition != null
                 ? attackerDefinition.attackDamage() : 1);
-        boolean defenseTokenSpent = hits > 0 && target.defenseTokens() > 0;
+        String defenseTokenType = hits > 0 ? selectedDefenseToken(action, target) : null;
+        if (hits > 0 && action.parameters().containsKey("defenseTokenType") && defenseTokenType == null) {
+            return rejected("DEFENSE_TOKEN_NOT_READY", "The selected defense token is not ready");
+        }
+        boolean defenseTokenSpent = defenseTokenType != null;
         int mitigatedDamage = Math.max(0, rolledDamage - (defenseTokenSpent ? 1 : 0));
         String targetZone = targetZone(target, attacker);
         Map<String, Integer> remainingShieldZones = new HashMap<>(target.shieldZones());
@@ -490,14 +497,20 @@ public final class AuthoritativeGameEngine implements GameEngine {
                 ? target.shieldPoints() - shieldDamage
                 : remainingShieldZones.values().stream().mapToInt(Integer::intValue).sum();
         int remainingHull = Math.max(0, target.hullPoints() - hullDamage);
-        int remainingDefenseTokens = target.defenseTokens() - (defenseTokenSpent ? 1 : 0);
+        Map<String, Integer> remainingReadyTokens = defenseTokenSpent
+                ? decrementToken(target.readyDefenseTokens(), defenseTokenType) : target.readyDefenseTokens();
+        Map<String, Integer> remainingExhaustedTokens = defenseTokenSpent
+                ? incrementToken(target.exhaustedDefenseTokens(), defenseTokenType) : target.exhaustedDefenseTokens();
+        int remainingDefenseTokens = remainingReadyTokens.values().stream().mapToInt(Integer::intValue).sum();
         String targetStatus = remainingHull == 0 ? "destroyed" : target.status();
         UnitState damaged = new UnitState(target.unitId(), target.playerId(), target.unitCode(), target.positionX(),
-                 target.positionY(), target.facing(), targetStatus, remainingHull, remainingShields,
-                 remainingDefenseTokens, target.currentSpeed(), remainingShieldZones);
+                  target.positionY(), target.facing(), targetStatus, remainingHull, remainingShields,
+                  remainingDefenseTokens, target.currentSpeed(), remainingShieldZones,
+                  remainingReadyTokens, remainingExhaustedTokens);
         UnitState activated = new UnitState(attacker.unitId(), attacker.playerId(), attacker.unitCode(),
                  attacker.positionX(), attacker.positionY(), attacker.facing(), "activated", attacker.hullPoints(),
-                 attacker.shieldPoints(), attacker.defenseTokens(), attacker.currentSpeed(), attacker.shieldZones());
+                 attacker.shieldPoints(), attacker.defenseTokens(), attacker.currentSpeed(), attacker.shieldZones(),
+                 attacker.readyDefenseTokens(), attacker.exhaustedDefenseTokens());
         List<UnitState> units = new ArrayList<>(state.units());
         units.set(units.indexOf(attacker), activated);
         units.set(units.indexOf(target), damaged);
@@ -515,6 +528,7 @@ public final class AuthoritativeGameEngine implements GameEngine {
         eventPayload.put("damage", hullDamage);
         eventPayload.put("shieldDamage", shieldDamage);
         eventPayload.put("defenseTokenSpent", defenseTokenSpent);
+        if (defenseTokenType != null) eventPayload.put("defenseTokenType", defenseTokenType);
         eventPayload.put("stabilizedRoll", stabilizedRoll);
         eventPayload.put("remainingHullPoints", remainingHull);
         eventPayload.put("remainingShieldPoints", remainingShields);
@@ -577,6 +591,50 @@ public final class AuthoritativeGameEngine implements GameEngine {
     private static int numericOption(Map<String, Object> values, String name, int fallback) {
         Object value = values.get(name);
         return value instanceof Number number && number.intValue() > 0 ? number.intValue() : fallback;
+    }
+
+    private static String selectedDefenseToken(Action action, UnitState target) {
+        if (target.readyDefenseTokens().isEmpty()) return null;
+        Object requested = action.parameters().get("defenseTokenType");
+        if (requested != null) {
+            if (!(requested instanceof String type) || type.isBlank()) return null;
+            return target.readyDefenseTokens().keySet().stream()
+                    .filter(key -> key.equalsIgnoreCase(type.trim()))
+                    .filter(key -> target.readyDefenseTokens().getOrDefault(key, 0) > 0)
+                    .findFirst().orElse(null);
+        }
+        return target.readyDefenseTokens().entrySet().stream()
+                .filter(entry -> entry.getValue() > 0)
+                .sorted(Map.Entry.comparingByKey())
+                .map(Map.Entry::getKey)
+                .findFirst().orElse(null);
+    }
+
+    private static Map<String, Integer> decrementToken(Map<String, Integer> tokens, String type) {
+        Map<String, Integer> result = new HashMap<>(tokens);
+        int remaining = result.getOrDefault(type, 0) - 1;
+        if (remaining > 0) result.put(type, remaining); else result.remove(type);
+        return result;
+    }
+
+    private static Map<String, Integer> incrementToken(Map<String, Integer> tokens, String type) {
+        Map<String, Integer> result = new HashMap<>(tokens);
+        result.merge(type, 1, Integer::sum);
+        return result;
+    }
+
+    private static Map<String, Integer> readiedDefenseTokens(UnitState unit) {
+        Map<String, Integer> result = new HashMap<>(unit.readyDefenseTokens());
+        unit.exhaustedDefenseTokens().forEach((type, count) -> result.merge(type, count, Integer::sum));
+        return result;
+    }
+
+    private static int readyDefenseTokenCount(UnitState unit) {
+        return readiedDefenseTokens(unit).values().stream().mapToInt(Integer::intValue).sum();
+    }
+
+    private static Map<String, Integer> genericDefenseTokens(int count) {
+        return count > 0 ? Map.of("generic", count) : Map.of();
     }
 
     private static ActionResult accepted(GameState state, GameEvent event) {

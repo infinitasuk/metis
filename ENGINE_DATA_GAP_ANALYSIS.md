@@ -50,8 +50,8 @@ and `Squadron Ability`.
 | Squadron attacks | `Anti-Squadron`, `Squadron`, and squadron abilities | Anti-squadron and battery profiles are projected separately for ship/squadron target selection | Partial | Implement squadron abilities and complete target-specific rules |
 | Range | Profile source has attack data | Short/medium/long bands are enforced using color eligibility and mode-coordinate defaults of 100/200/300 | Partial | Load authoritative range scale from mode/rules data |
 | Arc legality | Four arc names in source | Server-side bearing checks now select the available firing arc and reject attacks outside it | Done | Add exact base geometry and boundary-rule tests |
-| Defense tokens | Token names and counts | Count is aggregated; token type/effects are discarded | High | Model token instances/types and per-attack spend/refresh rules |
-| Command values | `Command`, `Engineering`, `Squadron` | Not projected or stored in runtime | High | Add command dials, reveal timing, and command effects |
+| Defense tokens | Token names and counts | Typed counts are projected; runtime tracks ready/exhausted tokens, typed spend, and status refresh; token-specific effects remain absent | Partial | Model token instances and per-token effects such as brace, evade, redirect, and scatter |
+| Command values | `Command`, `Engineering`, `Squadron` | Values are projected into `UnitDefinition` and exposed in the simulator; dials and command effects remain absent | Partial | Add command dials, reveal timing, and command effects |
 | Keywords | Structured keyword values | Stored in catalogue but not runtime | High | Normalize keyword vocabulary and implement effects incrementally |
 | Squadron abilities | Structured ability values and ability objects | Not executable | High | Add ability definitions/effects and timing hooks |
 | Upgrade bars | Slot arrays and upgrade card objects | Not in runtime fleet/unit model | High | Add loadout selections, eligibility, costs, and modifiers |
@@ -86,7 +86,7 @@ reference, and formal navigation-command timing.
 
 1. Reconcile the imported per-ship maneuver charts against the target rules
    reference and pin an approved source/licence.
-2. Complete zone-specific damage, defense-token effects, critical icons, and
+2. Complete zone-specific damage, token-specific defense effects, critical icons, and
    weapon-specific attack rules.
 3. Load selected mode/scenario/fleet format into runtime setup and enforce
    points, limits, objectives, deployment, and phase configuration.

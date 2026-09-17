@@ -522,6 +522,8 @@ html[data-theme="operations"] .game-card, html[data-theme="operations"] .faction
 .resource-bar-fill { display: block; height: 100%; background: #53d9ff; transition: width .3s ease; }
 .resource-bar:nth-child(2) .resource-bar-fill { background: #73d2bf; }
 .resource-bar:nth-child(3) .resource-bar-fill { background: #ffe28a; }
+.defense-token-summary { display: grid; gap: 3px; color: #92a8b7; font-size: .55rem; letter-spacing: .07em; }
+.defense-token-summary > span:first-child { color: #53d9ff; font-size: .59rem; }
 .selected-actions { display: grid; gap: 7px; }
 .selected-actions[hidden] { display: none; }
 .selected-actions .tactical-button { width: 100%; }

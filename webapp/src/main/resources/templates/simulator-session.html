@@ -225,10 +225,12 @@
               const maximumSpeed = Number(profile?.maximumMovementDistance ?? base.currentSpeed ?? 0);
               return { ...base, playerId: Number(playerId ?? base.playerId),
                   positionX: Number(payload.positionX), positionY: Number(payload.positionY), facing: 0,
-                  status: 'ready', hullPoints: Number(profile?.maximumHullPoints ?? base.hullPoints),
-                  shieldPoints: Number(profile?.maximumShieldPoints ?? base.shieldPoints),
-                  defenseTokens: Number(profile?.defenseTokenCount ?? base.defenseTokens),
-                  currentSpeed: Math.min(1, maximumSpeed),
+                   status: 'ready', hullPoints: Number(profile?.maximumHullPoints ?? base.hullPoints),
+                   shieldPoints: Number(profile?.maximumShieldPoints ?? base.shieldPoints),
+                   defenseTokens: Number(profile?.defenseTokenCount ?? base.defenseTokens),
+                   readyDefenseTokens: { ...(profile?.defenseTokenCounts || base.readyDefenseTokens || {}) },
+                   exhaustedDefenseTokens: {},
+                   currentSpeed: Math.min(1, maximumSpeed),
                   shieldZones: { ...(profile?.shieldZones || base.shieldZones || {}) } };
           };
           events.forEach(event => {
@@ -256,16 +258,27 @@
                   const attacker = units.get(attackerId);
                   const target = units.get(targetId);
                   if (attacker) units.set(attackerId, { ...attacker, status: 'activated' });
-                  if (target) {
-                      const shieldZones = { ...(target.shieldZones || {}) };
-                      const zone = payload.targetZone;
+                   if (target) {
+                       const shieldZones = { ...(target.shieldZones || {}) };
+                       const readyDefenseTokens = { ...(target.readyDefenseTokens || {}) };
+                       const exhaustedDefenseTokens = { ...(target.exhaustedDefenseTokens || {}) };
+                       const defenseTokenType = payload.defenseTokenType;
+                       if (payload.defenseTokenSpent && defenseTokenType) {
+                           readyDefenseTokens[defenseTokenType] = Math.max(0, (readyDefenseTokens[defenseTokenType] || 0) - 1);
+                           if (readyDefenseTokens[defenseTokenType] === 0) delete readyDefenseTokens[defenseTokenType];
+                           exhaustedDefenseTokens[defenseTokenType] = (exhaustedDefenseTokens[defenseTokenType] || 0) + 1;
+                       }
+                       const zone = payload.targetZone;
                       if (zone && shieldZones[zone] != null) {
                           shieldZones[zone] = Math.max(0, shieldZones[zone] - Number(payload.shieldDamage || 0));
                       }
-                      units.set(targetId, { ...target,
-                      hullPoints: Number(payload.remainingHullPoints ?? target.hullPoints),
-                      shieldPoints: Number(payload.remainingShieldPoints ?? target.shieldPoints),
-                      shieldZones,
+                       units.set(targetId, { ...target,
+                       hullPoints: Number(payload.remainingHullPoints ?? target.hullPoints),
+                       shieldPoints: Number(payload.remainingShieldPoints ?? target.shieldPoints),
+                       defenseTokens: Object.values(readyDefenseTokens).reduce((sum, count) => sum + Number(count), 0),
+                       readyDefenseTokens,
+                       exhaustedDefenseTokens,
+                       shieldZones,
                       status: Number(payload.remainingHullPoints ?? target.hullPoints) === 0 ? 'destroyed' : target.status });
                   }
                   if (type === 'game_won') {
@@ -285,9 +298,17 @@
                   round = Number(payload.round || round + 1);
                   phaseCode = payload.phase || 'command';
                   activePlayerId = null;
-                  units.forEach((unit, unitId) => {
-                      if (unit.hullPoints > 0) units.set(unitId, { ...unit, status: 'ready' });
-                  });
+                   units.forEach((unit, unitId) => {
+                       if (unit.hullPoints > 0) {
+                           const readyDefenseTokens = { ...(unit.readyDefenseTokens || {}) };
+                           Object.entries(unit.exhaustedDefenseTokens || {}).forEach(([type, count]) => {
+                               readyDefenseTokens[type] = (readyDefenseTokens[type] || 0) + Number(count);
+                           });
+                           units.set(unitId, { ...unit, status: 'ready',
+                               defenseTokens: Object.values(readyDefenseTokens).reduce((sum, count) => sum + Number(count), 0),
+                               readyDefenseTokens, exhaustedDefenseTokens: {} });
+                       }
+                   });
               } else if (type === 'round_limit_reached') {
                   status = 'finished';
                   phaseCode = 'victory';
@@ -838,7 +859,7 @@
         }
     };
      const selectedUnit = () => currentState?.units.find(unit => unit.unitId === selectedUnitId);
-     const resourceBar = (label, current, maximum) => {
+      const resourceBar = (label, current, maximum) => {
          const value = Math.max(0, Number(current) || 0);
          const maximumValue = Math.max(0, Number(maximum) || 0);
          const percentage = maximumValue ? Math.min(100, Math.round(value / maximumValue * 100)) : 0;
@@ -858,9 +879,32 @@
          fill.style.width = `${percentage}%`;
          track.append(fill);
          row.append(heading, track);
-         return row;
-     };
-     const pipRow = (label, value) => {
+          return row;
+      };
+      const defenseTokenSummary = (unit, profile) => {
+          const row = document.createElement('div');
+          row.className = 'defense-token-summary';
+          const heading = document.createElement('span');
+          heading.textContent = 'DEFENSE TOKENS';
+          row.append(heading);
+          const configured = profile?.defenseTokenCounts || {};
+          const types = new Set([...Object.keys(configured), ...Object.keys(unit.readyDefenseTokens || {}),
+              ...Object.keys(unit.exhaustedDefenseTokens || {})]);
+          types.forEach(type => {
+              const ready = Number(unit.readyDefenseTokens?.[type] || 0);
+              const exhausted = Number(unit.exhaustedDefenseTokens?.[type] || 0);
+              const token = document.createElement('span');
+              token.textContent = `${type.toUpperCase()} ${ready} READY / ${exhausted} EXHAUSTED`;
+              row.append(token);
+          });
+          if (!types.size) {
+              const token = document.createElement('span');
+              token.textContent = 'NONE';
+              row.append(token);
+          }
+          return row;
+      };
+      const pipRow = (label, value) => {
          const row = document.createElement('div');
          row.className = 'pip-row';
          const name = document.createElement('span');
@@ -920,18 +964,19 @@
               resourceBar(`SHIELD ${zone.toUpperCase()}`, currentShieldZones[zone] ?? 0, shieldZones[zone]));
           resources.replaceChildren(
               resourceBar('HULL', unit.hullPoints, profile?.maximumHullPoints),
-              ...(shieldRows.length ? shieldRows : [resourceBar('SHIELDS', unit.shieldPoints, profile?.maximumShieldPoints)]),
-              resourceBar('DEFENSE', unit.defenseTokens, profile?.defenseTokenCount)
-          );
+               ...(shieldRows.length ? shieldRows : [resourceBar('SHIELDS', unit.shieldPoints, profile?.maximumShieldPoints)]),
+               resourceBar('DEFENSE READY', unit.defenseTokens, profile?.defenseTokenCount),
+               defenseTokenSummary(unit, profile)
+           );
            maxSpeed.textContent = profile?.maximumMovementDistance ?? '-';
            minSpeed.textContent = unit.currentSpeed ?? '-';
            const maneuver = profile?.maneuverProfiles?.[String(unit.currentSpeed)];
            turnRate.textContent = maneuver?.maximumYawClicks?.join(' / ') || '-';
           pipStats.replaceChildren(
-              pipRow('COMMAND', profile?.attackDice || 1),
-              pipRow('SQUADRON', profile?.classification?.toLowerCase() === 'squadron' ? 4 : 2),
-              pipRow('ENGINEERING', Math.min(5, profile?.maximumShieldPoints || 1))
-          );
+               pipRow('COMMAND', profile?.commandValue || 0),
+               pipRow('SQUADRON', profile?.squadronValue || 0),
+               pipRow('ENGINEERING', profile?.engineeringValue || 0)
+           );
            if (cpuControlled) document.querySelector('#interaction-message').textContent = 'CPU controls this unit automatically.';
            renderMovementCommand(unit);
      };
