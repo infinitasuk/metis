@@ -127,7 +127,9 @@ public class BattleApiController {
         long sessionId = battle.createSession(gameId, request.name(), request.gameModeId(), request.scenarioId(),
                 request.fleetFormatId(), request.visibility(), engineVersion, apiVersion, eventSchemaVersion);
         battle.assignSessionOwner(sessionId, user.userId());
-        if (request.templateId() != null) templates.assignSessionTemplate(sessionId, request.templateId());
+        if (request.templateId() != null) {
+            templates.initializeRunMetadata(sessionId, request.templateId(), gitSha);
+        }
         return ResponseEntity.created(URI.create("/api/v1/sessions/" + sessionId))
                 .body(getSession(sessionId));
     }

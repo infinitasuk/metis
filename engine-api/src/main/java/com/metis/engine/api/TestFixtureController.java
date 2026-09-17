@@ -69,7 +69,11 @@ public class TestFixtureController {
             BattleRepository.BattleSessionDetail session = existing == null
                     ? createFixture(gameId, fixture)
                     : battle.findSession(existing.sessionId()).orElseThrow();
-            ensureTemplate(gameId, fixture, session);
+            BattleTemplateRepository.CanonicalSetup setup = templates.findCanonicalSetup(requiredVersion(session))
+                    .orElseThrow(() -> new IllegalStateException("Canonical setup is unavailable for test fixture " + fixture.key()));
+            templates.configureSession(session.sessionId(), setup);
+            session = battle.findSession(session.sessionId()).orElseThrow();
+            ensureTemplate(gameId, fixture, session, setup);
             loaded.add(new LoadedFixture(fixture.key(), fixture.ordinal(), session.sessionId(),
                     session.sessionName(), session.sessionCode(), session.status(),
                     URI.create("/api/v1/sessions/" + session.sessionId()).toString()));
@@ -77,7 +81,8 @@ public class TestFixtureController {
         return ResponseEntity.ok(new TestFixtureResponse("metis-authoritative-v1", gameId, loaded));
     }
 
-    private void ensureTemplate(long gameId, FixtureSpec fixture, BattleRepository.BattleSessionDetail session) {
+    private void ensureTemplate(long gameId, FixtureSpec fixture, BattleRepository.BattleSessionDetail session,
+                                BattleTemplateRepository.CanonicalSetup setup) {
         List<BattleRepository.SessionPlayer> players = battle.findPlayers(session.sessionId());
         List<BattleTemplateRepository.TemplatePlayer> templatePlayers = players.stream()
                 .map(player -> new BattleTemplateRepository.TemplatePlayer(player.seatNumber(), player.displayName(),
@@ -86,41 +91,52 @@ public class TestFixtureController {
                 .toList();
         long templateId = templates.upsertTemplate(new BattleTemplateRepository.TemplateSpec(
                 gameId, fixture.key(), fixture.name(), "CPU versus CPU regression battle template",
-                session.gameVersionId(), session.gameModeId(), session.scenarioId(), session.fleetFormatId(),
-                fixture.boardCode(), 1800, 900,
-                Map.of("distancePerSpeed", 100, "shortRange", 100, "mediumRange", 200,
-                        "longRange", 300, "maximumRounds", 6), templatePlayers, session.sessionId()));
+                session.gameVersionId(), setup.gameModeId(), setup.scenarioId(), setup.fleetFormatId(),
+                setup.boardCode(), setup.boardWidth(), setup.boardHeight(), setup.options(),
+                templatePlayers, session.sessionId()));
         templates.assignSessionTemplate(session.sessionId(), templateId);
+        templates.setSourceMetadata(session.sessionId(), "cpu-fixture-v1");
     }
 
     private BattleRepository.BattleSessionDetail createFixture(long gameId, FixtureSpec fixture) {
         long sessionId = battle.createSession(gameId, fixture.name(), null, null, null,
                 "private", engineVersion, apiVersion, eventSchemaVersion);
         BattleRepository.BattleSessionDetail session = battle.findSession(sessionId).orElseThrow();
+        BattleTemplateRepository.CanonicalSetup setup = templates.findCanonicalSetup(requiredVersion(session))
+                .orElseThrow(() -> new IllegalStateException("Canonical setup is unavailable for test fixture " + fixture.key()));
+        templates.configureSession(sessionId, setup);
+        session = battle.findSession(sessionId).orElseThrow();
         GameDefinition definition = definitions.findEngineDefinition(requiredVersion(session)).orElseThrow(
                 () -> new IllegalStateException("No published engine definition for test fixture " + fixture.key()));
         List<DefinitionRepository.Faction> factions = definitions.findFactions(definition.definitionVersionId());
         if (factions.size() < 2) {
             throw new IllegalStateException("At least two factions are required for test fixtures");
         }
-        battle.createPlayer(sessionId, 1, "Test Rebel", "cpu", factions.get(0).factionId());
-        battle.createPlayer(sessionId, 2, "Test Empire", "cpu", factions.get(1).factionId());
-        startFixture(sessionId, fixture, definition);
+        battle.createPlayer(sessionId, 1, factions.get(0).factionName(), "cpu", factions.get(0).factionId());
+        battle.createPlayer(sessionId, 2, factions.get(1).factionName(), "cpu", factions.get(1).factionId());
+        List<BattleRepository.SessionPlayer> players = battle.findPlayers(sessionId);
+        if (setup.boardDefinitionId() > 0) battle.createBoard(sessionId, setup.boardDefinitionId(), "primary", null);
+        if (setup.fleetFormatId() > 0) {
+            for (BattleRepository.SessionPlayer player : players) {
+                battle.createFleet(player.sessionPlayerId(), setup.fleetFormatId(),
+                        "Fleet " + player.seatNumber(), setup.pointsLimit());
+            }
+        }
+        startFixture(sessionId, fixture, definition, setup);
         return battle.findSession(sessionId).orElseThrow();
     }
 
-    private void startFixture(long sessionId, FixtureSpec fixture, GameDefinition definition) {
+    private void startFixture(long sessionId, FixtureSpec fixture, GameDefinition definition,
+                              BattleTemplateRepository.CanonicalSetup setup) {
         List<BattleRepository.SessionPlayer> players = battle.findPlayers(sessionId);
         List<Player> enginePlayers = players.stream()
                 .sorted(Comparator.comparingInt(BattleRepository.SessionPlayer::seatNumber))
                 .map(player -> new Player(player.sessionPlayerId(), player.seatNumber(), player.playerKind(),
                         player.factionName()))
                 .toList();
-        GameSetup setup = new GameSetup(2, 2, enginePlayers,
-                new BoardState(fixture.boardCode(), 1800, 900),
-                Map.of("distancePerSpeed", 100, "shortRange", 100, "mediumRange", 200,
-                        "longRange", 300, "maximumRounds", 6));
-        GameState state = engine.createInitialState(sessionId, definition, setup);
+        GameSetup gameSetup = new GameSetup(2, 2, enginePlayers,
+                new BoardState(setup.boardCode(), setup.boardWidth(), setup.boardHeight()), setup.options());
+        GameState state = engine.createInitialState(sessionId, definition, gameSetup);
         state = applyAndPersist(definition, state, new Action("start_game", 0, Map.of()));
         for (int index = 0; index < enginePlayers.size(); index++) {
             Player player = enginePlayers.get(index);
@@ -137,6 +153,29 @@ public class TestFixtureController {
                     "unitId", fixture.unitId(index), "unitCode", profile.code(),
                     "positionX", fixture.positionX(index), "positionY", fixture.positionY(index),
                     "facing", index == 0 ? 0 : 180)));
+        }
+        syncRelationalUnits(sessionId, state);
+    }
+
+    private void syncRelationalUnits(long sessionId, GameState state) {
+        for (com.metis.engine.core.UnitState unit : state.units()) {
+            try {
+                long variantId = Long.parseLong(unit.unitCode());
+                long fleetId = battle.findFleets(sessionId).stream()
+                        .filter(fleet -> fleet.sessionPlayerId() == unit.playerId())
+                        .findFirst().map(BattleRepository.FleetSummary::fleetId).orElse(0L);
+                if (fleetId > 0) {
+                    String stateJson = objectMapper.writeValueAsString(Map.of(
+                            "engineUnitId", unit.unitId(), "unit", unit));
+                    battle.createUnit(fleetId, variantId,
+                            battle.findUnitVariantName(variantId).orElse(unit.unitCode()),
+                            java.math.BigDecimal.valueOf(unit.positionX()),
+                            java.math.BigDecimal.valueOf(unit.positionY()),
+                            java.math.BigDecimal.valueOf(unit.facing()), unit.status(), stateJson);
+                }
+            } catch (NumberFormatException | JsonProcessingException ignored) {
+                // Test doubles use symbolic unit codes and do not have catalog rows.
+            }
         }
     }
 
@@ -183,7 +222,7 @@ public class TestFixtureController {
 
     private record FixtureSpec(int ordinal, String key, String name) {
         private String boardCode() {
-            return "metis-test-board-" + String.format("%02d", ordinal);
+            return "standard_6x3";
         }
 
         private long unitId(int playerIndex) {

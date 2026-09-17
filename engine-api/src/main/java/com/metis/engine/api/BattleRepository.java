@@ -25,7 +25,9 @@ public class BattleRepository {
                         rs.getLong("session_id"), rs.getLong("game_id"),
                         rs.getString("game_name"), rs.getString("session_name"),
                         rs.getString("session_code"), rs.getString("visibility"),
-                        rs.getObject("owner_user_id", Long.class),
+                        rs.getObject("owner_user_id", Long.class), rs.getObject("template_id", Long.class),
+                        rs.getString("template_name"), rs.getString("ai_version"),
+                        rs.getObject("run_number", Integer.class),
                         rs.getString("status"),
                         rs.getInt("current_round"), rs.getLong("player_count"),
                         rs.getString("created_at"), rs.getString("updated_at")
@@ -34,23 +36,27 @@ public class BattleRepository {
 
     public List<BattleSession> findVisibleSessions(Long gameId, String status, MetisUser user) {
         return jdbc.query("""
-                SELECT s.session_id, s.game_id, g.game_name, s.session_name, s.session_code,
-                       s.visibility, s.owner_user_id, s.status, s.current_round,
+                 SELECT s.session_id, s.game_id, g.game_name, s.session_name, s.session_code,
+                        s.visibility, s.owner_user_id, s.template_id, t.template_name,
+                        s.ai_version, s.run_number, s.status, s.current_round,
                        count(sp.session_player_id) AS player_count, s.created_at, s.updated_at
                 FROM game_instance.game_session s
-                JOIN game_engine.game g ON g.game_id = s.game_id
+                 JOIN game_engine.game g ON g.game_id = s.game_id
+                 LEFT JOIN game_instance.battle_template t ON t.template_id = s.template_id
                 LEFT JOIN game_instance.session_player sp ON sp.session_id = s.session_id
                 WHERE (CAST(? AS bigint) IS NULL OR s.game_id = ?)
                   AND (CAST(? AS text) IS NULL OR s.status = ?)
                   AND (? OR s.visibility = 'public' OR s.owner_user_id = ?
                        OR EXISTS (SELECT 1 FROM game_instance.session_invitation i
                                   WHERE i.session_id = s.session_id AND i.user_id = ?))
-                GROUP BY s.session_id, g.game_name
+                 GROUP BY s.session_id, g.game_name, t.template_name
                 ORDER BY s.updated_at DESC, s.session_id DESC
                 """, (rs, rowNum) -> new BattleSession(
                 rs.getLong("session_id"), rs.getLong("game_id"), rs.getString("game_name"),
                 rs.getString("session_name"), rs.getString("session_code"), rs.getString("visibility"),
-                rs.getObject("owner_user_id", Long.class), rs.getString("status"),
+                 rs.getObject("owner_user_id", Long.class), rs.getObject("template_id", Long.class),
+                 rs.getString("template_name"), rs.getString("ai_version"),
+                 rs.getObject("run_number", Integer.class), rs.getString("status"),
                 rs.getInt("current_round"), rs.getLong("player_count"),
                 rs.getString("created_at"), rs.getString("updated_at")),
                 gameId, gameId, status, status, user.admin(), user.userId(), user.userId());
@@ -66,6 +72,8 @@ public class BattleRepository {
                          rs.getObject("fleet_format_id", Long.class),
                           rs.getString("session_name"), rs.getString("session_code"),
                           rs.getString("visibility"), rs.getObject("owner_user_id", Long.class),
+                          rs.getObject("template_id", Long.class), rs.getString("template_name"),
+                          rs.getString("ai_version"), rs.getObject("run_number", Integer.class),
                          rs.getString("status"), rs.getInt("current_round"),
                          rs.getObject("current_phase_id", Long.class),
                          rs.getString("state_json"), rs.getLong("state_version"), rs.getString("engine_version"),
@@ -223,6 +231,11 @@ public class BattleRepository {
                         rs.getBigDecimal("position_y"), rs.getBigDecimal("facing"),
                         rs.getString("unit_status"), rs.getString("state_json")
                 ), fleetId);
+    }
+
+    public Optional<String> findUnitVariantName(long unitVariantId) {
+        return jdbc.query("SELECT unit_variant_name FROM game_engine.unit_variant WHERE unit_variant_id = ?",
+                rs -> rs.next() ? Optional.of(rs.getString("unit_variant_name")) : Optional.empty(), unitVariantId);
     }
 
     public List<SessionBoard> findBoards(long sessionId) {
@@ -512,6 +525,7 @@ public class BattleRepository {
 
     public record BattleSession(long sessionId, long gameId, String gameName,
                                 String sessionName, String sessionCode, String visibility, Long ownerUserId,
+                                Long templateId, String templateName, String aiVersion, Integer runNumber,
                                 String status,
                                 int currentRound, long playerCount,
                                 String createdAt, String updatedAt) {}
@@ -521,6 +535,7 @@ public class BattleRepository {
                                       Long gameModeId, Long scenarioId,
                                       Long fleetFormatId,
                                        String sessionName, String sessionCode, String visibility, Long ownerUserId,
+                                       Long templateId, String templateName, String aiVersion, Integer runNumber,
                                        String status,
                                        int currentRound, Long currentPhaseId, String state, long stateVersion,
                                       String engineVersion, String apiVersion,

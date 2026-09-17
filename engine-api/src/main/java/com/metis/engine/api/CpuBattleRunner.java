@@ -354,13 +354,14 @@ public class CpuBattleRunner {
         if (unit == null) {
             return;
         }
-        String stateJson = "{\"engineUnitId\":" + engineUnitId + "}";
+        String stateJson = writeUnitState(unit);
+        String unitName = battle.findUnitVariantName(variantId).orElse(unitCode);
         if (stored == null) {
-            battle.createUnit(fleet.fleetId(), variantId, unitCode,
+            battle.createUnit(fleet.fleetId(), variantId, unitName,
                     java.math.BigDecimal.valueOf(unit.positionX()), java.math.BigDecimal.valueOf(unit.positionY()),
                     java.math.BigDecimal.valueOf(unit.facing()), unit.status(), stateJson);
         } else {
-            battle.updateUnit(stored.unitInstanceId(), stored.unitName(),
+            battle.updateUnit(stored.unitInstanceId(), unitName,
                     java.math.BigDecimal.valueOf(unit.positionX()), java.math.BigDecimal.valueOf(unit.positionY()),
                     java.math.BigDecimal.valueOf(unit.facing()), unit.status(), stateJson);
         }
@@ -397,6 +398,14 @@ public class CpuBattleRunner {
             return objectMapper.writeValueAsString(state);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Could not serialize CPU game state", exception);
+        }
+    }
+
+    private String writeUnitState(UnitState unit) {
+        try {
+            return objectMapper.writeValueAsString(Map.of("engineUnitId", unit.unitId(), "unit", unit));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Could not serialize CPU unit state", exception);
         }
     }
 

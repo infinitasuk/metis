@@ -36,9 +36,10 @@
          <article class="game-card live-game-card" th:each="gameSession : ${runningGames}" th:attr="data-session-id=${gameSession.sessionId}">
              <a class="session-card-link" th:href="@{/simulator/sessions/{id}(id=${gameSession.sessionId})}">
                  <div class="card-kicker">LIVE MATCH <span th:text="${gameSession.sessionCode}"></span></div>
-                 <h3 th:text="${gameSession.sessionName}"></h3>
-                 <p th:text="${gameSession.gameName}"></p>
-                 <div class="metric-row"><span><b th:text="|Round ${gameSession.currentRound}|"></b></span><span><b th:text="${gameSession.playerCount}"></b> players</span></div>
+                  <h3 th:text="${gameSession.sessionName}"></h3>
+                  <p th:text="${gameSession.gameName}"></p>
+                  <p class="template-meta" th:if="${gameSession.templateName != null}" th:text="|${gameSession.templateName} / RUN ${gameSession.runNumber}|"></p>
+                  <div class="metric-row"><span><b th:text="|Round ${gameSession.currentRound}|"></b></span><span><b th:text="${gameSession.playerCount}"></b> players</span></div>
                  <span class="arrow">View game <span>-&gt;</span></span>
              </a>
               <button class="text-button delete-session" type="button" th:if="${currentUser.admin() or gameSession.ownerUserId == currentUser.userId}" th:attr="data-session-id=${gameSession.sessionId}">Delete session</button>
@@ -53,9 +54,10 @@
         <article class="game-card live-game-card" th:each="gameSession : ${oldGames}" th:attr="data-session-id=${gameSession.sessionId}">
             <a class="session-card-link" th:href="@{/simulator/sessions/{id}(id=${gameSession.sessionId})}">
                 <div class="card-kicker"><span th:text="${gameSession.status == 'finished' ? 'COMPLETED' : 'SAVED SESSION'}"></span> <span th:text="${gameSession.sessionCode}"></span></div>
-                <h3 th:text="${gameSession.sessionName}"></h3>
-                <p th:text="${gameSession.gameName}"></p>
-                <div class="metric-row"><span><b th:text="|Round ${gameSession.currentRound}|"></b></span><span><b th:text="${gameSession.playerCount}"></b> players</span></div>
+                 <h3 th:text="${gameSession.sessionName}"></h3>
+                 <p th:text="${gameSession.gameName}"></p>
+                 <p class="template-meta" th:if="${gameSession.templateName != null}" th:text="|${gameSession.templateName} / RUN ${gameSession.runNumber}|"></p>
+                 <div class="metric-row"><span><b th:text="|Round ${gameSession.currentRound}|"></b></span><span><b th:text="${gameSession.playerCount}"></b> players</span></div>
                 <span class="arrow">Open session <span>-&gt;</span></span>
             </a>
              <button class="text-button delete-session" type="button" th:if="${currentUser.admin() or gameSession.ownerUserId == currentUser.userId}" th:attr="data-session-id=${gameSession.sessionId}">Delete session</button>
@@ -116,6 +118,12 @@
             name.textContent = gameSession.sessionName;
             const game = document.createElement('p');
             game.textContent = gameSession.gameName;
+            if (gameSession.templateName) {
+                const template = document.createElement('p');
+                template.className = 'template-meta';
+                template.textContent = gameSession.templateName + ' / RUN ' + gameSession.runNumber;
+                sessionLink.append(template);
+            }
             const metrics = document.createElement('div');
             metrics.className = 'metric-row';
             metrics.textContent = 'Round ' + gameSession.currentRound + ' / ' + gameSession.playerCount + ' players';
