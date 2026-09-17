@@ -60,18 +60,21 @@ games and access the catalogue admin pages and engine logs.
 
 ## Load repeatable test games
 
-The test-fixture endpoint creates ten private, started sessions named
+The test-fixture endpoint requires an administrator session and creates ten private, started sessions named
 `METIS-TEST-GAME-01` through `METIS-TEST-GAME-10`. Existing fixture sessions are
 reset by default, while unrelated sessions are left untouched:
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v1/test-fixtures/games/1" -ContentType "application/json" -Body '{}'
+$webSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:8080/login" -WebSession $webSession | Out-Null
+Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:8080/login" -Method Post -WebSession $webSession -Body @{ userId = 5; next = "/" } | Out-Null
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v1/test-fixtures/games/6" -WebSession $webSession -ContentType "application/json" -Body '{}'
 ```
 
 To reuse the existing ten sessions without resetting their state:
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v1/test-fixtures/games/1" -ContentType "application/json" -Body '{"resetExisting":false}'
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/v1/test-fixtures/games/6" -WebSession $webSession -ContentType "application/json" -Body '{"resetExisting":false}'
 ```
 
 The response contains the stable fixture keys and current session IDs for test
