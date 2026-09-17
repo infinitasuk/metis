@@ -91,8 +91,8 @@ public class TestFixtureController {
         if (factions.size() < 2) {
             throw new IllegalStateException("At least two factions are required for test fixtures");
         }
-        battle.createPlayer(sessionId, 1, "Test Rebel", "human", factions.get(0).factionId());
-        battle.createPlayer(sessionId, 2, "Test Empire", "human", factions.get(1).factionId());
+        battle.createPlayer(sessionId, 1, "Test Rebel", "cpu", factions.get(0).factionId());
+        battle.createPlayer(sessionId, 2, "Test Empire", "cpu", factions.get(1).factionId());
         startFixture(sessionId, fixture, definition);
         return battle.findSession(sessionId).orElseThrow();
     }
@@ -104,7 +104,7 @@ public class TestFixtureController {
                 .map(player -> new Player(player.sessionPlayerId(), player.seatNumber(), player.playerKind(),
                         player.factionName()))
                 .toList();
-        GameSetup setup = new GameSetup(2, 0, enginePlayers,
+        GameSetup setup = new GameSetup(2, 2, enginePlayers,
                 new BoardState(fixture.boardCode(), 1800, 900),
                 Map.of("distancePerSpeed", 100, "shortRange", 100, "mediumRange", 200,
                         "longRange", 300, "maximumRounds", 6));

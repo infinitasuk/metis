@@ -33,6 +33,8 @@ class TestFixtureControllerTest {
                 .map(TestFixtureController.LoadedFixture::sessionId).toList();
 
         assertEquals(10, first.games().size());
+        assertTrue(battle.players.values().stream().flatMap(List::stream)
+                .allMatch(player -> "cpu".equals(player.playerKind())));
         assertEquals(firstIds, preservedIds);
         assertEquals(10, first.games().stream()
                 .filter(game -> "running".equals(game.status())).count());
@@ -57,7 +59,7 @@ class TestFixtureControllerTest {
 
     private static final class FakeDefinitionRepository extends DefinitionRepository {
         private final GameDefinition definition = new GameDefinition(7, "test", "Test", 1,
-                "v1", 2, 2, 0, 0, List.of("rebel", "empire"), List.of(
+                "v1", 2, 2, 2, 2, List.of("rebel", "empire"), List.of(
                 new UnitDefinition("rebel-ship", "rebel", 3, 300, 1, 5),
                 new UnitDefinition("empire-ship", "empire", 3, 300, 1, 5)));
 
