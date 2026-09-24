@@ -49,6 +49,7 @@ public class BattleApiController {
 
     private final BattleRepository battle;
     private final BattleTemplateRepository templates;
+    private final FleetPresetRepository fleetPresets;
     private final DefinitionRepository definitions;
     private final ObjectMapper objectMapper;
     private final AuthoritativeGameEngine engine;
@@ -59,6 +60,7 @@ public class BattleApiController {
     private final AuthenticationContext authentication;
 
     public BattleApiController(BattleRepository battle, BattleTemplateRepository templates,
+                               FleetPresetRepository fleetPresets,
                                DefinitionRepository definitions, ObjectMapper objectMapper,
                                AuthenticationContext authentication,
                                @Value("${metis.engine.version:0.1.0-SNAPSHOT}") String engineVersion,
@@ -67,6 +69,7 @@ public class BattleApiController {
                                @Value("${metis.git.sha:unknown}") String gitSha) {
         this.battle = battle;
         this.templates = templates;
+        this.fleetPresets = fleetPresets;
         this.definitions = definitions;
         this.objectMapper = objectMapper;
         this.authentication = authentication;
@@ -110,6 +113,30 @@ public class BattleApiController {
     public BattleTemplateRepository.BattleTemplate template(@PathVariable long templateId) {
         return templates.findTemplate(templateId).orElseThrow(() ->
                 new ApiNotFoundException("Template " + templateId + " does not exist"));
+    }
+
+    @GetMapping("/fleet-presets")
+    public List<FleetPresetRepository.FleetPreset> fleetPresets(@RequestParam long gameId,
+                                                                @RequestParam(required = false) Long factionId,
+                                                                HttpServletRequest request) {
+        return fleetPresets.findPresets(authentication.require(request).userId(), gameId, factionId);
+    }
+
+    @PostMapping("/games/{gameId}/fleet-presets")
+    public ResponseEntity<Map<String, Long>> createFleetPreset(@PathVariable long gameId,
+                                                               @RequestBody FleetPresetRequest request,
+                                                               HttpServletRequest httpRequest) {
+        MetisUser user = authentication.require(httpRequest);
+        long presetId = fleetPresets.create(user.userId(), gameId, request.gameVersionId(), request.fleetFormatId(),
+                request.factionId(), request.name(), request.pointsTotal(), request.units());
+        return ResponseEntity.created(URI.create("/api/v1/fleet-presets/" + presetId))
+                .body(Map.of("fleetPresetId", presetId));
+    }
+
+    @DeleteMapping("/fleet-presets/{presetId}")
+    public ResponseEntity<Void> deleteFleetPreset(@PathVariable long presetId, HttpServletRequest request) {
+        fleetPresets.delete(authentication.require(request).userId(), presetId);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/games/{gameId}/sessions")
@@ -162,7 +189,11 @@ public class BattleApiController {
         GameDefinition definition = definitions
                 .findEngineDefinition(session.gameVersionId())
                 .orElseThrow(() -> new ApiNotFoundException("Definition for session " + sessionId + " does not exist"));
+        if (definition.turnStructure() == null) throw new ApiConflictException("Configure a turn structure on a definition revision before starting a new battle");
         List<SessionPlayer> players = battle.findPlayers(sessionId);
+        if (battle.findSeats(sessionId).stream().anyMatch(seat -> "human".equals(seat.playerKind()) && seat.userId() == null)) {
+            throw new ApiConflictException("Assign each human seat to a user before starting");
+        }
         List<Player> enginePlayers = players.stream()
                 .map(player -> new Player(player.sessionPlayerId(), player.seatNumber(), player.playerKind(),
                         player.factionName()))
@@ -171,15 +202,69 @@ public class BattleApiController {
         GameSetup setup = new GameSetup(enginePlayers.size(),
                 (int) enginePlayers.stream().filter(player -> "cpu".equals(player.kind())).count(),
                 enginePlayers, board, request.options());
+        definitions.captureSessionDefinition(sessionId, definition);
         GameState state = engine.createInitialState(sessionId, definition, setup);
-        state = engine.applyAction(state, new Action("start_game", 0, null)).resultingState();
+        state = engine.applyAction(definition, state, new Action("start_game", 0, null)).resultingState();
         persistState(sessionId, session.stateVersion(), state, state.events().getLast());
+        deployStoredFleets(sessionId, definition, state, board);
         return getSession(sessionId);
+    }
+
+    private void deployStoredFleets(long sessionId, GameDefinition definition, GameState state, BoardState board) {
+        for (SessionPlayer player : battle.findPlayers(state.sessionId())) {
+            int unitIndex = 0;
+            for (BattleRepository.FleetSummary fleet : battle.findFleets(state.sessionId()).stream()
+                .filter(item -> item.sessionPlayerId() == player.sessionPlayerId()).toList()) {
+                for (FleetUnit unit : battle.findFleetUnits(fleet.fleetId())) {
+                    boolean hasLayout = unit.positionX() != null && unit.positionY() != null
+                            && unit.positionX().doubleValue() >= 0 && unit.positionX().doubleValue() <= 100
+                            && unit.positionY().doubleValue() >= 0 && unit.positionY().doubleValue() <= 100;
+                    double x = hasLayout
+                            ? deploymentX(board, player.seatNumber(), unit.positionX().doubleValue())
+                            : player.seatNumber() == 1
+                                ? 180 + unitIndex * 120
+                                : board.width() - 180 - unitIndex * 120;
+                    double y = hasLayout
+                            ? deploymentY(board, unit.positionY().doubleValue())
+                            : Math.min(board.height() - 100, 180 + unitIndex * 120);
+                    ActionResult result = engine.applyAction(definition, state, new Action("deploy_unit",
+                            player.sessionPlayerId(), Map.of("unitId", unit.unitInstanceId(),
+                                    "unitCode", String.valueOf(unit.unitVariantId()),
+                                    "positionX", x, "positionY", y,
+                                    "facing", player.seatNumber() == 1 ? 0 : 180)));
+                    if (!result.accepted()) {
+                        throw new ApiConflictException("Could not deploy a roster unit: " + result.code());
+                    }
+                    state = result.resultingState();
+                    persistState(sessionId, state.stateVersion() - 1, state, state.events().getLast());
+                    battle.updateUnit(unit.unitInstanceId(), unit.unitName(),
+                            java.math.BigDecimal.valueOf(x), java.math.BigDecimal.valueOf(y),
+                            java.math.BigDecimal.valueOf(player.seatNumber() == 1 ? 0 : 180), "ready", null);
+                    unitIndex++;
+                }
+            }
+        }
+    }
+
+    private double deploymentX(BoardState board, int seatNumber, double layoutX) {
+        double edge = board.width() * (120.0 / 1800.0);
+        double depth = board.width() * (600.0 / 1800.0) * layoutX / 100;
+        return seatNumber == 1 ? edge + depth : board.width() - edge - depth;
+    }
+
+    private double deploymentY(BoardState board, double layoutY) {
+        double edge = board.height() * (80.0 / 900.0);
+        return edge + (board.height() - edge * 2) * layoutY / 100;
     }
 
     @PostMapping("/sessions/{sessionId}/actions")
     @Transactional
-    public ActionResult submitAction(@PathVariable long sessionId, @RequestBody ActionRequest request) {
+    public ActionResult submitAction(@PathVariable long sessionId, @RequestBody ActionRequest request, HttpServletRequest httpRequest) {
+        var owned = battle.controlledPlayers(sessionId, authentication.require(httpRequest).userId());
+        long actor = request.actorPlayerId();
+        if (actor == 0 && "advance_phase".equals(request.type()) && !owned.isEmpty()) actor = owned.stream().min(Long::compareTo).orElseThrow();
+        if (!owned.contains(actor)) throw new org.springframework.web.server.ResponseStatusException(HttpStatus.FORBIDDEN, "You do not control this seat");
+        request = new ActionRequest(request.type(), actor, request.expectedStateVersion(), request.parameters());
         BattleSessionDetail session = getSession(sessionId);
         if (session.state() == null || "{}".equals(session.state().trim())) {
             throw new ApiConflictException("Session " + sessionId + " has not been started");
@@ -200,8 +285,13 @@ public class BattleApiController {
                 return new ActionResult(false, "STALE_STATE",
                         "The submitted state version does not match the current game state", null);
             }
-            GameDefinition definition = definitions.findEngineDefinition(session.gameVersionId())
-                    .orElseThrow(() -> new ApiNotFoundException("Definition for session " + sessionId + " does not exist"));
+            GameDefinition definition;
+            try { definition = definitions.findSessionDefinition(sessionId, session.gameVersionId()).orElse(null); }
+            catch (IllegalStateException error) { return new ActionResult(false, "SNAPSHOT_INCOMPATIBLE", error.getMessage(), null); }
+            if (definition == null) return new ActionResult(false, "LEGACY_SNAPSHOT", "This battle has no captured starting definition. Restart as a new battle to use current rules and corrected profiles.", null);
+            if (state.sessionId() != sessionId || state.definitionVersionId() != definition.definitionVersionId()) {
+                return new ActionResult(false, "STATE_DEFINITION_MISMATCH", "Recorded state does not match the captured battle definition", null);
+            }
             ActionResult result = engine.applyAction(definition, state,
                     new Action(request.type(), request.actorPlayerId(), request.parameters()));
             appendActionLog(sessionId, request, result.accepted() ? "INFO" : "WARN",
@@ -230,12 +320,100 @@ public class BattleApiController {
     }
 
     @GetMapping("/sessions/{sessionId}/legal-actions")
-    public List<LegalAction> legalActions(@PathVariable long sessionId) {
+    public List<LegalAction> legalActions(@PathVariable long sessionId, HttpServletRequest request) {
         BattleSessionDetail session = getSession(sessionId);
         GameState state = state(sessionId);
-        GameDefinition definition = definitions.findEngineDefinition(session.gameVersionId())
-                .orElseThrow(() -> new ApiNotFoundException("Definition for session " + sessionId + " does not exist"));
-        return engine.legalActions(definition, state);
+        GameDefinition definition;
+        try { definition = definitions.findSessionDefinition(sessionId, session.gameVersionId()).orElse(null); }
+        catch (IllegalStateException error) { return List.of(); }
+        if (definition == null) return List.of();
+        var owned = battle.controlledPlayers(sessionId, authentication.require(request).userId());
+        return engine.legalActions(definition, state).stream()
+                .filter(action -> action.actorPlayerId() == 0 ? !owned.isEmpty() : owned.contains(action.actorPlayerId())).toList();
+    }
+
+    @GetMapping("/sessions/{sessionId}/permissions")
+    public Map<String,Object> permissions(@PathVariable long sessionId,HttpServletRequest request) {
+        var user=authentication.require(request);
+        return Map.of("controlledPlayerIds",battle.controlledPlayers(sessionId,user.userId()),"canManage",battle.canEditSession(sessionId,user));
+    }
+
+    @GetMapping("/sessions/{sessionId}/seats")
+    public List<BattleRepository.SeatAssignment> seats(@PathVariable long sessionId) { return battle.findSeats(sessionId); }
+
+    @PostMapping("/sessions/{sessionId}/seats/{playerId}")
+    public List<BattleRepository.SeatAssignment> assignSeat(@PathVariable long sessionId,@PathVariable long playerId,@RequestBody SeatRequest request) {
+        if(battle.findPlayer(playerId).filter(player->player.sessionId()==sessionId).isEmpty()) throw new ApiNotFoundException("Seat does not belong to this session");
+        battle.assignSeat(playerId,request.userId()); return battle.findSeats(sessionId);
+    }
+
+    @GetMapping("/sessions/{sessionId}/compatibility")
+    public Map<String, Object> compatibility(@PathVariable long sessionId) {
+        var session = getSession(sessionId);
+        try {
+            var definition = definitions.findSessionDefinition(sessionId, session.gameVersionId());
+            return Map.of("compatible", definition.isPresent(), "code", definition.isPresent() ? "PINNED" : "LEGACY_UNPINNED",
+                    "message", definition.isPresent() ? "This battle uses its captured starting definition."
+                            : "Starting profiles were not captured for this battle. Recorded damage cannot be distinguished reliably from old profile errors. Restart as a new battle to use corrected profiles; the original history is retained.");
+        } catch (IllegalStateException error) {
+            return Map.of("compatible", false, "code", "SNAPSHOT_INCOMPATIBLE", "message", error.getMessage());
+        }
+    }
+
+    @PostMapping("/sessions/{sessionId}/restart")
+    @Transactional
+    public BattleSessionDetail restart(@PathVariable long sessionId, HttpServletRequest request) {
+        var source = getSession(sessionId);
+        GameState original = state(sessionId);
+        long newId = battle.createSession(source.gameId(), source.sessionName().substring(0, Math.min(95, source.sessionName().length())) + " / restarted",
+                source.gameModeId(), source.scenarioId(), source.fleetFormatId(), source.visibility(), engineVersion, apiVersion, eventSchemaVersion);
+        battle.assignSessionOwner(newId, authentication.require(request).userId());
+        if (!getSession(newId).gameVersionId().equals(source.gameVersionId())) {
+            throw new ApiConflictException("The published catalogue revision changed. Build a new roster using the current revision.");
+        }
+        var playerMapping = new java.util.HashMap<Long,Long>();
+        for (var player : battle.findPlayers(sessionId)) {
+            long playerId = battle.createPlayer(newId, player.seatNumber(), player.displayName(), player.playerKind(), player.factionId());
+            playerMapping.put(player.sessionPlayerId(), playerId);
+            var ownership = battle.findSeats(sessionId).stream().filter(seat -> seat.sessionPlayerId() == player.sessionPlayerId()).findFirst();
+            if (ownership.isPresent() && ownership.get().userId() != null && "human".equals(player.playerKind())) battle.assignSeat(playerId, ownership.get().userId());
+            for (var fleet : battle.findFleets(sessionId)) {
+                if (fleet.sessionPlayerId() != player.sessionPlayerId()) continue;
+                long fleetId = battle.createFleet(playerId, fleet.fleetFormatId(), fleet.fleetName(), fleet.pointsTotal());
+                for (var unit : battle.findFleetUnits(fleet.fleetId())) {
+                    long recordedId = unit.unitInstanceId();
+                    if (unit.state() != null) {
+                        try { recordedId = objectMapper.readTree(unit.state()).path("engineUnitId").asLong(recordedId); }
+                        catch (JsonProcessingException error) { throw new ApiConflictException("Cannot read the source roster mapping"); }
+                    }
+                    long originalUnitId = recordedId;
+                    var deployed = original.events().stream().filter(event -> "unit_deployed".equals(event.type())
+                            && event.payload().get("unitId") instanceof Number id && id.longValue() == originalUnitId).findFirst();
+                    BigDecimal x = null; BigDecimal y = null;
+                    if (deployed.isPresent()) {
+                        double boardX = ((Number) deployed.get().payload().get("positionX")).doubleValue();
+                        double boardY = ((Number) deployed.get().payload().get("positionY")).doubleValue();
+                        double startX = deploymentX(original.board(), player.seatNumber(), 0);
+                        double endX = deploymentX(original.board(), player.seatNumber(), 100);
+                        x = BigDecimal.valueOf(Math.max(0, Math.min(100, (boardX - startX) / (endX - startX) * 100)));
+                        double startY = deploymentY(original.board(), 0);
+                        double endY = deploymentY(original.board(), 100);
+                        y = BigDecimal.valueOf(Math.max(0, Math.min(100, (boardY - startY) / (endY - startY) * 100)));
+                    }
+                    battle.createUnit(fleetId, unit.unitVariantId(), unit.unitName(), x, y, null, "ready", null);
+                }
+            }
+        }
+        for (var board : battle.findBoards(sessionId)) battle.createBoard(newId, board.boardDefinitionId(), board.role(), null);
+        var options = new java.util.HashMap<String, Object>();
+        if (original.values().get("initialSetupOptions") instanceof Map<?, ?> initialOptions) {
+            initialOptions.forEach((key, value) -> options.put(key.toString(), com.metis.engine.core.ScopedData.remapOwners(value, playerMapping)));
+        } else for (String key : List.of("distancePerSpeed", "maximumMovementDistance", "maximumRounds", "unlimitedRounds",
+                "maximumShipsPerPlayer", "maximumSquadronsPerPlayer", "loadoutProfile", "shortRange", "mediumRange", "longRange")) {
+            if (original.values().containsKey(key)) options.put(key, original.values().get(key));
+        }
+        return startSession(newId, new StartSessionRequest(original.board().boardCode(), BigDecimal.valueOf(original.board().width()),
+                BigDecimal.valueOf(original.board().height()), options));
     }
 
     @GetMapping("/admin/sessions/{sessionId}/engine-logs")
@@ -261,10 +439,12 @@ public class BattleApiController {
     }
 
     @PostMapping("/sessions/{sessionId}/players")
+    @Transactional
     public ResponseEntity<SessionPlayer> createPlayer(@PathVariable long sessionId,
                                                        @RequestBody CreatePlayerRequest request) {
         long playerId = battle.createPlayer(sessionId, request.seatNumber(), request.displayName(),
                 request.playerKind(), request.factionId());
+        if (request.userId() != null && "human".equals(request.playerKind())) battle.assignSeat(playerId, request.userId());
         SessionPlayer player = battle.findPlayers(sessionId).stream()
                 .filter(item -> item.sessionPlayerId() == playerId)
                 .findFirst()
@@ -456,7 +636,7 @@ public class BattleApiController {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", "The session changed; reload the current state and retry"));
         }
-        return ResponseEntity.badRequest().body(Map.of("error", exception.getMostSpecificCause().getMessage()));
+        return ResponseEntity.badRequest().body(Map.of("error", "The request failed database validation"));
     }
 
     private void requireSession(long sessionId) {
@@ -492,7 +672,7 @@ public class BattleApiController {
             context.put("actionType", request.type());
             context.put("actorPlayerId", request.actorPlayerId());
             context.put("expectedStateVersion", request.expectedStateVersion());
-            context.put("parameters", request.parameters());
+            // Parameters can contain private choices. They are never copied into diagnostics.
             battle.appendEngineLog(sessionId, level, "HTTP", message,
                     objectMapper.writeValueAsString(context));
         } catch (JsonProcessingException exception) {
@@ -517,12 +697,18 @@ public class BattleApiController {
                                        Long currentPhaseId, JsonNode state) {}
 
     public record CreatePlayerRequest(int seatNumber, String displayName,
-                                      String playerKind, Long factionId) {}
+                                      String playerKind, Long factionId, Long userId) {}
+
+    public record SeatRequest(long userId) {}
 
     public record UpdatePlayerRequest(String displayName, String playerKind,
                                       Long factionId, Boolean ready, JsonNode state) {}
 
     public record CreateFleetRequest(Long fleetFormatId, String fleetName, Integer pointsTotal) {}
+
+    public record FleetPresetRequest(long gameVersionId, Long fleetFormatId, long factionId,
+                                     String name, Integer pointsTotal,
+                                     List<FleetPresetRepository.PresetUnitRequest> units) {}
 
     public record UpdateFleetRequest(String fleetName, Integer pointsTotal, JsonNode state) {}
 

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "javaModules": ["engine-core", "engine-api", "webapp"],
+  "sql": ["profile_mapping.sql", "session_snapshots.sql", "seat_ownership.sql"],
+  "fixtureSql": "multiplayer_fixtures.sql",
+  "integrations": [
+    {"id":"multiplayer", "script":"webapp/src/test/js/multiplayer-integration.cjs", "requiredOutput":["PASS: seat membership", "PASS: CPU handles its own response"]},
+    {"id":"orders-browser", "script":"webapp/src/test/js/orders-integration.cjs", "requiredOutput":["PASS: F07 queue privacy", "PASS: browser private planning controls"]},
+    {"id":"interpreted-api", "script":"webapp/src/test/js/rules-api-integration.cjs", "requiredOutput":["PASS: interpreted publication", "PASS: transactional rollback", "PASS: durable restart"]},
+    {"id":"mechanics-recovery", "script":"webapp/src/test/js/mechanics-recovery.cjs", "requiredOutput":["PASS: post-roll privacy", "PASS: random rollback"]},
+    {"id":"spatial-conformance", "script":"webapp/src/test/js/spatial-conformance.cjs", "requiredOutput":["PASS: authoritative spatial preview", "PASS: three contrasting games"]},
+    {"id":"modes-catalogue", "script":"webapp/src/test/js/modes-catalogue.cjs", "requiredOutput":["PASS: pinned mode resolution", "PASS: catalogue profiles imported"]},
+    {"id":"rules-cpu", "script":"webapp/src/test/js/rules-cpu-integration.cjs", "requiredOutput":["PASS: persistent CPU seats", "PASS: an actual process kill during a CPU write"]},
+    {"id":"rules-browser", "script":"webapp/src/test/js/rules-browser.cjs", "requiredOutput":["PASS: generic browser authors", "PASS: private drafts", "PASS: all three game styles"]}
+  ]
+}

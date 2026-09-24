@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "authorized-attack",
+  "adapter": "legacy-authoritative",
+  "requirements": ["M0", "T02", "F03"],
+  "logicalTime": "2026-01-01T00:00:00Z",
+  "randomTape": [5],
+  "definition": {
+    "gameId": 1, "gameCode": "baseline", "gameName": "Baseline",
+    "definitionVersionId": 1, "definitionVersion": "test",
+    "minimumPlayers": 2, "maximumPlayers": 2, "minimumCpu": 0, "maximumCpu": 2,
+    "factionCodes": ["a", "b"],
+    "unitDefinitions": [{"code":"unit", "factionCode":"a", "maximumMovementDistance":1,
+      "maximumAttackRange":400, "attackDamage":1, "maximumHullPoints":20, "attackDice":1, "baseRadius":10}]
+  },
+  "initialState": {
+    "sessionId":1, "definitionVersionId":1, "status":"running", "round":1,
+    "phaseCode":"ship", "activePlayerId":10, "stateVersion":0,
+    "players":[{"playerId":10,"seatNumber":1,"kind":"human","factionCode":"a"},
+               {"playerId":20,"seatNumber":2,"kind":"human","factionCode":"b"}],
+    "units":[{"unitId":1,"playerId":10,"unitCode":"unit","positionX":100,"positionY":100,"facing":0,"status":"ready","hullPoints":20,"currentSpeed":1},
+             {"unitId":2,"playerId":20,"unitCode":"unit","positionX":250,"positionY":100,"facing":180,"status":"ready","hullPoints":20,"currentSpeed":1}],
+    "board":{"boardCode":"test","width":1000,"height":1000}, "events":[],
+    "values":{"privateChoices":{"1:ship":{
+      "10":{"$visibility":"OWNER","ownerPlayerId":10,"value":{"intent":"LEFT_SENTINEL"}},
+      "20":{"$visibility":"OWNER","ownerPlayerId":20,"value":{"intent":"RIGHT_SENTINEL"}}
+    }}}
+  },
+  "steps": [
+    {"action":{"type":"attack_unit","actorPlayerId":20,"parameters":{"unitId":1,"targetUnitId":2}},
+     "expect":{"accepted":false,"code":"NOT_ACTIVE_PLAYER","randomConsumed":0,"state":{"/stateVersion":0,"/units/1/hullPoints":20},
+       "views":[
+         {"players":[10],"state":{"/values/privateChoices/1:ship/10/intent":"LEFT_SENTINEL"},"absent":["/values/privateChoices/1:ship/20"]},
+         {"players":[20],"state":{"/values/privateChoices/1:ship/20/intent":"RIGHT_SENTINEL"},"absent":["/values/privateChoices/1:ship/10"]},
+         {"players":[],"state":{"/values/privateChoices/1:ship":{}},"absent":["/values/privateChoices/1:ship/10","/values/privateChoices/1:ship/20"]}
+       ]}},
+    {"action":{"type":"attack_unit","actorPlayerId":10,"parameters":{"unitId":1,"targetUnitId":2}},
+     "expect":{"accepted":true,"code":"ACTION_ACCEPTED","randomConsumed":1,"state":{"/stateVersion":1,"/units/1/hullPoints":19,"/events/0/type":"unit_attacked","/events/0/payload/hits":1}}},
+    {"action":{"type":"attack_unit","actorPlayerId":10,"parameters":{"unitId":1,"targetUnitId":2}},
+     "expect":{"accepted":false,"code":"UNIT_ALREADY_ACTIVATED","randomConsumed":1,"state":{"/stateVersion":1,"/units/1/hullPoints":19}}}
+  ]
+}

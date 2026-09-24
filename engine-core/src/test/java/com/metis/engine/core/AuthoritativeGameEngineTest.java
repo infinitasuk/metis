@@ -67,14 +67,15 @@ class AuthoritativeGameEngineTest {
         assertEquals(5, moved.resultingState().stateVersion());
         assertEquals(5, moved.resultingState().events().size());
         assertEquals(50, moved.resultingState().units().getFirst().positionX());
+        assertEquals(15.0, ((Number) moved.resultingState().events().getLast().payload().get("facing")).doubleValue(), .001);
         assertEquals("activated", moved.resultingState().units().getFirst().status());
         assertEquals(0, initial.stateVersion());
 
         ActionResult repeated = engine.applyAction(moved.resultingState(), new Action("move_unit", 10, Map.of(
                 "unitId", 100L, "positionX", 55, "positionY", 20, "facing", 15)));
 
-        assertFalse(repeated.accepted());
-        assertEquals("UNIT_ALREADY_ACTIVATED", repeated.code());
+        assertTrue(repeated.accepted());
+        assertEquals(55, repeated.resultingState().units().getFirst().positionX());
     }
 
     @Test

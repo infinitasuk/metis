@@ -1,10 +1,39 @@
 # METIS Implementation Plan
 
-**Status:** Active
+**Status:** Engine-first delivery; revised 2026-09-19.
 
-This plan turns the agreed architecture into an implementation sequence. It is
-deliberately focused on the first playable battle simulator and the boundaries
-needed for future mobile and VR clients.
+M0–M7 are implemented with local verification: compiler/runtime, durable APIs, reactions,
+mechanics/spatial modules, pinned modes, catalogue migration, generic browser and persistent CPU seats. Recovery, coverage
+and mutation gates pass. Hosted CI awaits repository execution.
+**Next release step: hosted CI on the committed revision.** See `RULES_CLIENT_M7.md`.
+
+The primary priority is an actual rules-driven engine: executable game/mode JSON,
+a shared resumable interpreter and reusable mechanical modules, backed by a full
+automated test suite. Standalone battle UI development and additional hardcoded
+game behavior are deferred while this architecture is delivered.
+
+## Active delivery plan
+
+[RULES_ENGINE_DEVELOPMENT_PLAN.md](RULES_ENGINE_DEVELOPMENT_PLAN.md) is the governing
+milestone sequence. [RULES_ENGINE_TEST_PLAN.md](RULES_ENGINE_TEST_PLAN.md) defines
+required automation and exit gates; [RULES_LANGUAGE_BACKLOG.md](RULES_LANGUAGE_BACKLOG.md)
+contains the detailed implementation tasks.
+
+| Milestone | Required outcome |
+| --- | --- |
+| M0 | Hardcoding inventory, v1 scope, reproducible test harness and CI |
+| M1 | Versioned JSON language, typed expressions, operation registry and compiler |
+| M2 | Headless interpreter completing two different JSON-defined games |
+| M3 | Durable API sessions, authorized decisions/reactions, atomic retry and recovery |
+| M4 | Definition-driven dice, tokens, cards and timed effects |
+| M5 | Spatial modules, setup/scoring and three complete headless acceptance games |
+| M6 | Mode resolution, immutable version captures and catalogue migration |
+| M7 | Thin generic UI/CPU integration and full automated release qualification |
+
+Tests are delivered with every milestone, beginning in M0. Existing-session
+maintenance remains possible, but new UI work serves interpreter contracts after
+the headless engine is proven. The earlier Phase 0–8 roadmap below is retained as
+reference; it does not override M0–M7 or authorize parallel hardcoded battle work.
 
 ## Guiding Decisions
 
@@ -17,10 +46,16 @@ needed for future mobile and VR clients.
 - Expose HTTP APIs to clients; never expose database credentials.
 - Use PostgreSQL functions for reads and procedures for inserts, updates and
   deletes.
-- Keep game rules in plain Java and definition data in PostgreSQL.
+- Keep the interpreter and reusable mechanical primitives in plain Java; store
+  executable game/mode rules as versioned JSON definitions in PostgreSQL.
 - Pin every simulation to an immutable game-definition revision.
-- Deliver one complete Armada vertical slice before broadening the rules or
-  supporting another game.
+- Deliver corrections through reusable rule modules and versioned definition data.
+  Verify contrasting activation/board models before claiming a module is game-neutral.
+
+The current behavior-correction queue is in
+[`GAME_ENGINE_FIX_BACKLOG.md`](GAME_ENGINE_FIX_BACKLOG.md), following the full
+rules review. Its remaining mechanics are delivered through the rules-engine plan,
+which supersedes game-specific implementation assumptions below.
 
 ## Current Baseline
 
@@ -46,6 +81,8 @@ Completed foundations:
 - Deterministic CPU-vs-CPU self-play regression simulations across multiple seeds.
 - Plain-Java `GameEngine` contract test covering setup validation and initial state creation.
 - Definition-backed attack legality, hull damage and destroyed-unit state transitions.
+- Captured session definitions, configurable activation sequencing, seat ownership,
+  private projection, response windows and queued-order foundations (F04–F07).
 
 Known gaps:
 
@@ -60,6 +97,9 @@ Known gaps:
   relationship and unit-definition records.
 - The engine does not yet load complete Armada rules or generate all legal
   actions; the current combat slice is intentionally a minimal attack model.
+- The interpreted runtime now has its own persisted/authenticated API path and M4
+  mechanics. Spatial modules, mode composition, catalogue migration and generic UI
+  remain later milestones; the existing battle page still uses its captured legacy rules.
 
 ## Phase 0: Architecture And Delivery Foundation
 
@@ -303,14 +343,26 @@ Exit criteria:
 
 ## Testing Strategy
 
-Every phase should add tests at the appropriate boundary:
+The full strategy and implementation tasks T01–T12 are specified in
+[`RULES_ENGINE_TEST_PLAN.md`](RULES_ENGINE_TEST_PLAN.md). M0 establishes CI and
+isolated orchestration; every later milestone adds its required scenarios. The
+full command is now implemented; the extended profile and later feature tests remain
+planned deliverables. See `tools/rules-tests/README.md` for prerequisites and artifacts.
+
+Required automated coverage includes:
 
 - Database routine integration tests.
 - Engine domain unit tests.
+- Language/schema/compiler validation and operation-contract tests.
+- Property/model-based tests, independent scenario oracles and JSON-only game variation.
 - API contract tests.
 - Persistence and transaction tests.
+- Concurrent submission, idempotency, interrupted execution and crash-recovery tests.
+- Seat projection, hidden-information and response authorization tests.
 - Replay tests.
 - WebApp smoke tests.
+- Headless cross-game self-play and mandatory generic-client browser acceptance.
+- Mutation, architectural, performance and migration/compatibility checks.
 - Cross-client compatibility tests once additional clients exist.
 
 Rules tests must cover accepted actions, rejected actions, state changes,
@@ -324,19 +376,21 @@ A feature is complete only when:
 - Its API contract exists.
 - Its reads use database functions.
 - Its writes use database procedures.
-- Its engine behaviour is covered by tests.
+- Its engine behaviour is covered by independent success, rejection and boundary
+  fixtures, plus recovery/privacy cases where applicable.
 - Its state changes are auditable where applicable.
-- Its UI handles loading, success, rejection and failure states.
-- Its migration works on a clean database.
+- Where a UI surface is delivered, it handles loading, success, rejection and failure
+  states using interpreter-derived contracts rather than duplicated rules.
+- Its migration works on clean and supported existing databases.
 - Its compatibility with existing definition revisions is understood.
+- The milestone's required suite and regression jobs pass in CI without silently
+  skipping tests or requiring manual fixture preparation.
 
 ## Immediate Work Queue
 
-1. Introduce component/module boundaries for `engine-core`, `engine-api` and
-   `webapp`.
-2. Define the first Armada movement scenario and curated forces.
-3. Add definition revision and publish modelling.
-4. Replace static WebApp JDBC access with Admin/API routine access.
-5. Implement the first authoritative action: deployment or movement.
-6. Add the board state and legal-action API.
-7. Connect the WebApp board to that API.
+1. Run hosted fast/full/mutation/performance CI on the committed revision.
+2. Preserve the local browser/CPU, recovery, privacy and replay acceptance gates.
+3. Expand catalogue scope through classified rule migrations and richer R21 authoring tools.
+
+M0–M7 implementation/local gates are delivered; hosted release qualification remains pending. Preserve the
+combined command: `mvn -B "-Prules-full,rules-mutation" clean verify`.

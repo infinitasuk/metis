@@ -1,0 +1,13 @@
+{
+  "session":"grid-demo","players":["alice","bob"],
+  "steps":[
+    {"command":"start"},
+    {"command":"respond","actor":"alice","choice":"A1"},
+    {"command":"respond","actor":"bob","choice":"C3"},
+    {"command":"act","actor":"alice","action":"guess","args":{"ownTarget":"alice","cell":"B1"}},
+    {"command":"act","actor":"bob","action":"guess","args":{"ownTarget":"bob","cell":"A2"}},
+    {"command":"act","actor":"alice","action":"guess","args":{"ownTarget":"alice","cell":"B1"},"expect":"ACTION_INELIGIBLE"},
+    {"command":"act","actor":"alice","action":"guess","args":{"ownTarget":"alice","cell":"C3"}}
+  ],
+  "expected":{"outcome":"victory","winners":["alice"],"round":2}
+}

@@ -81,4 +81,20 @@ class CpuBattleRunnerTest {
         assertEquals(List.of("squadron-a"), CpuBattleRunner.deploymentCandidates(definition, state, player)
                 .stream().map(UnitDefinition::code).toList());
     }
+
+    @Test
+    void honorsSuiteLoadoutProfiles() {
+        Player player = new Player(10, 1, "cpu", "rebel");
+        List<UnitDefinition> definitions = List.of(
+                new UnitDefinition("ship-a", "rebel", 100, 100, 1, 5, 1, 0, 0, "Ship A", "Ship"),
+                new UnitDefinition("squadron-a", "rebel", 100, 100, 1, 5, 1, 0, 0, "Squadron A", "Squadron"));
+        GameDefinition definition = new GameDefinition(1, "test", "Test", 1, "v1", 1, 2, 0, 2,
+                List.of("rebel"), definitions);
+        GameState state = new GameState(1, 1, "running", 0, "deployment", null, 0,
+                List.of(player), List.of(), new BoardState("standard", 1800, 900), List.of(),
+                Map.of("loadoutProfile", "squadron"));
+
+        assertEquals(List.of("squadron-a"), CpuBattleRunner.deploymentCandidates(definition, state, player)
+                .stream().map(UnitDefinition::code).toList());
+    }
 }

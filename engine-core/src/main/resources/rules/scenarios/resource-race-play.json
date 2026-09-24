@@ -1,0 +1,13 @@
+{
+  "session":"race-demo","players":["alice","bob"],
+  "steps":[
+    {"command":"start"},
+    {"command":"act","actor":"alice","action":"boost","args":{"counter":"alice"}},
+    {"command":"act","actor":"bob","action":"collect","args":{"counter":"bob"}},
+    {"command":"act","actor":"alice","action":"boost","args":{"counter":"alice"}},
+    {"command":"act","actor":"bob","action":"collect","args":{"counter":"bob"}},
+    {"command":"act","actor":"alice","action":"boost","args":{"counter":"alice"},"expect":"ACTION_INELIGIBLE"},
+    {"command":"act","actor":"alice","action":"collect","args":{"counter":"alice"}}
+  ],
+  "expected":{"outcome":"victory","winners":["alice"],"round":3}
+}

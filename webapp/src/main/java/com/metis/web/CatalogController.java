@@ -36,17 +36,19 @@ public class CatalogController {
     private final DefinitionRepository definitions;
     private final ObjectMapper objectMapper;
     private final AuthenticationContext authentication;
+    private final com.metis.engine.api.BattleViews views;
 
     public CatalogController(CatalogRepository catalog, BattleRepository battle,
                               BattleTemplateRepository templates, DefinitionRepository definitions,
                               ObjectMapper objectMapper,
-                              AuthenticationContext authentication) {
+                               AuthenticationContext authentication, com.metis.engine.api.BattleViews views) {
         this.catalog = catalog;
         this.battle = battle;
         this.templates = templates;
         this.definitions = definitions;
         this.objectMapper = objectMapper;
         this.authentication = authentication;
+        this.views = views;
     }
 
     @GetMapping("/")
@@ -70,6 +72,17 @@ public class CatalogController {
         model.addAttribute("games", games);
         model.addAttribute("fixtureGameId", games.isEmpty() ? null : games.get(0).gameId());
         return "games";
+    }
+
+    @GetMapping("/admin/cpu-suite")
+    public String cpuSuite(Model model) {
+        List<BattleRepository.BattleSession> sessions = battle.findSessions(null, null).stream()
+                .filter(session -> session.templateName() != null && session.templateName().startsWith("CPU SUITE /"))
+                .toList();
+        model.addAttribute("sessions", sessions);
+        model.addAttribute("suiteGameId", sessions.stream().map(BattleRepository.BattleSession::gameId)
+                .findFirst().orElseGet(() -> catalog.findGames().stream().findFirst().map(GameSummary::gameId).orElse(0L)));
+        return "cpu-suite";
     }
 
     @GetMapping("/admin/engine-logs")
@@ -99,8 +112,10 @@ public class CatalogController {
     }
 
     @GetMapping("/simulator/games/{gameId}")
-    public String simulatorGame(@PathVariable long gameId, Model model) {
+    public String simulatorGame(@PathVariable long gameId, Model model, HttpServletRequest request) {
+        authentication.require(request);
         GameSummary game = catalog.findGame(gameId).orElseThrow(this::notFound);
+        long definitionId = catalog.publishedDefinitionId(gameId);
         model.addAttribute("game", game);
         model.addAttribute("gameModes", catalog.findGameModes(gameId));
         model.addAttribute("scenarios", catalog.findScenarios(gameId));
@@ -108,11 +123,14 @@ public class CatalogController {
         model.addAttribute("factions", catalog.findFactions(gameId));
         model.addAttribute("boards", catalog.findBoards(gameId));
         model.addAttribute("templates", templates.findTemplates(gameId));
+        model.addAttribute("definitionId", definitionId);
+        model.addAttribute("unitVariants", catalog.findUnitVariants(gameId, definitionId));
+        model.addAttribute("seatUsers", authentication.users().findActiveUsers());
         return "simulator-game";
     }
 
     @GetMapping("/simulator/sessions/{sessionId}")
-    public String simulatorSession(@PathVariable long sessionId, Model model) {
+    public String simulatorSession(@PathVariable long sessionId, Model model, HttpServletRequest request) {
         BattleSessionDetail session = battle.findSession(sessionId).orElseThrow(this::notFound);
         long definitionId = session.gameVersionId() == null
                 ? catalog.publishedDefinitionId(session.gameId()) : session.gameVersionId();
@@ -127,7 +145,10 @@ public class CatalogController {
         model.addAttribute("users", authentication.users().findActiveUsers());
         model.addAttribute("engineState", engineState(session));
         model.addAttribute("enginePhase", enginePhase(session));
-        model.addAttribute("engineDefinition", definitions.findEngineDefinition(session.gameVersionId()).orElse(null));
+        com.metis.engine.core.GameDefinition captured = null;
+        try { captured = definitions.findSessionDefinition(sessionId, session.gameVersionId()).orElse(null); }
+        catch (IllegalStateException ignored) { /* Incompatible history remains viewable. */ }
+        model.addAttribute("engineDefinition", captured != null ? captured : definitions.findEngineDefinition(session.gameVersionId()).orElse(null));
         model.addAttribute("factions", catalog.findFactions(session.gameId(), session.gameVersionId()));
         model.addAttribute("scenarioName", catalog.findScenarios(session.gameId(), definitionId).stream()
                 .filter(scenario -> session.scenarioId() != null && scenario.scenarioId() == session.scenarioId())
@@ -135,6 +156,11 @@ public class CatalogController {
         model.addAttribute("modeName", catalog.findGameModes(session.gameId(), definitionId).stream()
                 .filter(mode -> session.gameModeId() != null && mode.gameModeId() == session.gameModeId())
                 .map(CatalogRepository.GameMode::name).findFirst().orElse("Standard"));
+        // The server-rendered board/inline JS must use the same projection as APIs.
+        var user=authentication.require(request);
+        for(String key:List.of("battleSession","players","units","fleets","boards","turns","events","engineState")) {
+            model.addAttribute(key,views.project(model.getAttribute(key),sessionId,user));
+        }
         return "simulator-session";
     }
 

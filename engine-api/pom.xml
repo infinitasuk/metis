@@ -13,6 +13,19 @@
     <dependencies>
         <dependency>
             <groupId>com.metis</groupId>
+            <artifactId>metis-database</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.metis</groupId>
             <artifactId>metis-engine-core</artifactId>
             <version>${project.version}</version>
         </dependency>

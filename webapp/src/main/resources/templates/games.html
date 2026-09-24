@@ -23,11 +23,14 @@
         <div>
             <p class="eyebrow">TEST DATA</p>
             <h2>Repeatable test battles</h2>
-            <p class="muted">Keep the ten CPU-versus-CPU template battles and create any that are missing.</p>
+            <p class="muted">Keep the ten regression battles, or load the varied CPU suite for faction and unit comparisons.</p>
         </div>
         <div class="fixture-action">
             <button class="button" id="load-test-fixtures" type="button"
                     th:attr="data-game-id=${fixtureGameId}">Load 10 test templates <span>-&gt;</span></button>
+            <button class="button secondary-button" id="load-cpu-suite" type="button"
+                    th:attr="data-game-id=${fixtureGameId}">Load CPU suite <span>-&gt;</span></button>
+            <a class="text-link fixture-monitor-link" href="/admin/cpu-suite">Monitor CPU suite -&gt;</a>
             <p class="form-message" id="fixture-message" aria-live="polite"></p>
         </div>
     </section>
@@ -49,26 +52,29 @@
 <footer th:replace="~{fragments :: footer}"></footer>
 <script>
     const fixtureButton = document.querySelector('#load-test-fixtures');
+    const suiteButton = document.querySelector('#load-cpu-suite');
     const fixtureMessage = document.querySelector('#fixture-message');
 
-    fixtureButton?.addEventListener('click', async () => {
-        fixtureButton.disabled = true;
-        fixtureMessage.textContent = 'Loading test games...';
+    const loadFixtures = async (button, endpoint, label) => {
+        button.disabled = true;
+        fixtureMessage.textContent = label;
         try {
-            const response = await fetch(`/api/v1/test-fixtures/games/${fixtureButton.dataset.gameId}`, {
+            const response = await fetch(endpoint + button.dataset.gameId, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: '{}'
             });
             if (!response.ok) throw new Error(`Request failed (${response.status})`);
             const result = await response.json();
-            fixtureMessage.textContent = `${result.games.length} test games loaded.`;
+            fixtureMessage.textContent = `${result.games.length} battles loaded.`;
         } catch (error) {
             fixtureMessage.textContent = `Could not load test games: ${error.message}`;
         } finally {
-            fixtureButton.disabled = false;
+            button.disabled = false;
         }
-    });
+    };
+    fixtureButton?.addEventListener('click', () => loadFixtures(fixtureButton, '/api/v1/test-fixtures/games/', 'Loading regression games...'));
+    suiteButton?.addEventListener('click', () => loadFixtures(suiteButton, '/api/v1/test-fixtures/suites/', 'Loading CPU suite...'));
 </script>
 </body>
 </html>

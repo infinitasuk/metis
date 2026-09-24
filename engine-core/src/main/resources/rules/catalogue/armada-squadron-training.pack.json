@@ -1,0 +1,9 @@
+{
+ "pack":"armada-squadron-training-v1","game":"Star Wars: Armada","definition":"armada-squadron-training","title":"Squadron training","classification":"Squadron",
+ "units":["TIE Fighter Squadron","X-Wing Squadron"],
+ "scope":{"supported":["Two generic squadrons, one per seat","Captured catalogue hull, speed, base radius and anti-squadron pool","Move or attack per activation; engaged movement restriction","Blue symbolic dice; hit-only squadron damage; elimination and explicit round cap"],"inapplicable":["Swarm has no second friendly squadron","Escort has no alternative friendly target","Bomber has no ship target"],"unsupported":["Ship combat and manoeuvre tools","Aces, upgrades and multi-squadron keyword interactions","Official ruler calibration and full fleet formats"],"geometry":"Development-unit geometry: catalogue speed times 100, edge range 100"},
+ "modes":[
+  {"code":"close-engagement","name":"Close engagement","overrides":[{"op":"replace","path":"/state/startX/initial","value":[300,400]}]},
+  {"code":"short-battle","name":"Short battle","overrides":[{"op":"replace","path":"/state/roundLimit/initial","value":3}]}
+ ]
+}

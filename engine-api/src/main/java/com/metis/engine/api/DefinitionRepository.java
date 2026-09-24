@@ -49,14 +49,39 @@ public class DefinitionRepository {
     }
 
     public Optional<com.metis.engine.core.GameDefinition> findEngineDefinition(long definitionId) {
+        var turnStructure = findTurnStructure(definitionId);
         return jdbc.query("SELECT * FROM game_engine.fn_engine_definition_get(?)", rs -> rs.next()
                 ? Optional.of(new com.metis.engine.core.GameDefinition(rs.getLong("game_id"), rs.getString("game_code"),
                         rs.getString("game_name"), rs.getLong("definition_version_id"),
                         rs.getString("definition_version"), rs.getInt("minimum_players"),
                         rs.getInt("maximum_players"), rs.getInt("minimum_cpu"),
                         rs.getInt("maximum_cpu"), parseFactionCodes(rs.getString("faction_codes")),
-                        parseUnitDefinitions(rs.getString("unit_definitions"))))
+                        parseUnitDefinitions(rs.getString("unit_definitions")), turnStructure))
                 : Optional.empty(), definitionId);
+    }
+
+    public com.metis.engine.core.TurnStructure findTurnStructure(long definitionId) {
+        String json = jdbc.queryForObject("SELECT game_engine.fn_definition_turn_structure_get(?)::text", String.class, definitionId);
+        try { return json == null ? null : objectMapper.readValue(json, com.metis.engine.core.TurnStructure.class); }
+        catch (com.fasterxml.jackson.core.JsonProcessingException error) { throw new IllegalStateException("Invalid turn structure", error); }
+    }
+
+    public void updateTurnStructure(long definitionId, com.metis.engine.core.TurnStructure structure) {
+        try { jdbc.update("CALL game_engine.sp_definition_turn_structure_update(?,?)", definitionId, objectMapper.writeValueAsString(structure)); }
+        catch (com.fasterxml.jackson.core.JsonProcessingException error) { throw new IllegalArgumentException("Invalid turn structure", error); }
+    }
+
+    public void captureSessionDefinition(long sessionId, com.metis.engine.core.GameDefinition definition) {
+        DefinitionSnapshot snapshot = DefinitionSnapshot.capture(objectMapper, definition);
+        jdbc.update("CALL game_instance.sp_session_definition_snapshot_create(?,?,?,?,?)", sessionId,
+                snapshot.schemaVersion(), snapshot.rulesVersion(), snapshot.json(), snapshot.checksum());
+    }
+
+    public Optional<com.metis.engine.core.GameDefinition> findSessionDefinition(long sessionId, long expectedRevision) {
+        return jdbc.query("SELECT * FROM game_instance.fn_session_definition_snapshot_get(?)", rs -> rs.next()
+                ? Optional.of(new DefinitionSnapshot(rs.getInt("snapshot_schema_version"), rs.getString("rules_version"),
+                    rs.getString("definition_json"), rs.getString("checksum")).resolve(objectMapper, expectedRevision))
+                : Optional.empty(), sessionId);
     }
 
     public List<Faction> findFactions(long definitionId) {
@@ -64,6 +89,23 @@ public class DefinitionRepository {
                         + "WHERE game_version_id = ? ORDER BY faction_id",
                 (rs, rowNum) -> new Faction(rs.getLong("faction_id"), rs.getString("faction_name")),
                 definitionId);
+    }
+
+    public JsonNode findProfileMapping(long definitionId) {
+        String mapping = jdbc.queryForObject("SELECT game_engine.fn_definition_profile_mapping_get(?)::text",
+                String.class, definitionId);
+        try {
+            return objectMapper.readTree(mapping == null ? "{}" : mapping);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException("Definition profile mapping is invalid", exception);
+        }
+    }
+
+    public void updateProfileMapping(long definitionId, JsonNode mapping) {
+        if (mapping == null || !mapping.isObject()) {
+            throw new IllegalArgumentException("Profile mapping must be a JSON object");
+        }
+        jdbc.update("CALL game_engine.sp_definition_profile_mapping_update(?,?)", definitionId, mapping.toString());
     }
 
     private List<String> parseFactionCodes(String json) {

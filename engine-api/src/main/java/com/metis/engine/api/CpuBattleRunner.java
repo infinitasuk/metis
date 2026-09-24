@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
-/** Advances sessions whose players are all CPU-controlled at a human-readable pace. */
+/** Advances CPU-controlled seats at a human-readable pace. */
 @Component
 public class CpuBattleRunner {
     private static final int UNITS_PER_PLAYER = 2;
@@ -72,14 +72,46 @@ public class CpuBattleRunner {
             return;
         }
         GameState state = readState(session.state());
-        if (state.players().isEmpty() || state.players().stream().anyMatch(player -> !"cpu".equals(player.kind()))) {
+        if (state.players().stream().noneMatch(player -> "cpu".equals(player.kind()))) {
             return;
         }
-        GameDefinition definition = definitions.findEngineDefinition(session.gameVersionId()).orElse(null);
+        GameDefinition definition = definitions.findSessionDefinition(sessionId, session.gameVersionId()).orElse(null);
         if (definition == null) {
             return;
         }
-        Action action = chooseAction(definition, state);
+        Action action;
+        var pending = com.metis.engine.core.ResponseWindows.pending(state);
+        if (!pending.isEmpty()) {
+            long responder = ((Number) pending.get("responderPlayerId")).longValue();
+            if (state.players().stream().noneMatch(player -> player.playerId() == responder && "cpu".equals(player.kind()))) return;
+            action = chooseResponse(engine.legalActions(definition, state))
+                    .map(item -> new Action(item.type(), item.actorPlayerId(), item.parameters())).orElse(null);
+        } else if (definition.turnStructure() != null && definition.turnStructure().phase(state.phaseCode()) != null
+                && definition.turnStructure().phase(state.phaseCode()).mode() == com.metis.engine.core.TurnStructure.Mode.MANUAL) {
+            action = null;
+            var phase = definition.turnStructure().phase(state.phaseCode());
+            for (Player player : state.players()) {
+                if (!"cpu".equals(player.kind())) continue;
+                var view = new com.metis.engine.core.StateProjection(definition.turnStructure().visibility(), java.util.Set.of(player.playerId()), state.units()).state(state);
+                var plan = new com.metis.engine.core.OrderEngine(definition).planningActions(view).stream()
+                        .filter(item -> item.actorPlayerId() == player.playerId() && ((Number)item.parameters().get("needed")).intValue() > 0).findFirst();
+                if (plan.isPresent()) { action = CpuOrders.plan(definition, view, plan.get()); break; }
+                for (var input : phase.privateInputs()) {
+                    if (!com.metis.engine.core.PrivatePlanning.choices(view, player.playerId()).containsKey(input.code())) {
+                        action = new Action("submit_private_choice", player.playerId(), Map.of("inputCode", input.code(), "value", input.choices().getFirst()));
+                        break;
+                    }
+                }
+                if (action != null) break;
+            }
+            if (action == null && engine.legalActions(definition, state).stream().anyMatch(item -> item.type().equals("advance_phase"))) action = new Action("advance_phase", 0, Map.of());
+        } else {
+            if (state.activePlayerId() != null && state.players().stream().noneMatch(player -> player.playerId() == state.activePlayerId() && "cpu".equals(player.kind()))) return;
+            GameState strategyView = state;
+            if (definition.turnStructure() != null && state.activePlayerId() != null) strategyView = new com.metis.engine.core.StateProjection(
+                    definition.turnStructure().visibility(), java.util.Set.of(state.activePlayerId()), state.units()).state(state);
+            action = chooseAction(definition, strategyView);
+        }
         if (action == null) {
             return;
         }
@@ -88,6 +120,20 @@ public class CpuBattleRunner {
             log.warn("CPU action {} rejected for session {}: {}", action.type(), sessionId, result.message());
             appendCpuLog(sessionId, action, "WARN", "ACTION_REJECTED", result.message());
             if ("move_unit".equals(action.type())) {
+                if (definition.turnStructure() != null && action.parameters().get("unitId") instanceof Number id) {
+                    var unit = state.units().stream().filter(item -> item.unitId() == id.longValue()).findFirst().orElse(null);
+                     var profile = unit == null ? null : profile(definition, unit.unitCode());
+                     if (unit != null && (new com.metis.engine.core.OrderEngine(definition).activation(state, unit) || com.metis.engine.core.OrderEngine.activeSupport(state, unit.unitId()))) {
+                         persistAcceptedAction(sessionId, state, holdPosition(unit));
+                         return;
+                     }
+                    var stopped = profile == null ? null : profile.maneuverProfile(0);
+                    if (stopped != null) {
+                        persistAcceptedAction(sessionId, state, new Action("move_unit", state.activePlayerId(),
+                                Map.of("unitId", unit.unitId(), "speed", 0, "yaw", stopped.maximumYawClicks().stream().map(value -> 0).toList())));
+                        return;
+                    }
+                }
                 persistAcceptedAction(sessionId, state, new Action("end_turn", state.activePlayerId(), Map.of()));
             }
             return;
@@ -100,7 +146,7 @@ public class CpuBattleRunner {
     }
 
     private void persistAcceptedAction(long sessionId, GameState state, Action action) {
-        ActionResult result = engine.applyAction(definitions.findEngineDefinition(state.definitionVersionId()).orElseThrow(), state, action);
+        ActionResult result = engine.applyAction(definitions.findSessionDefinition(sessionId, state.definitionVersionId()).orElseThrow(), state, action);
         if (result.accepted()) {
             persistAcceptedAction(sessionId, state, action, result.resultingState());
         }
@@ -118,7 +164,7 @@ public class CpuBattleRunner {
             context.put("outcome", outcome);
             context.put("actionType", action.type());
             context.put("actorPlayerId", action.actorPlayerId());
-            context.put("parameters", action.parameters());
+            // Private decisions and response parameters stay out of diagnostics.
             battle.appendEngineLog(sessionId, level, "CPU", message,
                     objectMapper.writeValueAsString(context));
         } catch (JsonProcessingException exception) {
@@ -126,18 +172,65 @@ public class CpuBattleRunner {
         }
     }
 
-    private Action chooseAction(GameDefinition definition, GameState state) {
+    static java.util.Optional<LegalAction> chooseResponse(List<LegalAction> actions) {
+        return actions.stream().filter(action -> "respond".equals(action.type())
+                        && String.valueOf(action.parameters().get("choice")).startsWith("resource:"))
+                .sorted(Comparator.comparing(action -> String.valueOf(action.parameters().get("choice"))))
+                .findFirst().or(() -> actions.stream().filter(action -> "respond".equals(action.type())
+                        && "decline".equals(action.parameters().get("choice"))).findFirst());
+    }
+
+    Action chooseAction(GameDefinition definition, GameState state) {
+        if (definition.turnStructure() != null && !"deployment".equals(state.phaseCode())) {
+            var legal = engine.legalActions(definition, state);
+            var phase = definition.turnStructure().phase(state.phaseCode());
+            if (phase == null) return null;
+            if (phase.mode() == com.metis.engine.core.TurnStructure.Mode.MANUAL) {
+                return new Action("advance_phase", 0, Map.of());
+            }
+            if (state.players().stream().noneMatch(player -> java.util.Objects.equals(state.activePlayerId(), player.playerId()) && "cpu".equals(player.kind()))) return null;
+            var context = com.metis.engine.core.ActivationContext.from(state);
+            for (String type : List.of("activate_support_unit", "end_order_grant")) {
+                var support = legal.stream().filter(action -> action.type().equals(type)).findFirst();
+                if (support.isPresent()) return new Action(type, support.get().actorPlayerId(), support.get().parameters());
+            }
+            if (context.unitId() == null) return legal.stream().filter(action -> "activate_unit".equals(action.type()))
+                    .findFirst().map(action -> new Action(action.type(), action.actorPlayerId(), action.parameters())).orElse(null);
+            Action order = CpuOrders.resolve(definition, state, legal);
+            if (order != null) return order;
+            if (!context.uses().isEmpty() && legal.stream().anyMatch(action -> "end_activation".equals(action.type()))) {
+                return new Action("end_activation", state.activePlayerId(), Map.of());
+            }
+            var attack = legal.stream().filter(action -> "attack_unit".equals(action.type())).findFirst();
+            if (attack.isPresent()) return new Action("attack_unit", state.activePlayerId(), attack.get().parameters());
+            if (legal.stream().anyMatch(action -> "move_unit".equals(action.type()))) {
+                var moveId = ((Number) legal.stream().filter(action -> action.type().equals("move_unit")).findFirst().orElseThrow().parameters().get("unitId")).longValue();
+                var unit = state.units().stream().filter(item -> item.unitId() == moveId).findFirst().orElse(null);
+                Action move = unit == null ? null : moveAction(definition, state, unit);
+                if (move != null) return move;
+            }
+            if (legal.stream().anyMatch(action -> "end_support_activation".equals(action.type()))) return new Action("end_support_activation",state.activePlayerId(),Map.of());
+            return legal.stream().anyMatch(action -> "end_activation".equals(action.type()))
+                    ? new Action("end_activation", state.activePlayerId(), Map.of()) : null;
+        }
         if ("deployment".equals(state.phaseCode())) {
-            if (state.players().stream().anyMatch(player -> !deploymentCandidates(definition, state, player).isEmpty())) {
+            if (state.players().stream()
+                    .filter(player -> "cpu".equals(player.kind()))
+                    .anyMatch(player -> !deploymentCandidates(definition, state, player).isEmpty())) {
                 return deploymentAction(definition, state);
             }
-            return new Action("advance_phase", 0, Map.of());
+            return state.units().isEmpty() ? null : new Action("advance_phase", 0, Map.of());
         }
         if ("command".equals(state.phaseCode()) || "status".equals(state.phaseCode())) {
             return new Action("advance_phase", 0, Map.of());
         }
         if ((!"ship".equals(state.phaseCode()) && !"squadron".equals(state.phaseCode()))
                 || state.activePlayerId() == null) {
+            return null;
+        }
+        if (state.players().stream()
+                .filter(player -> player.playerId() == state.activePlayerId())
+                .noneMatch(player -> "cpu".equals(player.kind()))) {
             return null;
         }
         Action attack = attackAction(definition, state);
@@ -160,6 +253,7 @@ public class CpuBattleRunner {
 
     private Action deploymentAction(GameDefinition definition, GameState state) {
         List<Player> players = state.players().stream()
+                .filter(player -> "cpu".equals(player.kind()))
                 .sorted(Comparator.comparingInt(Player::seatNumber)).toList();
         Player player = players.stream()
                 .filter(item -> !deploymentCandidates(definition, state, item).isEmpty())
@@ -174,7 +268,7 @@ public class CpuBattleRunner {
         UnitDefinition profile = chooseDeploymentProfile(profiles, state.units(), player.playerId(),
                 bound -> ThreadLocalRandom.current().nextInt(bound));
         int playerUnitCount = (int) state.units().stream().filter(unit -> unit.playerId() == player.playerId()).count();
-        int playerIndex = players.indexOf(player);
+        int playerIndex = Math.max(0, player.seatNumber() - 1);
         double x = deploymentX(state.board(), playerIndex, playerUnitCount);
         double y = deploymentY(state.board(), playerUnitCount);
         long unitId = state.units().stream().mapToLong(UnitState::unitId).max().orElse(0) + 1;
@@ -190,6 +284,16 @@ public class CpuBattleRunner {
         List<UnitDefinition> profiles = definition.unitDefinitions().stream()
                 .filter(unit -> unit.factionCode().equals(player.factionCode())).toList();
         int playerUnitCount = (int) state.units().stream().filter(unit -> unit.playerId() == player.playerId()).count();
+        Object loadoutValue = state.values().get("loadoutProfile");
+        String loadout = loadoutValue == null ? "" : loadoutValue.toString();
+        if ("capital".equals(loadout)) {
+            profiles = profiles.stream().filter(unit -> "ship".equalsIgnoreCase(unit.classification())).toList();
+        } else if ("squadron".equals(loadout)) {
+            profiles = profiles.stream().filter(unit -> "squadron".equalsIgnoreCase(unit.classification())).toList();
+        } else if ("mixed".equals(loadout)) {
+            String classification = playerUnitCount == 0 ? "ship" : "squadron";
+            profiles = profiles.stream().filter(unit -> classification.equalsIgnoreCase(unit.classification())).toList();
+        }
         int maximumShips = integerOption(state.values(), "maximumShipsPerPlayer", -1);
         int maximumSquadrons = integerOption(state.values(), "maximumSquadronsPerPlayer", -1);
         if (maximumShips < 0 && maximumSquadrons < 0) {
@@ -268,14 +372,15 @@ public class CpuBattleRunner {
         if (profile == null) {
             return null;
         }
-        int speed = unit.currentSpeed() > 0 ? unit.currentSpeed() : Math.min(1, profile.maximumSpeed());
+        boolean controlled = new com.metis.engine.core.OrderEngine(definition).activation(state, unit);
+        int speed = controlled ? unit.currentSpeed() : unit.currentSpeed() > 0 ? unit.currentSpeed() : Math.min(1, profile.maximumSpeed());
         ManeuverProfile maneuver = profile.maneuverProfile(speed);
-        if (maneuver == null || speed <= 0) return null;
+        if (maneuver == null || speed <= 0) return holdPosition(unit);
         UnitState target = state.units().stream()
                 .filter(candidate -> candidate.playerId() != unit.playerId() && candidate.hullPoints() > 0)
                 .min(Comparator.comparingDouble(candidate -> distance(unit, candidate))).orElse(null);
         if (target == null) {
-            return null;
+            return holdPosition(unit);
         }
         double distance = distance(unit, target);
         if (distance == 0) {
@@ -289,13 +394,18 @@ public class CpuBattleRunner {
         List<Integer> yaw = new java.util.ArrayList<>();
         double remaining = remainingTurn;
         for (int index = 0; index < maneuver.maximumYawClicks().size(); index++) {
-            int clicks = direction * Math.min(maneuver.maximumYawClicks().get(index),
+            int maximum = controlled ? com.metis.engine.core.OrderEngine.yawLimit(state, unit.unitId(), speed, index, maneuver.maximumYawClicks().get(index)) : maneuver.maximumYawClicks().get(index);
+            int clicks = direction * Math.min(maximum,
                     (int) Math.round(Math.abs(remaining) / MovementCalculator.YAW_CLICK_DEGREES));
             yaw.add(clicks);
             remaining -= clicks * MovementCalculator.YAW_CLICK_DEGREES;
         }
         return new Action("move_unit", unit.playerId(), Map.of(
                 "unitId", unit.unitId(), "speed", speed, "yaw", yaw));
+    }
+
+    private static Action holdPosition(UnitState unit) {
+        return new Action("move_unit", unit.playerId(), Map.of("unitId",unit.unitId(),"positionX",unit.positionX(),"positionY",unit.positionY(),"facing",unit.facing()));
     }
 
     static double approachY(BoardState board, UnitState target, long unitId) {

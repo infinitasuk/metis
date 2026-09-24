@@ -57,6 +57,18 @@ class WebAuthInterceptorTest {
         assertEquals(403, response.getStatus());
     }
 
+    @Test
+    void assignedPlayersCanSubmitActionsButAdminRoleAloneCannot() throws Exception {
+        var authentication=new AuthenticationContext(new FakeUsers()); var battle=new FakeBattle();
+        battle.assigned=true;
+        var player=new MockHttpServletRequest("POST","/api/v1/sessions/42/actions"); authentication.login(player,2);
+        assertTrue(new WebAuthInterceptor(authentication,battle).preHandle(player,new MockHttpServletResponse(),new Object()));
+        var admin=new MockHttpServletRequest("POST","/api/v1/sessions/42/actions"); authentication.login(admin,5);
+        var denied=new MockHttpServletResponse();
+        assertFalse(new WebAuthInterceptor(authentication,battle).preHandle(admin,denied,new Object()));
+        assertEquals(403,denied.getStatus());
+    }
+
     private static final class FakeUsers extends UserRepository {
         private FakeUsers() {
             super(null);
@@ -72,9 +84,13 @@ class WebAuthInterceptorTest {
     }
 
     private static final class FakeBattle extends BattleRepository {
+        private boolean assigned;
         private FakeBattle() {
             super(null);
         }
+
+        @Override
+        public java.util.Set<Long> controlledPlayers(long sessionId, long userId) { return assigned && userId==2 ? java.util.Set.of(200L) : java.util.Set.of(); }
 
         @Override
         public boolean canViewSession(long sessionId, MetisUser user) {

@@ -16,13 +16,13 @@
         <p class="lede">Work through the setup, then start the battle when everything is ready.</p>
     </section>
 
-    <form class="wizard" id="setup-form"
-          th:attr="data-game-id=${game.gameId},data-min-players=${game.minimumNumberOfPlayers},data-max-players=${game.maximumNumberOfPlayers}">
+        <form class="wizard" id="setup-form"
+          th:attr="data-game-id=${game.gameId},data-definition-id=${definitionId},data-min-players=${game.minimumNumberOfPlayers},data-max-players=${game.maximumNumberOfPlayers}">
         <nav class="wizard-tabs" aria-label="Game setup steps">
             <button class="wizard-tab active" type="button" data-step="0"><span>01</span>Match</button>
             <button class="wizard-tab" type="button" data-step="1"><span>02</span>Commanders</button>
-            <button class="wizard-tab" type="button" data-step="2"><span>03</span>Fleets</button>
-            <button class="wizard-tab" type="button" data-step="3"><span>04</span>Battlefield</button>
+            <button class="wizard-tab" type="button" data-step="2"><span>03</span>Battlefield</button>
+            <button class="wizard-tab" type="button" data-step="3"><span>04</span>Fleets</button>
             <button class="wizard-tab" type="button" data-step="4"><span>05</span>Review</button>
         </nav>
 
@@ -37,7 +37,7 @@
                 <label>Visibility<select id="visibility"><option value="public">Public</option><option value="private">Private</option></select></label>
                 <label>Game mode<select id="game-mode" required><option value="">Choose a mode</option><option th:each="mode : ${gameModes}" th:value="${mode.gameModeId}" th:attr="data-config=${mode.configuration},data-description=${mode.description}" th:text="${mode.name}"></option></select></label>
                 <label>Scenario<select id="scenario" required><option value="">Choose a scenario</option><option th:each="scenario : ${scenarios}" th:value="${scenario.scenarioId}" th:text="${scenario.name}"></option></select></label>
-                <label>Fleet format<select id="fleet-format" required><option value="">Choose a format</option><option th:each="format : ${fleetFormats}" th:value="${format.fleetFormatId}" th:attr="data-mode-id=${format.gameModeId},data-config=${format.configuration}" th:text="|${format.name} / ${format.pointsLimit} points|"></option></select></label>
+                <label>Fleet format<select id="fleet-format" required><option value="">Choose a format</option><option th:each="format : ${fleetFormats}" th:value="${format.fleetFormatId}" th:attr="data-mode-id=${format.gameModeId},data-config=${format.configuration},data-points-limit=${format.pointsLimit}" th:text="|${format.name} / ${format.pointsLimit} points|"></option></select></label>
             </div>
             <p class="form-message" id="template-message" aria-live="polite"></p>
             <div class="wizard-help"><strong id="game-mode-label">Start with the basics.</strong><span id="game-mode-description">These settings define the match and can be changed any time before the battle starts.</span></div>
@@ -55,21 +55,8 @@
 
         <section class="wizard-step" data-step-panel="2" hidden>
             <div class="wizard-card-heading">
-                <div><p class="eyebrow">FLEETS</p><h2>Prepare the forces</h2></div>
-                <span class="step-count">3 / 5</span>
-            </div>
-            <div class="wizard-summary-card">
-                <span class="card-kicker">SELECTED FORMAT</span>
-                <h3 id="fleet-format-summary">Choose a fleet format in Match</h3>
-                <p>Give each commander a fleet name and starting points. Units can be deployed once the battle begins.</p>
-            </div>
-            <div class="setup-card-list" id="fleet-list"></div>
-        </section>
-
-        <section class="wizard-step" data-step-panel="3" hidden>
-            <div class="wizard-card-heading">
                 <div><p class="eyebrow">BATTLEFIELD</p><h2>Choose the arena</h2></div>
-                <span class="step-count">4 / 5</span>
+                <span class="step-count">3 / 5</span>
             </div>
             <div class="wizard-form-grid battlefield-form">
                 <label>Board<select id="board-code" required><option value="">Choose a board</option><option th:each="board : ${boards}" th:value="${board.code}" th:attr="data-board-id=${board.boardId},data-width=${board.width},data-height=${board.height}" th:text="${board.name}"></option></select></label>
@@ -78,6 +65,19 @@
                  <label>Distance per speed (mm)<input id="movement-limit" type="number" min="1" value="100" required></label>
             </div>
              <div class="wizard-help"><strong>Set the tactical space.</strong><span>CPU fleets deploy from opposite long edges and use the movement limit to navigate into the engagement.</span></div>
+        </section>
+
+        <section class="wizard-step" data-step-panel="3" hidden>
+            <div class="wizard-card-heading">
+                <div><p class="eyebrow">FLEETS</p><h2>Prepare the forces</h2></div>
+                <span class="step-count">4 / 5</span>
+            </div>
+                <div class="wizard-summary-card fleet-creator-intro">
+                 <span class="card-kicker">SELECTED FORMAT / BOARD</span>
+                 <h3 id="fleet-format-summary">Choose a fleet format in Match</h3>
+                 <p>Build your roster on the selected board. The hashed area marks where the opposition will deploy.</p>
+                </div>
+            <div class="setup-card-list" id="fleet-list"></div>
         </section>
 
         <section class="wizard-step" data-step-panel="4" hidden>
@@ -97,6 +97,12 @@
     </form>
 
     <select id="faction-options" hidden><option value="">Choose faction</option><option th:each="faction : ${factions}" th:value="${faction.factionId}" th:text="${faction.factionName}"></option></select>
+    <select id="seat-user-options" hidden th:attr="data-current-user=${currentUser.userId}"><option th:each="user : ${seatUsers}" th:value="${user.userId}" th:text="${user.displayName}"></option></select>
+    <select id="unit-variant-options" hidden>
+        <option th:each="variant : ${unitVariants}" th:value="${variant.variantId}"
+                th:attr="data-faction-id=${variant.factionId},data-classification=${variant.classification},data-unit-type=${variant.unitTypeName},data-unit-name=${variant.name},data-points=${variant.pointsCost}"
+                th:text="|${variant.name} (${variant.pointsCost} pts)|"></option>
+    </select>
 </main>
 <footer th:replace="~{fragments :: footer}"></footer>
 <script>
@@ -108,14 +114,57 @@
     const playerList = document.querySelector('#player-list');
     const fleetList = document.querySelector('#fleet-list');
     const factionOptions = document.querySelector('#faction-options').innerHTML;
+    const seatUserOptions = document.querySelector('#seat-user-options').innerHTML;
+    const currentUserId = document.querySelector('#seat-user-options').dataset.currentUser;
+    const variantOptions = [...document.querySelector('#unit-variant-options').options].map(option => ({
+        id: option.value, name: option.textContent, unitName: option.dataset.unitName, factionId: option.dataset.factionId,
+        classification: option.dataset.classification, unitTypeName: option.dataset.unitType,
+        pointsCost: Number(option.dataset.points) || 0
+    }));
+    const variantById = new Map(variantOptions.map(option => [option.id, option]));
     const minPlayers = Number(setupForm.dataset.minPlayers);
     const maxPlayers = Number(setupForm.dataset.maxPlayers);
+    const definitionId = Number(setupForm.dataset.definitionId);
     let currentStep = 0;
     let playerNumber = 0;
+    let selectedTemplateOptions = {};
+    const fleetState = new Map();
+    const presetsByFaction = new Map();
 
     const field = id => document.querySelector(id);
     const value = id => field(id).value;
     const escapeHtml = text => String(text).replace(/[&<>'"]/g, character => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'}[character]));
+    const selectedBoard = () => {
+        const option = field('#board-code').selectedOptions[0];
+        return {
+            code: option?.value || 'BOARD',
+            width: Number(field('#board-width').value) || Number(option?.dataset.width) || 1800,
+            height: Number(field('#board-height').value) || Number(option?.dataset.height) || 900
+        };
+    };
+    const deploymentGeometry = board => ({
+        edgeX: board.width * (120 / 1800),
+        depth: board.width * (600 / 1800),
+        edgeY: board.height * (80 / 900),
+        verticalSpan: board.height * (740 / 900)
+    });
+    const fleetScreenPosition = (board, seatNumber, layoutX, layoutY) => {
+        const geometry = deploymentGeometry(board);
+        const x = geometry.edgeX + geometry.depth * (layoutX / 100);
+        const boardX = seatNumber % 2 === 1 ? x : board.width - x;
+        const boardY = geometry.edgeY + geometry.verticalSpan * (layoutY / 100);
+        return { left: (boardX / board.width) * 100, bottom: (boardY / board.height) * 100 };
+    };
+    const fleetLayoutPosition = (board, seatNumber, clientX, clientY, rect) => {
+        const geometry = deploymentGeometry(board);
+        const boardX = ((clientX - rect.left) / rect.width) * board.width;
+        const boardY = ((rect.bottom - clientY) / rect.height) * board.height;
+        const localX = seatNumber % 2 === 1 ? boardX : board.width - boardX;
+        return {
+            layoutX: Math.max(0, Math.min(100, ((localX - geometry.edgeX) / geometry.depth) * 100)),
+            layoutY: Math.max(0, Math.min(100, ((boardY - geometry.edgeY) / geometry.verticalSpan) * 100))
+        };
+    };
     const selectedModeConfig = () => {
         try { return JSON.parse(field('#game-mode').selectedOptions[0]?.dataset.config || '{}'); }
         catch (error) { return {}; }
@@ -144,7 +193,8 @@
         card.className = 'setup-card player-card';
         card.dataset.playerNumber = playerNumber;
         card.innerHTML = `<div class="setup-card-heading"><div><span class="card-kicker">SEAT ${playerNumber}</span><h3>Commander ${playerNumber}</h3></div><button class="text-button remove-player" type="button">Remove</button></div>
-            <div class="wizard-form-grid"><label>Display name<input data-field="name" placeholder="Player name" required></label><label>Type<select data-field="kind"><option value="human">Human</option><option value="cpu">CPU</option></select></label><label>Faction<select data-field="faction" required>${factionOptions}</select></label></div>`;
+            <div class="wizard-form-grid"><label>Display name<input data-field="name" placeholder="Player name" required></label><label>Type<select data-field="kind"><option value="human">Human</option><option value="cpu">CPU</option></select></label><label>Controlled by<select data-field="user">${seatUserOptions}</select></label><label>Faction<select data-field="faction" required>${factionOptions}</select></label></div>`;
+        card.querySelector('[data-field=user]').value = currentUserId;
         card.querySelector('.remove-player').addEventListener('click', () => {
             if (playerList.children.length <= minPlayers) return;
             card.remove();
@@ -154,8 +204,157 @@
         refreshSetupCards();
     };
 
+    const captureFleetState = () => {
+        [...fleetList.children].forEach(card => {
+            fleetState.set(card.dataset.playerNumber, {
+                name: card.querySelector('[data-field=fleet-name]')?.value || `Fleet ${card.dataset.playerNumber}`,
+                points: card.querySelector('[data-field=points]')?.value || '0',
+                units: [...card.querySelectorAll('.fleet-token')].map(token => ({
+                    unitVariantId: Number(token.dataset.unitVariant),
+                    unitName: token.dataset.unitName,
+                    quantity: 1,
+                    pointsCost: Number(token.dataset.pointsCost) || 0,
+                    layoutX: Number(token.dataset.layoutX),
+                    layoutY: Number(token.dataset.layoutY)
+                }))
+            });
+        });
+    };
+
+    const fleetForPlayer = playerNumber => fleetState.get(String(playerNumber)) || {
+        name: `Fleet ${playerNumber}`, points: '0', units: []
+    };
+
+    const fleetPointLimit = () => Number(field('#fleet-format').selectedOptions[0]?.dataset.pointsLimit || 0);
+    const fleetPoints = state => state.units.reduce((total, unit) => total + (unit.pointsCost || 0), 0);
+    const refreshFleetPoints = card => {
+        const state = fleetForPlayer(card.dataset.playerNumber);
+        const total = fleetPoints(state);
+        const limit = fleetPointLimit();
+        card.querySelector('[data-field=points]').value = total;
+        card.querySelector('[data-field=budget]').textContent = limit ? `${total} / ${limit} points` : `${total} points`;
+        card.classList.toggle('over-budget', Boolean(limit && total > limit));
+    };
+
+    const renderUnitRows = card => {
+        let state = fleetForPlayer(card.dataset.playerNumber);
+        const container = card.querySelector('[data-field=units]');
+        const board = selectedBoard();
+        const geometry = deploymentGeometry(board);
+        const zoneWidth = ((geometry.edgeX + geometry.depth) / board.width) * 100;
+        const playerOnLeft = Number(card.dataset.playerNumber) % 2 === 1;
+        container.style.setProperty('--deployment-zone-width', `${zoneWidth}%`);
+        container.classList.toggle('fleet-board-right', !playerOnLeft);
+        container.innerHTML = `<span class="workspace-label">${escapeHtml(board.code)} / ${board.width} x ${board.height} MM</span><span class="workspace-help">Drag units to arrange your deployment formation.</span><div class="fleet-board-zone player"><span>YOUR DEPLOYMENT</span></div><div class="fleet-board-zone opposing"><span>OPPOSITION DEPLOYMENT</span></div>`;
+        state.units.forEach((unit, index) => {
+            const token = document.createElement('button');
+            token.type = 'button';
+            token.className = 'fleet-token';
+            token.dataset.unitVariant = unit.unitVariantId;
+            token.dataset.unitName = unit.unitName;
+            token.dataset.pointsCost = unit.pointsCost ?? variantById.get(String(unit.unitVariantId))?.pointsCost ?? 0;
+            token.dataset.layoutX = unit.layoutX ?? 50 + (index % 4) * 8;
+            token.dataset.layoutY = unit.layoutY ?? 50 + Math.floor(index / 4) * 10;
+            const screenPosition = fleetScreenPosition(board, Number(card.dataset.playerNumber), Number(token.dataset.layoutX), Number(token.dataset.layoutY));
+            token.style.left = `${screenPosition.left}%`;
+            token.style.bottom = `${screenPosition.bottom}%`;
+            token.innerHTML = `<strong>${escapeHtml(unit.unitName)}</strong><span>${token.dataset.pointsCost} pts / drag to position</span><i class="remove-unit">x</i>`;
+            token.addEventListener('pointerdown', event => {
+                if (event.target.closest('.remove-unit')) return;
+                event.preventDefault();
+                token.setPointerCapture(event.pointerId);
+                const rect = container.getBoundingClientRect();
+                const move = moveEvent => {
+                    const layout = fleetLayoutPosition(board, Number(card.dataset.playerNumber), moveEvent.clientX, moveEvent.clientY, rect);
+                    token.dataset.layoutX = layout.layoutX.toFixed(2);
+                    token.dataset.layoutY = layout.layoutY.toFixed(2);
+                    const position = fleetScreenPosition(board, Number(card.dataset.playerNumber), layout.layoutX, layout.layoutY);
+                    token.style.left = `${position.left}%`;
+                    token.style.bottom = `${position.bottom}%`;
+                    state.units[index].layoutX = layout.layoutX;
+                    state.units[index].layoutY = layout.layoutY;
+                };
+                const stop = stopEvent => {
+                    token.releasePointerCapture(stopEvent.pointerId);
+                    token.removeEventListener('pointermove', move);
+                    token.removeEventListener('pointerup', stop);
+                    token.removeEventListener('pointercancel', stop);
+                };
+                token.addEventListener('pointermove', move);
+                token.addEventListener('pointerup', stop);
+                token.addEventListener('pointercancel', stop);
+            });
+            container.appendChild(token);
+        });
+        refreshFleetPoints(card);
+        refreshVariantAvailability(card);
+    };
+
+    const refreshVariantAvailability = card => {
+        const select = card.querySelector('[data-field=unit-variant]');
+        if (!select) return;
+        const quantityValue = Number(card.querySelector('[data-field=unit-quantity]')?.value);
+        const quantity = Number.isInteger(quantityValue) && quantityValue > 0 ? quantityValue : 1;
+        const state = fleetForPlayer(card.dataset.playerNumber);
+        const limit = fleetPointLimit();
+        const remaining = limit ? limit - fleetPoints(state) : Number.POSITIVE_INFINITY;
+        [...select.options].forEach(option => {
+            if (!option.value) return;
+            const unavailable = Number(option.dataset.points) * quantity > remaining;
+            option.disabled = unavailable;
+            option.title = unavailable ? 'Not enough points remaining' : '';
+        });
+    };
+
+    const renderVariantOptions = card => {
+        const playerCard = [...playerList.children].find(item => item.dataset.playerNumber === card.dataset.playerNumber);
+        const factionId = playerCard?.querySelector('[data-field=faction]')?.value;
+        const select = card.querySelector('[data-field=unit-variant]');
+        select.replaceChildren(new Option('Choose a unit', ''));
+        const groups = new Map();
+        variantOptions.filter(option => option.factionId === factionId).forEach(option => {
+            const key = `${option.classification} / ${option.unitTypeName}`;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(option);
+        });
+        groups.forEach((options, label) => {
+            const group = document.createElement('optgroup');
+            group.label = label;
+            options.forEach(option => {
+                const item = new Option(`${option.unitName} / ${option.pointsCost} pts`, option.id);
+                item.dataset.points = option.pointsCost;
+                group.appendChild(item);
+            });
+            select.appendChild(group);
+        });
+        refreshVariantAvailability(card);
+    };
+
+    const renderPresets = (card, presets) => {
+        const select = card.querySelector('[data-field=preset]');
+        select.innerHTML = '<option value="">Load a saved fleet</option>' + presets
+            .map(preset => `<option value="${preset.presetId}">${escapeHtml(preset.presetName)}</option>`).join('');
+    };
+
+    const loadPresets = async card => {
+        const playerCard = [...playerList.children].find(item => item.dataset.playerNumber === card.dataset.playerNumber);
+        const factionId = playerCard?.querySelector('[data-field=faction]')?.value;
+        if (!factionId) {
+            renderPresets(card, []);
+            return;
+        }
+        if (!presetsByFaction.has(factionId)) {
+            const response = await fetch(`/api/v1/fleet-presets?gameId=${setupForm.dataset.gameId}&factionId=${factionId}`);
+            if (!response.ok) return;
+            presetsByFaction.set(factionId, await response.json());
+        }
+        renderPresets(card, presetsByFaction.get(factionId));
+    };
+
     const refreshSetupCards = () => {
+        captureFleetState();
         [...playerList.children].forEach((card, index) => {
+            card.querySelector('[data-field=user]').disabled = card.querySelector('[data-field=kind]').value === 'cpu';
             const seat = index + 1;
             card.dataset.playerNumber = seat;
             card.querySelector('.card-kicker').textContent = `SEAT ${seat}`;
@@ -164,16 +363,126 @@
         });
         document.querySelector('#player-count').textContent = `${playerList.children.length} / ${maxPlayers}`;
         fleetList.replaceChildren(...[...playerList.children].map(card => {
+            const state = fleetForPlayer(card.dataset.playerNumber);
             const fleet = document.createElement('article');
             fleet.className = 'setup-card fleet-card';
             fleet.dataset.playerNumber = card.dataset.playerNumber;
-            fleet.innerHTML = `<span class="card-kicker">SEAT ${card.dataset.playerNumber}</span><h3 class="fleet-player-name">Commander ${card.dataset.playerNumber}</h3><div class="wizard-form-grid"><label>Fleet name<input data-field="fleet-name" value="Fleet ${card.dataset.playerNumber}" required></label><label>Starting points<input data-field="points" type="number" min="0" value="0" required></label></div>`;
+            const isCpu = card.querySelector('[data-field=kind]').value === 'cpu';
+            fleet.classList.toggle('cpu-fleet-card', isCpu);
+            fleet.innerHTML = isCpu
+                ? `<div class="setup-card-heading"><div><span class="card-kicker">SEAT ${card.dataset.playerNumber}</span><h3 class="fleet-player-name">Commander ${card.dataset.playerNumber}</h3></div><span class="fleet-faction" data-field="faction-name"></span></div><div class="cpu-fleet-note"><strong>CPU CONTROLLED</strong><span>The CPU will select, deploy, and command this fleet.</span></div>`
+                : `<div class="setup-card-heading"><div><span class="card-kicker">SEAT ${card.dataset.playerNumber}</span><h3 class="fleet-player-name">Commander ${card.dataset.playerNumber}</h3></div><span class="fleet-faction" data-field="faction-name"></span></div><div class="wizard-form-grid"><label>Fleet name<input data-field="fleet-name" value="${escapeHtml(state.name)}" maxlength="120" required></label><label>Fleet points<input data-field="points" type="number" min="0" value="${state.points}" readonly><small class="fleet-budget" data-field="budget"></small></label></div><div class="fleet-saved-row"><select data-field="preset"><option value="">Load a saved fleet</option></select><button class="button secondary-button load-preset" type="button">Load</button><input data-field="preset-name" placeholder="New saved fleet name"><button class="button secondary-button save-preset" type="button">Save fleet</button></div><div class="fleet-unit-picker"><select data-field="unit-variant"><option value="">Choose a unit type and variant</option></select><input data-field="unit-quantity" type="number" min="1" max="99" value="1" aria-label="Quantity to add"><button class="button secondary-button add-unit" type="button">Add unit</button></div><div class="fleet-workspace" data-field="units" tabindex="0"><span class="workspace-label">FORMATION WORKSPACE</span><span class="workspace-help">Drag units to arrange your deployment formation.</span></div><p class="form-message" data-field="message" aria-live="polite"></p>`;
+            fleet.querySelector('[data-field=faction-name]').textContent = card.querySelector('[data-field=faction]').selectedOptions[0]?.textContent || 'Choose a faction first';
+            if (!isCpu) {
+                renderVariantOptions(fleet);
+                renderUnitRows(fleet);
+                loadPresets(fleet);
+            }
             return fleet;
         }));
     };
 
     for (let index = 0; index < minPlayers; index += 1) addPlayer();
     document.querySelector('#add-player').addEventListener('click', addPlayer);
+    playerList.addEventListener('change', event => {
+        if (event.target.dataset.field === 'kind') {
+            event.target.closest('.player-card').querySelector('[data-field=user]').disabled = event.target.value === 'cpu';
+        }
+        if (event.target.dataset.field === 'faction') {
+            refreshSetupCards();
+        }
+    });
+    fleetList.addEventListener('click', async event => {
+        const card = event.target.closest('.fleet-card');
+        if (!card) return;
+        let state = fleetForPlayer(card.dataset.playerNumber);
+        if (event.target.closest('.add-unit')) {
+            const select = card.querySelector('[data-field=unit-variant]');
+            const quantity = Number(card.querySelector('[data-field=unit-quantity]').value);
+            const variant = variantOptions.find(item => item.id === select.value);
+            if (!variant) return;
+            if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
+                card.querySelector('[data-field=message]').textContent = 'Choose a quantity between 1 and 99.';
+                return;
+            }
+            const limit = fleetPointLimit();
+            if (limit && fleetPoints(state) + variant.pointsCost * quantity > limit) {
+                card.querySelector('[data-field=message]').textContent = `That unit would exceed the ${limit}-point fleet limit.`;
+                return;
+            }
+            for (let added = 0; added < quantity; added += 1) {
+                const offset = state.units.length;
+                state.units.push({ unitVariantId: Number(variant.id), unitName: variant.unitName, pointsCost: variant.pointsCost, quantity: 1,
+                    layoutX: 20 + (offset % 4) * 18, layoutY: 25 + Math.floor(offset / 4) * 18 });
+            }
+            fleetState.set(card.dataset.playerNumber, state);
+            renderUnitRows(card);
+        }
+        if (event.target.closest('.remove-unit')) {
+            captureFleetState();
+            state = fleetForPlayer(card.dataset.playerNumber);
+            const token = event.target.closest('.fleet-token');
+            const index = [...card.querySelectorAll('.fleet-token')].indexOf(token);
+            if (index >= 0) state.units.splice(index, 1);
+            fleetState.set(card.dataset.playerNumber, state);
+            renderUnitRows(card);
+        }
+        if (event.target.closest('.load-preset')) {
+            const presetId = Number(card.querySelector('[data-field=preset]').value);
+            const playerCard = [...playerList.children].find(item => item.dataset.playerNumber === card.dataset.playerNumber);
+            const presets = presetsByFaction.get(playerCard?.querySelector('[data-field=faction]')?.value) || [];
+            const preset = presets.find(item => item.presetId === presetId);
+            if (!preset) return;
+            fleetState.set(card.dataset.playerNumber, {
+                name: preset.presetName,
+                points: String(preset.pointsTotal ?? 0),
+                units: preset.units.flatMap(unit => Array.from({ length: unit.quantity || 1 }, (_, index) => ({
+                    unitVariantId: unit.unitVariantId, unitName: unit.unitName,
+                    pointsCost: variantById.get(String(unit.unitVariantId))?.pointsCost || 0, quantity: 1,
+                    layoutX: Math.min(96, (unit.layoutX ?? 50) + index * 2),
+                    layoutY: Math.min(92, (unit.layoutY ?? 50) + index * 2)
+                })))
+            });
+            card.querySelector('[data-field=fleet-name]').value = preset.presetName;
+            renderUnitRows(card);
+            card.querySelector('[data-field=message]').textContent = `${preset.presetName} loaded.`;
+        }
+        if (event.target.closest('.save-preset')) {
+            captureFleetState();
+            state = fleetForPlayer(card.dataset.playerNumber);
+            const name = card.querySelector('[data-field=preset-name]').value.trim() || card.querySelector('[data-field=fleet-name]').value.trim();
+            const playerCard = [...playerList.children].find(item => item.dataset.playerNumber === card.dataset.playerNumber);
+            const factionId = Number(playerCard?.querySelector('[data-field=faction]')?.value);
+            if (!factionId || !state.units.length) {
+                card.querySelector('[data-field=message]').textContent = 'Choose a faction and add at least one unit before saving.';
+                return;
+            }
+            if (fleetPointLimit() && fleetPoints(state) > fleetPointLimit()) {
+                card.querySelector('[data-field=message]').textContent = 'This fleet is over the selected point limit.';
+                return;
+            }
+            const response = await fetch(`/api/v1/games/${setupForm.dataset.gameId}/fleet-presets`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ gameVersionId: definitionId, fleetFormatId: Number(value('#fleet-format')) || null,
+                    factionId, name, pointsTotal: fleetPoints(state),
+                    units: state.units.map(unit => ({ unitVariantId: unit.unitVariantId, quantity: 1,
+                        layoutX: unit.layoutX, layoutY: unit.layoutY })) })
+            });
+            if (!response.ok) {
+                card.querySelector('[data-field=message]').textContent = 'Could not save this fleet.';
+                return;
+            }
+            presetsByFaction.delete(String(factionId));
+            await loadPresets(card);
+            card.querySelector('[data-field=preset-name]').value = '';
+            card.querySelector('[data-field=message]').textContent = `${name} saved for future battles.`;
+        }
+    });
+    fleetList.addEventListener('input', event => {
+        if (event.target.dataset.field === 'unit-quantity') {
+            refreshVariantAvailability(event.target.closest('.fleet-card'));
+        }
+    });
     document.querySelector('#game-mode').addEventListener('change', applyModeDefaults);
     document.querySelector('#battle-template').addEventListener('change', async event => {
         const templateId = event.target.value;
@@ -184,6 +493,7 @@
             const response = await fetch(`/api/v1/templates/${templateId}`);
             if (!response.ok) throw new Error('Could not load the battle template.');
             const template = await response.json();
+            selectedTemplateOptions = template.options || {};
             field('#session-name').value = `${template.name} / run ${new Date().toISOString().slice(0, 10)}`;
             field('#visibility').value = 'private';
             if (template.gameModeId != null) field('#game-mode').value = template.gameModeId;
@@ -222,6 +532,10 @@
     });
     document.querySelector('#fleet-format').addEventListener('change', () => {
         field('#fleet-format-summary').textContent = field('#fleet-format').selectedOptions[0]?.textContent || 'Choose a fleet format in Match';
+        [...fleetList.children].forEach(card => {
+            refreshFleetPoints(card);
+            refreshVariantAvailability(card);
+        });
     });
     document.querySelector('#board-code').addEventListener('change', event => {
         const option = event.target.selectedOptions[0];
@@ -237,6 +551,22 @@
             document.querySelector('#player-message').textContent = `Add at least ${minPlayers} commanders.`;
             return false;
         }
+        if (currentStep === 3) {
+            captureFleetState();
+            const missingFleet = [...playerList.children].some((player, index) =>
+                player.querySelector('[data-field=kind]').value === 'human'
+                && !fleetForPlayer(player.dataset.playerNumber).units.length);
+            if (missingFleet) {
+                document.querySelector('#fleet-list').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+            if (fleetPointLimit() && [...playerList.children].some(player =>
+                player.querySelector('[data-field=kind]').value === 'human'
+                && fleetPoints(fleetForPlayer(player.dataset.playerNumber)) > fleetPointLimit())) {
+                document.querySelector('#fleet-list').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return false;
+            }
+        }
         return true;
     };
     const renderReview = () => {
@@ -250,7 +580,7 @@
         tabs.forEach((tab, index) => { tab.classList.toggle('active', index === step); tab.classList.toggle('complete', index < step); });
         previous.hidden = step === 0;
         next.hidden = step === steps.length - 1;
-        if (step === 2) refreshSetupCards();
+        if (step === 3) refreshSetupCards();
         if (step === 4) renderReview();
         window.scrollTo({ top: setupForm.offsetTop - 25, behavior: 'smooth' });
     };
@@ -276,14 +606,29 @@
             const session = await createResponse.json();
             const playerIds = [];
             for (const card of playerList.children) {
-                const playerResponse = await fetch(`/api/v1/sessions/${session.sessionId}/players`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seatNumber: Number(card.dataset.playerNumber), displayName: card.querySelector('[data-field=name]').value.trim(), playerKind: card.querySelector('[data-field=kind]').value, factionId: Number(card.querySelector('[data-field=faction]').value) }) });
+                const playerResponse = await fetch(`/api/v1/sessions/${session.sessionId}/players`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seatNumber: Number(card.dataset.playerNumber), displayName: card.querySelector('[data-field=name]').value.trim(), playerKind: card.querySelector('[data-field=kind]').value, userId: card.querySelector('[data-field=kind]').value === 'human' ? Number(card.querySelector('[data-field=user]').value) : null, factionId: Number(card.querySelector('[data-field=faction]').value) }) });
                 if (!playerResponse.ok) throw new Error('Could not save a commander.');
                 playerIds.push(await playerResponse.json());
             }
             for (let index = 0; index < playerIds.length; index += 1) {
                 const card = fleetList.children[index];
-                const fleetResponse = await fetch(`/api/v1/players/${playerIds[index].sessionPlayerId}/fleets`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fleetFormatId: Number(value('#fleet-format')), fleetName: card.querySelector('[data-field=fleet-name]').value.trim(), pointsTotal: Number(card.querySelector('[data-field=points]').value) }) });
+                const playerCard = playerList.children[index];
+                const isCpu = playerCard.querySelector('[data-field=kind]').value === 'cpu';
+                const fleetResponse = await fetch(`/api/v1/players/${playerIds[index].sessionPlayerId}/fleets`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fleetFormatId: Number(value('#fleet-format')), fleetName: isCpu ? `CPU Fleet ${index + 1}` : card.querySelector('[data-field=fleet-name]').value.trim(), pointsTotal: isCpu ? null : Number(card.querySelector('[data-field=points]').value) }) });
                 if (!fleetResponse.ok) throw new Error('Could not save a fleet.');
+                const fleet = await fleetResponse.json();
+                if (isCpu) continue;
+                const state = fleetForPlayer(card.dataset.playerNumber);
+                for (const unit of state.units) {
+                    for (let quantity = 0; quantity < unit.quantity; quantity += 1) {
+                        const unitResponse = await fetch(`/api/v1/fleets/${fleet.fleetId}/units`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ unitVariantId: unit.unitVariantId, unitName: unit.unitName,
+                                positionX: unit.layoutX, positionY: unit.layoutY, facing: null, status: 'ready' })
+                        });
+                        if (!unitResponse.ok) throw new Error('Could not add a unit to the fleet.');
+                    }
+                }
             }
             const board = field('#board-code').selectedOptions[0];
             if (board.dataset.boardId) {
@@ -294,7 +639,7 @@
               const formatOption = field('#fleet-format').selectedOptions[0];
               let formatConfig = {};
               try { formatConfig = JSON.parse(formatOption?.dataset.config || '{}'); } catch (error) { formatConfig = {}; }
-               const options = { distancePerSpeed: Number(value('#movement-limit')) };
+               const options = { ...selectedTemplateOptions, distancePerSpeed: Number(value('#movement-limit')) };
               if (Number.isInteger(formatConfig.ship_limit)) options.maximumShipsPerPlayer = formatConfig.ship_limit;
               if (Number.isInteger(formatConfig.squadron_limit)) options.maximumSquadronsPerPlayer = formatConfig.squadron_limit;
              if (modeConfig.unlimitedRounds) options.unlimitedRounds = true;

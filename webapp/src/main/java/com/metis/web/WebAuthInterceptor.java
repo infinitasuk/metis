@@ -42,6 +42,8 @@ public class WebAuthInterceptor implements HandlerInterceptor {
             return false;
         }
         MetisUser user = current.get();
+        response.setHeader("Cache-Control", "no-store");
+        response.setHeader("X-Metis-User-Id", Long.toString(user.userId()));
         if (path.startsWith("/admin") || path.startsWith("/api/v1/admin")
                 || path.startsWith("/api/v1/test-fixtures")) {
             if (!user.admin()) response.sendError(HttpServletResponse.SC_FORBIDDEN, "Administrator access required");
@@ -57,7 +59,23 @@ public class WebAuthInterceptor implements HandlerInterceptor {
         }
         if (sessionId != null) {
             boolean edit = !"GET".equalsIgnoreCase(request.getMethod());
-            boolean allowed = edit ? battle.canEditSession(sessionId, user) : battle.canViewSession(sessionId, user);
+            boolean actions = path.equals("/api/v1/sessions/" + sessionId + "/actions") && "POST".equalsIgnoreCase(request.getMethod());
+            boolean allowed = actions ? !battle.controlledPlayers(sessionId, user.userId()).isEmpty()
+                    : edit ? battle.canEditSession(sessionId, user) : battle.canViewSession(sessionId, user);
+            if (edit && !actions) {
+                var session = battle.findSession(sessionId);
+                boolean setup = session.isPresent() && "setup".equals(session.get().status());
+                if (setup && !allowed && isSessionResource(path)) {
+                    String[] parts = path.split("/");
+                    long resourceId = Long.parseLong(parts[4]);
+                    var owned = battle.controlledPlayers(sessionId, user.userId());
+                    allowed = battle.playerIdForResource(parts[3], resourceId)
+                            .map(owned::contains).orElse(false);
+                }
+                boolean management = path.endsWith("/restart") || path.endsWith("/invitations")
+                        || (path.equals("/api/v1/sessions/" + sessionId) && "DELETE".equalsIgnoreCase(request.getMethod()));
+                if (!setup && !management) allowed = false;
+            }
             if (!allowed) response.sendError(HttpServletResponse.SC_FORBIDDEN, "You do not have access to this game");
             return allowed;
         }

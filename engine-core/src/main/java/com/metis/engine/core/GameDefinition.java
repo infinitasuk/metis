@@ -7,7 +7,15 @@ public record GameDefinition(long gameId, String gameCode, String gameName,
                              long definitionVersionId, String definitionVersion,
                              int minimumPlayers, int maximumPlayers,
                              int minimumCpu, int maximumCpu,
-                             List<String> factionCodes, List<UnitDefinition> unitDefinitions) {
+                             List<String> factionCodes, List<UnitDefinition> unitDefinitions,
+                             TurnStructure turnStructure) {
+    public GameDefinition(long gameId, String gameCode, String gameName,
+                          long definitionVersionId, String definitionVersion,
+                          int minimumPlayers, int maximumPlayers, int minimumCpu, int maximumCpu,
+                          List<String> factionCodes, List<UnitDefinition> unitDefinitions) {
+        this(gameId, gameCode, gameName, definitionVersionId, definitionVersion,
+                minimumPlayers, maximumPlayers, minimumCpu, maximumCpu, factionCodes, unitDefinitions, null);
+    }
     public GameDefinition(long gameId, String gameCode, String gameName,
                           long definitionVersionId, String definitionVersion,
                           int minimumPlayers, int maximumPlayers,

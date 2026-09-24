@@ -1,0 +1,97 @@
+name: Rules engine tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fast:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: mvn -B clean verify
+      - run: node --test tools/rules-tests/runner.test.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fast-${{ matrix.os }}
+          path: |
+            **/target/surefire-reports/
+            **/target/rules-scenarios/
+            **/target/jqwik-database
+            **/target/site/jacoco/
+  full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+      - run: mvn -B -Prules-full clean verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rules-full
+          path: |
+            target/rules-suite/
+            engine-core/target/rules-benchmark.json
+            **/target/surefire-reports/
+            **/target/rules-scenarios/
+            **/target/jqwik-database
+            **/target/site/jacoco/
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: mvn -B -pl engine-core -Prules-mutation clean verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rules-mutation
+          path: |
+            engine-core/target/pit-reports/
+            engine-core/target/surefire-reports/
+  performance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: mvn -B -pl engine-core -Prules-benchmark -Drules.benchmark.enforce=true compile exec:java
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rules-performance
+          path: engine-core/target/rules-benchmark.json

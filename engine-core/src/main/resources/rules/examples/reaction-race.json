@@ -1,0 +1,32 @@
+{
+ "languageVersion":1,"id":"reaction-race","revision":"1","modules":{"core":"1"},
+ "limits":{"maxInstructions":1000,"maxCollectionSize":32,"maxCallDepth":8,"maxWindowDepth":3},
+ "state":{"guarded":{"type":"boolean","initial":false,"visibility":"PUBLIC"},"acknowledged":{"type":"boolean","initial":false,"visibility":"PUBLIC"},"secret":{"type":"string","initial":"DECK_SERVER_SENTINEL","visibility":"SERVER"}},
+ "entities":{"counter":{"ownership":"PLAYER","attributes":{"score":{"type":"integer","initial":0,"visibility":"PUBLIC"},"plan":{"type":"string","initial":"","visibility":"OWNER"}},"resources":{"energy":{"initial":2,"minimum":0,"maximum":5,"visibility":"PUBLIC"}}}},
+ "events":{},"setup":"prepare",
+ "procedures":{
+  "prepare":{"parameters":{},"steps":[{"op":"core.forEach","source":{"var":"players"},"as":"p","maxItems":4,"steps":[{"op":"core.createEntity","type":"counter","id":{"op":"id","args":[{"var":"p"}]},"owner":{"var":"p"},"attributes":{},"resources":{},"as":"created"}]}]},
+  "collect":{"parameters":{"actor":"player","counter":"entity:counter"},"steps":[
+   {"op":"core.modifyResource","entity":{"var":"counter"},"resource":"energy","delta":-1},
+   {"op":"core.choose","player":{"var":"actor"},"options":{"list":{"elementType":"string","items":["OWNER_ALPHA_SENTINEL","OWNER_BETA_SENTINEL"]}},"as":"plan","visibility":"OWNER"},
+   {"op":"core.setAttribute","entity":{"var":"counter"},"field":"plan","value":{"var":"plan"}},
+   {"op":"core.window","window":"defense","args":{"attacker":{"var":"actor"}}},
+   {"op":"core.setAttribute","entity":{"var":"counter"},"field":"score","value":1},
+   {"op":"core.endGame","outcome":"victory","winners":{"list":{"elementType":"player","items":[{"var":"actor"}]}}}
+  ]},
+  "guard":{"parameters":{"attacker":"player","counter":"entity:counter"},"steps":[
+   {"op":"core.modifyResource","entity":{"var":"counter"},"resource":"energy","delta":-1},
+   {"op":"core.window","window":"acknowledge","args":{"attacker":{"var":"attacker"}}},
+   {"op":"core.setState","field":"guarded","value":true}
+  ]},
+  "acknowledge":{"parameters":{},"steps":[{"op":"core.setState","field":"acknowledged","value":true}]}
+ },
+ "windows":{
+  "defense":{"parameters":{"attacker":"player"},"responders":{"filter":{"source":{"var":"players"},"as":"p","where":{"op":"ne","args":[{"var":"p"},{"var":"attacker"}]}}},"maxResponders":3,"allowPass":true,"visibility":"OWNER","choices":[
+   {"id":"guard","when":{"op":"gt","args":[{"resource":{"entity":{"op":"at","args":[{"filter":{"source":{"entities":"counter"},"as":"c","where":{"op":"eq","args":[{"owner":{"var":"c"}},{"var":"responder"}]}}},0]},"field":"energy"}},0]},"procedure":"guard","args":{"attacker":{"var":"attacker"},"counter":{"op":"at","args":[{"filter":{"source":{"entities":"counter"},"as":"c","where":{"op":"eq","args":[{"owner":{"var":"c"}},{"var":"responder"}]}}},0]}}}
+  ]},
+  "acknowledge":{"parameters":{"attacker":"player"},"responders":{"list":{"elementType":"player","items":[{"var":"attacker"}]}},"maxResponders":1,"allowPass":true,"visibility":"OWNER","choices":[{"id":"acknowledge","when":true,"procedure":"acknowledge","args":{}}]}
+ },
+ "actions":{"collect":{"parameters":{"counter":"entity:counter"},"availableWhen":{"op":"and","args":[{"op":"eq","args":[{"owner":{"var":"counter"}},{"var":"actor"}]},{"op":"gt","args":[{"resource":{"entity":{"var":"counter"},"field":"energy"}},0]}]},"procedure":"collect","args":{"actor":{"var":"actor"},"counter":{"var":"counter"}}}},
+ "flow":{"initial":"turn","roundStart":"turn","phases":{"turn":{"controller":"ALTERNATING_PLAYERS","groupSize":1,"steps":[{"id":"act","actions":["collect"],"minimum":1,"maximum":1}],"next":"turn"}}}
+}

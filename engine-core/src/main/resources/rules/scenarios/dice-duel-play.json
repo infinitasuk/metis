@@ -1,0 +1,14 @@
+{
+ "session":"dice-demo","players":["alice","bob"],
+ "steps":[
+  {"command":"start"},
+  {"command":"act","actor":"alice","action":"plan","args":{"fighter":"alice","orders":["focus","guard"]}},
+  {"command":"act","actor":"bob","action":"plan","args":{"fighter":"bob","orders":["guard","focus"]}},
+  {"command":"act","actor":"alice","action":"attack","args":{"fighter":"alice","target":"bob"}},
+  {"command":"respond","actor":"alice","choice":"$pass"},
+  {"command":"respond","actor":"alice","choice":"reroll"},
+  {"command":"respond","actor":"alice","choice":0},
+  {"command":"respond","actor":"bob","choice":"guard"}
+ ],
+ "expected":{"outcome":"victory","winners":["alice"],"round":1}
+}

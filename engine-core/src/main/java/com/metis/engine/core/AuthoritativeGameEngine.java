@@ -82,8 +82,13 @@ public final class AuthoritativeGameEngine implements GameEngine {
         if (!validation.valid()) {
             throw new InvalidSetupException(validation);
         }
+        var options = new HashMap<>(setup.options());
+        options.remove(ActivationContext.KEY);
+        options.remove("initialSetupOptions");
+        for (String reserved : List.of("serverOnly", "responseWindow", "privateChoices", "publicChoices", "orderQueues", "orderState", "orderActivations")) options.remove(reserved);
+        if (definition.turnStructure() != null) options.put("initialSetupOptions", Map.copyOf(options));
         return new GameState(sessionId, definition.definitionVersionId(), "setup", 0, "setup", null, 0,
-                setup.players(), List.of(), setup.board(), List.of(), setup.options());
+                setup.players(), List.of(), setup.board(), List.of(), options);
     }
 
     public List<LegalAction> legalActions(GameState state) {
@@ -100,6 +105,25 @@ public final class AuthoritativeGameEngine implements GameEngine {
         }
         if (!"running".equals(state.status())) {
             return List.of();
+        }
+        if (!ResponseWindows.pending(state).isEmpty()) return ResponseWindows.legal(state);
+        if (definition != null && definition.turnStructure() != null && !"deployment".equals(state.phaseCode())) {
+            var actions = new ArrayList<LegalAction>();
+            for (LegalAction action : sequencer(definition).legalActions(state)) {
+                if (!"attack_unit".equals(action.type())) { actions.add(action); continue; }
+                if (!(action.parameters().get("unitId") instanceof Number id)) continue;
+                UnitState attacker = state.units().stream().filter(unit -> unit.unitId() == id.longValue()).findFirst().orElseThrow();
+                var context = ActivationContext.from(state);
+                for (UnitState target : state.units()) {
+                    if (!canAttack(definition, state, attacker, target)) continue;
+                    var plan = attackPlan(definition, state, attacker, target);
+                    if (context.distinctValues().getOrDefault(String.valueOf(action.parameters().get("stepCode")), List.of()).contains(plan.arc())) continue;
+                    actions.add(new LegalAction("attack_unit", attacker.playerId(), "Attack unit " + target.unitId(),
+                            Map.of("unitId", "number", "targetUnitId", "number"),
+                            Map.of("unitId", attacker.unitId(), "targetUnitId", target.unitId(), "arc", plan.arc())));
+                }
+            }
+            return actions;
         }
         if ("deployment".equals(state.phaseCode())) {
             List<LegalAction> actions = new ArrayList<>();
@@ -135,6 +159,16 @@ public final class AuthoritativeGameEngine implements GameEngine {
                                         "Attack unit " + target.unitId(),
                                         Map.of("unitId", "number", "targetUnitId", "number"))));
                     });
+            state.units().stream()
+                    .filter(unit -> resettableMovement(state, unit) != null)
+                    .filter(unit -> unitCanActInPhase(definition, state.phaseCode(), unit))
+                    .forEach(unit -> {
+                        actions.add(new LegalAction("reset_movement", state.activePlayerId(),
+                                "Reset movement for unit " + unit.unitId(), Map.of("unitId", "number")));
+                        actions.add(new LegalAction("move_unit", state.activePlayerId(),
+                                "Adjust movement for unit " + unit.unitCode(),
+                                Map.of("unitId", "number", "speed", "number", "yaw", "array")));
+                    });
             actions.add(new LegalAction("end_turn", state.activePlayerId(), "End the active player's turn", Map.of()));
             return actions;
         }
@@ -147,7 +181,9 @@ public final class AuthoritativeGameEngine implements GameEngine {
                 || target.hullPoints() <= 0) {
             return false;
         }
-        return attackPlan(definition, state, attacker, target) != null;
+        if (!visibleTarget(definition, attacker.playerId(), target)) return false;
+        var plan = attackPlan(definition, state, attacker, target);
+        return plan != null && validOrderAttackColor(definition, state, attacker, plan);
     }
 
     public ActionResult applyAction(GameState state, Action action) {
@@ -162,12 +198,47 @@ public final class AuthoritativeGameEngine implements GameEngine {
         if (action == null || action.type() == null || action.type().isBlank()) {
             return rejected("ACTION_REQUIRED", "An action type is required");
         }
+        if ("respond".equals(action.type())) return ResponseWindows.resolve(state, action,
+                (resumed, original) -> executeAction(definition, resumed, original, true));
+        if (!ResponseWindows.pending(state).isEmpty()) return rejected("RESPONSE_PENDING", "Waiting for the designated player's response");
+        return executeAction(definition, state, action, false);
+    }
+
+    private ActionResult executeAction(GameDefinition definition, GameState state, Action action, boolean resumed) {
+        if (definition != null && definition.turnStructure() != null) {
+            if ("attack_unit".equals(action.type()) && action.parameters().get("unitId") instanceof Number id
+                    && action.parameters().get("targetUnitId") instanceof Number targetId) {
+                UnitState attacker = state.units().stream().filter(unit -> unit.unitId() == id.longValue()).findFirst().orElse(null);
+                UnitState target = state.units().stream().filter(unit -> unit.unitId() == targetId.longValue()).findFirst().orElse(null);
+                if (attacker != null && target != null) {
+                    if (!visibleTarget(definition, action.actorPlayerId(), target)) return rejected("TARGET_NOT_FOUND", "The target unit is not deployed");
+                    var plan = attackPlan(definition, state, attacker, target);
+                    if (plan != null) {
+                        var parameters = new HashMap<>(action.parameters()); parameters.put("arc", plan.arc());
+                        action = new Action(action.type(), action.actorPlayerId(), parameters);
+                    }
+                }
+            }
+            return new ActivationEngine(definition, (s, a) -> applyEffect(definition, s, a, resumed)).apply(state, action);
+        }
+        return applyEffect(definition, state, action, resumed);
+    }
+
+    private ActivationEngine sequencer(GameDefinition definition) {
+        return new ActivationEngine(definition, (state, action) -> applyEffect(definition, state, action));
+    }
+
+    private ActionResult applyEffect(GameDefinition definition, GameState state, Action action) {
+        return applyEffect(definition, state, action, false);
+    }
+    private ActionResult applyEffect(GameDefinition definition, GameState state, Action action, boolean resumed) {
         return switch (action.type()) {
             case "start_game" -> startGame(state);
             case "advance_phase" -> advancePhase(state);
             case "deploy_unit" -> deployUnit(definition, state, action);
             case "move_unit" -> moveUnit(definition, state, action);
-            case "attack_unit" -> attackUnit(definition, state, action);
+            case "reset_movement" -> resetMovement(state, action);
+            case "attack_unit" -> attackUnit(definition, state, action, resumed);
             case "end_turn" -> endTurn(state, action);
             default -> rejected("ACTION_UNSUPPORTED", "Action type is not supported: " + action.type());
         };
@@ -252,6 +323,10 @@ public final class AuthoritativeGameEngine implements GameEngine {
     }
 
     private static boolean unitCanActInPhase(GameDefinition definition, String phase, UnitState unit) {
+        if (definition != null && definition.turnStructure() != null) {
+            var configured = definition.turnStructure().phase(phase);
+            return configured != null && new ActivationEngine(definition, null).eligible(configured, unit);
+        }
         if (definition == null) {
             return true;
         }
@@ -299,7 +374,7 @@ public final class AuthoritativeGameEngine implements GameEngine {
                 unitDefinition == null ? genericDefenseTokens(defenseTokens) : unitDefinition.defenseTokenCounts(),
                 Map.of());
         GameEvent event = event(state, "unit_deployed", action.actorPlayerId(),
-                Map.of("unitId", unitId, "positionX", x, "positionY", y));
+                Map.of("unitId", unitId, "positionX", x, "positionY", y, "facing", facing, "speed", currentSpeed));
         List<UnitState> units = new ArrayList<>(state.units());
         units.add(unit);
         return accepted(new GameState(state.sessionId(), state.definitionVersionId(), state.status(), state.round(),
@@ -309,7 +384,7 @@ public final class AuthoritativeGameEngine implements GameEngine {
 
     private ActionResult moveUnit(GameDefinition definition, GameState state, Action action) {
         if (!"running".equals(state.status())
-                || (!"ship".equals(state.phaseCode()) && !"squadron".equals(state.phaseCode()))) {
+                || !allowsUnitActions(definition, state.phaseCode())) {
             return rejected("MOVEMENT_NOT_ALLOWED", "Units can only move during the ship or squadron phase");
         }
         Player player = player(state, action.actorPlayerId());
@@ -324,15 +399,20 @@ public final class AuthoritativeGameEngine implements GameEngine {
         if (unit.playerId() != player.playerId()) {
             return rejected("UNIT_NOT_OWNED", "The acting player does not control unit " + unitId);
         }
-        if (!unitCanActInPhase(definition, state.phaseCode(), unit)) {
+        if (!OrderEngine.activeSupport(state, unit.unitId()) && !unitCanActInPhase(definition, state.phaseCode(), unit)) {
             return rejected("UNIT_PHASE_MISMATCH", "This unit cannot activate during the " + state.phaseCode() + " phase");
         }
-        if (!"ready".equals(unit.status())) {
+        GameEvent previousMovement = resettableMovement(state, unit);
+        if (!"ready".equals(unit.status()) && previousMovement == null
+                && !(definition != null && definition.turnStructure() != null && "activating".equals(unit.status()))) {
             return rejected("UNIT_ALREADY_ACTIVATED", "Unit " + unitId + " has already acted this turn");
         }
-        if (state.activePlayerId() == null || state.activePlayerId() != player.playerId()) {
+        if (!ActionAuthorization.isActivePlayer(state, player.playerId())) {
             return rejected("NOT_ACTIVE_PLAYER", "It is not the acting player's turn");
         }
+        // Edits replace the current move and are always measured from the original pose.
+        int selectedSpeed = unit.currentSpeed();
+        if (previousMovement != null) unit = restoreMovement(unit, previousMovement);
         if (action.parameters().containsKey("speed") || action.parameters().containsKey("yaw")) {
             return moveByManeuver(definition, state, action, unit);
         }
@@ -340,11 +420,16 @@ public final class AuthoritativeGameEngine implements GameEngine {
         double y = doubleParameter(action.parameters(), "positionY");
         double distance = Math.hypot(x - unit.positionX(), y - unit.positionY());
         UnitDefinition unitDefinition = unitDefinition(definition, unit.unitCode());
-        double maximumDistance = numericOption(state.values(), "maximumMovementDistance", 0);
-        if (maximumDistance <= 0 && unitDefinition != null) {
+        double distancePerSpeed = numericOption(state.values(), "distancePerSpeed", 0);
+        double maximumDistance = distancePerSpeed > 0 && selectedSpeed > 0
+                ? distancePerSpeed * selectedSpeed
+                : numericOption(state.values(), "maximumMovementDistance", 0);
+        boolean controlledMovement = new OrderEngine(definition).activation(state, unit);
+        if (controlledMovement && selectedSpeed == 0) maximumDistance = 0;
+        else if (maximumDistance <= 0 && unitDefinition != null) {
             maximumDistance = unitDefinition.maximumMovementDistance();
         }
-        if (distance > maximumDistance) {
+        if (distance > maximumDistance + .000001) {
             return rejected("MOVEMENT_DISTANCE_EXCEEDED", "The requested movement exceeds the unit movement limit");
         }
         if (!onBoard(state.board(), x, y)) {
@@ -352,12 +437,14 @@ public final class AuthoritativeGameEngine implements GameEngine {
         }
         double facing = doubleParameter(action.parameters(), "facing");
         UnitState moved = new UnitState(unit.unitId(), unit.playerId(), unit.unitCode(), x, y, facing,
-                "activated", unit.hullPoints(), unit.shieldPoints(), unit.defenseTokens(), unit.currentSpeed(),
+                "activated", unit.hullPoints(), unit.shieldPoints(), unit.defenseTokens(), selectedSpeed,
                 unit.shieldZones(), unit.readyDefenseTokens(), unit.exhaustedDefenseTokens());
         List<UnitState> units = new ArrayList<>(state.units());
-        units.set(units.indexOf(unit), moved);
+        units.replaceAll(item -> item.unitId() == moved.unitId() ? moved : item);
         GameEvent event = event(state, "unit_moved", action.actorPlayerId(),
-                Map.of("unitId", unitId, "positionX", x, "positionY", y));
+                Map.of("unitId", unitId, "positionX", x, "positionY", y, "facing", facing,
+                        "previousMovement", movementSnapshot(unit),
+                        "replacesMovementSequence", previousMovement == null ? 0L : previousMovement.sequence()));
         return accepted(new GameState(state.sessionId(), state.definitionVersionId(), state.status(), state.round(),
                 state.phaseCode(), state.activePlayerId(), state.stateVersion() + 1, state.players(), units, state.board(),
                 append(state.events(), event), state.values()), event);
@@ -369,6 +456,11 @@ public final class AuthoritativeGameEngine implements GameEngine {
             return rejected("UNIT_DEFINITION_NOT_FOUND", "A maneuver profile is required for unit " + unit.unitCode());
         }
         int speed = integerParameter(action.parameters(), "speed");
+        boolean controlledMovement = new OrderEngine(definition).activation(state, unit);
+        if (controlledMovement && (!(action.parameters().get("speed") instanceof Number requestedSpeed)
+                || requestedSpeed.doubleValue() != unit.currentSpeed())) {
+            return rejected("SPEED_CHANGE_REQUIRES_ORDER", "Resolve an order or effect to change speed before moving");
+        }
         ManeuverProfile maneuver = profile.maneuverProfile(speed);
         if (maneuver == null) {
             return rejected("SPEED_INVALID", "Speed " + speed + " is not available to unit " + unit.unitCode());
@@ -376,7 +468,8 @@ public final class AuthoritativeGameEngine implements GameEngine {
         List<Integer> yaw = integerListParameter(action.parameters(), "yaw");
         if (yaw.size() != maneuver.maximumYawClicks().size()
                 || java.util.stream.IntStream.range(0, yaw.size())
-                .anyMatch(index -> Math.abs(yaw.get(index)) > maneuver.maximumYawClicks().get(index))) {
+                .anyMatch(index -> Math.abs((long)yaw.get(index)) > (controlledMovement
+                        ? OrderEngine.yawLimit(state, unit.unitId(), speed, index, maneuver.maximumYawClicks().get(index)) : maneuver.maximumYawClicks().get(index)))) {
             return rejected("MANEUVER_INVALID", "The selected yaw exceeds the unit's maneuver chart");
         }
         double distancePerSpeed = numericOption(state.values(), "distancePerSpeed",
@@ -405,23 +498,90 @@ public final class AuthoritativeGameEngine implements GameEngine {
                 pose.facing(), "activated", unit.hullPoints(), unit.shieldPoints(), unit.defenseTokens(), speed,
                 unit.shieldZones(), unit.readyDefenseTokens(), unit.exhaustedDefenseTokens());
         List<UnitState> units = new ArrayList<>(state.units());
-        units.set(units.indexOf(unit), moved);
+        units.replaceAll(item -> item.unitId() == moved.unitId() ? moved : item);
+        GameEvent previousMovement = resettableMovement(state, state.units().stream()
+                .filter(item -> item.unitId() == unit.unitId()).findFirst().orElseThrow());
         GameEvent event = event(state, "unit_moved", action.actorPlayerId(), Map.of(
                 "unitId", unit.unitId(), "positionX", pose.x(), "positionY", pose.y(),
-                "facing", pose.facing(), "speed", speed, "yaw", yaw));
+                "facing", pose.facing(), "speed", speed, "yaw", yaw,
+                "previousMovement", movementSnapshot(unit),
+                "replacesMovementSequence", previousMovement == null ? 0L : previousMovement.sequence()));
         return accepted(new GameState(state.sessionId(), state.definitionVersionId(), state.status(), state.round(),
                 state.phaseCode(), state.activePlayerId(), state.stateVersion() + 1, state.players(), units,
                 state.board(), append(state.events(), event), state.values()), event);
     }
 
-    private ActionResult attackUnit(GameDefinition definition, GameState state, Action action) {
+    private static Map<String, Object> movementSnapshot(UnitState unit) {
+        return Map.of("positionX", unit.positionX(), "positionY", unit.positionY(),
+                "facing", unit.facing(), "speed", unit.currentSpeed());
+    }
+
+    private static UnitState restoreMovement(UnitState unit, GameEvent movement) {
+        Map<?, ?> origin = (Map<?, ?>) movement.payload().get("previousMovement");
+        return new UnitState(unit.unitId(), unit.playerId(), unit.unitCode(),
+                ((Number) origin.get("positionX")).doubleValue(), ((Number) origin.get("positionY")).doubleValue(),
+                ((Number) origin.get("facing")).doubleValue(), "ready", unit.hullPoints(), unit.shieldPoints(),
+                unit.defenseTokens(), ((Number) origin.get("speed")).intValue(), unit.shieldZones(),
+                unit.readyDefenseTokens(), unit.exhaustedDefenseTokens());
+    }
+
+    private static GameEvent resettableMovement(GameState state, UnitState unit) {
         if (!"running".equals(state.status())
-                || (!"ship".equals(state.phaseCode()) && !"squadron".equals(state.phaseCode()))) {
+                || (!state.values().containsKey(ActivationContext.KEY) && !"ship".equals(state.phaseCode()) && !"squadron".equals(state.phaseCode()))
+                || state.activePlayerId() == null || state.activePlayerId() != unit.playerId()
+                || (!"activated".equals(unit.status()) && !"activating".equals(unit.status())) || unit.hullPoints() <= 0) return null;
+        if (state.players().stream().noneMatch(player -> player.playerId() == unit.playerId()
+                && "human".equals(player.kind()))) return null;
+        for (int index = state.events().size() - 1; index >= 0; index--) {
+            GameEvent event = state.events().get(index);
+            if (List.of("turn_started", "phase_changed", "round_started", "game_started", "activation_completed").contains(event.type())) {
+                return null;
+            }
+            if (event.payload().get("unitId") instanceof Number id && id.longValue() == unit.unitId()) {
+                return "unit_moved".equals(event.type())
+                        && event.payload().get("previousMovement") instanceof Map<?, ?> ? event : null;
+            }
+        }
+        return null;
+    }
+
+    private ActionResult resetMovement(GameState state, Action action) {
+        if (!ActionAuthorization.isActivePlayer(state, action.actorPlayerId())) {
+            return rejected("NOT_ACTIVE_PLAYER", "Only the active player can reset movement");
+        }
+        long unitId = longParameter(action.parameters(), "unitId");
+        UnitState unit = state.units().stream().filter(item -> item.unitId() == unitId).findFirst().orElse(null);
+        if (unit == null) return rejected("UNIT_NOT_FOUND", "Unit " + unitId + " is not deployed");
+        if (unit.playerId() != action.actorPlayerId()) {
+            return rejected("UNIT_NOT_OWNED", "The acting player does not control unit " + unitId);
+        }
+        GameEvent movement = resettableMovement(state, unit);
+        if (movement == null) {
+            return rejected("MOVEMENT_RESET_NOT_ALLOWED", "This unit has no movement to reset in the current activation");
+        }
+        UnitState restored = restoreMovement(unit, movement);
+        List<UnitState> units = new ArrayList<>(state.units());
+        units.set(units.indexOf(unit), restored);
+        GameEvent event = event(state, "unit_movement_reset", action.actorPlayerId(), Map.of(
+                "unitId", unitId, "positionX", restored.positionX(), "positionY", restored.positionY(),
+                "facing", restored.facing(), "speed", restored.currentSpeed(),
+                "movementSequence", movement.sequence()));
+        return accepted(new GameState(state.sessionId(), state.definitionVersionId(), state.status(), state.round(),
+                state.phaseCode(), state.activePlayerId(), state.stateVersion() + 1, state.players(), units,
+                state.board(), append(state.events(), event), state.values()), event);
+    }
+
+    private ActionResult attackUnit(GameDefinition definition, GameState state, Action action, boolean resumed) {
+        if (!"running".equals(state.status())
+                || !allowsUnitActions(definition, state.phaseCode())) {
             return rejected("ATTACK_NOT_ALLOWED", "Attacks can only be made during the ship or squadron phase");
         }
         Player player = player(state, action.actorPlayerId());
         if (player == null) {
             return rejected("PLAYER_NOT_FOUND", "The acting player is not part of the game");
+        }
+        if (!ActionAuthorization.isActivePlayer(state, player.playerId())) {
+            return rejected("NOT_ACTIVE_PLAYER", "It is not the acting player's turn");
         }
         UnitState attacker = state.units().stream()
                 .filter(unit -> unit.unitId() == longParameter(action.parameters(), "unitId"))
@@ -432,16 +592,17 @@ public final class AuthoritativeGameEngine implements GameEngine {
         if (attacker.playerId() != player.playerId()) {
             return rejected("UNIT_NOT_OWNED", "The acting player does not control the attacking unit");
         }
-        if (!unitCanActInPhase(definition, state.phaseCode(), attacker)) {
+        if (!OrderEngine.activeSupport(state, attacker.unitId()) && !unitCanActInPhase(definition, state.phaseCode(), attacker)) {
             return rejected("UNIT_PHASE_MISMATCH", "This unit cannot activate during the " + state.phaseCode() + " phase");
         }
-        if (!"ready".equals(attacker.status())) {
+        if (!"ready".equals(attacker.status())
+                && !(definition != null && definition.turnStructure() != null && "activating".equals(attacker.status()))) {
             return rejected("UNIT_ALREADY_ACTIVATED", "Unit " + attacker.unitId() + " has already acted this turn");
         }
         UnitState target = state.units().stream()
                 .filter(unit -> unit.unitId() == longParameter(action.parameters(), "targetUnitId"))
                 .findFirst().orElse(null);
-        if (target == null) {
+        if (target == null || !visibleTarget(definition, action.actorPlayerId(), target)) {
             return rejected("TARGET_NOT_FOUND", "The target unit is not deployed");
         }
         if (target.playerId() == player.playerId()) {
@@ -454,18 +615,28 @@ public final class AuthoritativeGameEngine implements GameEngine {
         if (attackPlan == null) {
             return rejected("ATTACK_OUT_OF_RANGE", "The target is outside the attacking unit's range");
         }
+        if (!validOrderAttackColor(definition, state, attacker, attackPlan)) return rejected("ORDER_DIE_COLOR_INVALID", "The selected bonus color is not present in this attack pool");
+        if (!resumed) {
+            ActionResult window = ResponseWindows.open(definition, state, action);
+            if (window != null) return window;
+        }
         UnitDefinition attackerDefinition = unitDefinition(definition, attacker.unitCode());
-        int attackDice = attackPlan.dice().stream().mapToInt(AttackDie::count).sum();
+        boolean orderedAttack = new OrderEngine(definition).activation(state, attacker);
+        int bonus = orderedAttack ? OrderEngine.modifier(state, attacker.unitId(), "attackDice") : 0;
+        int rerolls = orderedAttack ? OrderEngine.modifier(state, attacker.unitId(), "rerolls") : 0;
+        int attackDice = attackPlan.dice().stream().mapToInt(AttackDie::count).sum() + bonus;
         Map<String, Integer> diceByColor = new HashMap<>();
         attackPlan.dice().forEach(die -> diceByColor.merge(die.color(), die.count(), Integer::sum));
-        int hits = 0;
-        for (AttackDie die : attackPlan.dice()) {
-            for (int index = 0; index < die.count(); index++) {
-                if (random.nextInt(6) >= 3) {
-                    hits++;
-                }
-            }
+        String bonusColor = String.valueOf(OrderEngine.modifiers(state, attacker.unitId()).getOrDefault("color", "auto"));
+        if (bonusColor.equals("auto")) bonusColor = attackPlan.dice().getFirst().color();
+        if (bonus > 0) diceByColor.merge(bonusColor, bonus, Integer::sum);
+        var outcomes = new ArrayList<Boolean>();
+        for (int die = 0; die < attackDice; die++) outcomes.add(random.nextInt(6) >= 3);
+        int rerolled = 0;
+        for (int die = 0; die < outcomes.size() && rerolled < rerolls; die++) {
+            if (!outcomes.get(die)) { outcomes.set(die, random.nextInt(6) >= 3); rerolled++; }
         }
+        int hits = (int) outcomes.stream().filter(Boolean::booleanValue).count();
         Map<String, Object> values = new HashMap<>(state.values());
         int noDamageAttacks = numericOption(state.values(), "noDamageAttacks", 0);
         boolean stabilizedRoll = hits == 0 && ++noDamageAttacks >= 3;
@@ -478,7 +649,7 @@ public final class AuthoritativeGameEngine implements GameEngine {
         values.put("noDamageAttacks", noDamageAttacks);
         int rolledDamage = hits * (attackPlan.generic() && attackerDefinition != null
                 ? attackerDefinition.attackDamage() : 1);
-        String defenseTokenType = hits > 0 ? selectedDefenseToken(action, target) : null;
+        String defenseTokenType = hits > 0 && !Boolean.TRUE.equals(action.parameters().get("declineDefense")) ? selectedDefenseToken(action, target) : null;
         if (hits > 0 && action.parameters().containsKey("defenseTokenType") && defenseTokenType == null) {
             return rejected("DEFENSE_TOKEN_NOT_READY", "The selected defense token is not ready");
         }
@@ -536,6 +707,8 @@ public final class AuthoritativeGameEngine implements GameEngine {
         eventPayload.put("targetZone", targetZone);
         eventPayload.put("rangeBand", attackPlan.rangeBand());
         eventPayload.put("diceByColor", diceByColor);
+        eventPayload.put("orderBonusDice", bonus);
+        eventPayload.put("orderRerolls", rerolled);
         String nextStatus = state.status();
         String nextPhase = state.phaseCode();
         Long nextActivePlayerId = state.activePlayerId();
@@ -556,12 +729,31 @@ public final class AuthoritativeGameEngine implements GameEngine {
                 append(state.events(), event), values), event);
     }
 
+    private static boolean visibleTarget(GameDefinition definition, long actor, UnitState target) {
+        return definition == null || definition.turnStructure() == null
+                || new StateProjection(definition.turnStructure().visibility(), Set.of(actor), List.of(target)).canSeePlayerUnits(target.playerId());
+    }
+
+    private static boolean validOrderAttackColor(GameDefinition definition, GameState state, UnitState unit, AttackPlan plan) {
+        if (!new OrderEngine(definition).activation(state, unit) || OrderEngine.modifier(state, unit.unitId(), "attackDice") == 0) return true;
+        String color = String.valueOf(OrderEngine.modifiers(state, unit.unitId()).getOrDefault("color", "auto"));
+        return color.equals("auto") || plan.dice().stream().anyMatch(die -> die.color().equals(color));
+    }
+
+    private static boolean allowsUnitActions(GameDefinition definition, String phase) {
+        if (definition != null && definition.turnStructure() != null) {
+            var configured = definition.turnStructure().phase(phase);
+            return configured != null && configured.mode() != TurnStructure.Mode.MANUAL;
+        }
+        return "ship".equals(phase) || "squadron".equals(phase);
+    }
+
     private ActionResult endTurn(GameState state, Action action) {
         if (!"running".equals(state.status())
                 || (!"ship".equals(state.phaseCode()) && !"squadron".equals(state.phaseCode()))) {
             return rejected("TURN_END_NOT_ALLOWED", "Turns can only end during the ship or squadron phase");
         }
-        if (state.activePlayerId() == null || state.activePlayerId() != action.actorPlayerId()) {
+        if (!ActionAuthorization.isActivePlayer(state, action.actorPlayerId())) {
             return rejected("NOT_ACTIVE_PLAYER", "Only the active player can end the turn");
         }
         List<Player> orderedPlayers = state.players().stream()

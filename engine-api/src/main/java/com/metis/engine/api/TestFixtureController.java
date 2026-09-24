@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -32,6 +33,7 @@ import java.util.Map;
 public class TestFixtureController {
 
     private static final List<FixtureSpec> FIXTURES = buildFixtures();
+    private static final List<FixtureSpec> CPU_SUITE = buildCpuSuite();
 
     private final BattleRepository battle;
     private final BattleTemplateRepository templates;
@@ -61,8 +63,25 @@ public class TestFixtureController {
     @Transactional
     public ResponseEntity<TestFixtureResponse> load(@PathVariable long gameId,
                                                      @RequestBody(required = false) LoadRequest request) {
+        return loadFixtures(gameId, FIXTURES);
+    }
+
+    @PostMapping("/suites/{gameId}")
+    @Transactional
+    public ResponseEntity<TestFixtureResponse> loadCpuSuite(@PathVariable long gameId) {
+        return loadFixtures(gameId, CPU_SUITE);
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/suites/{gameId}")
+    public List<BattleRepository.BattleSession> cpuSuite(@PathVariable long gameId) {
+        return battle.findSessions(gameId, null).stream()
+                .filter(session -> session.templateName() != null && session.templateName().startsWith("CPU SUITE /"))
+                .toList();
+    }
+
+    private ResponseEntity<TestFixtureResponse> loadFixtures(long gameId, List<FixtureSpec> fixtures) {
         List<LoadedFixture> loaded = new ArrayList<>();
-        for (FixtureSpec fixture : FIXTURES) {
+        for (FixtureSpec fixture : fixtures) {
             BattleRepository.BattleSession existing = battle.findSessions(gameId, null).stream()
                     .filter(session -> fixture.name().equals(session.sessionName()))
                     .findFirst().orElse(null);
@@ -90,9 +109,9 @@ public class TestFixtureController {
                         "Fleet " + player.seatNumber(), 0))
                 .toList();
         long templateId = templates.upsertTemplate(new BattleTemplateRepository.TemplateSpec(
-                gameId, fixture.key(), fixture.name(), "CPU versus CPU regression battle template",
+                gameId, fixture.key(), fixture.name(), fixture.description(),
                 session.gameVersionId(), setup.gameModeId(), setup.scenarioId(), setup.fleetFormatId(),
-                setup.boardCode(), setup.boardWidth(), setup.boardHeight(), setup.options(),
+                setup.boardCode(), setup.boardWidth(), setup.boardHeight(), fixture.options(setup.options()),
                 templatePlayers, session.sessionId()));
         templates.assignSessionTemplate(session.sessionId(), templateId);
         templates.setSourceMetadata(session.sessionId(), "cpu-fixture-v1");
@@ -112,8 +131,10 @@ public class TestFixtureController {
         if (factions.size() < 2) {
             throw new IllegalStateException("At least two factions are required for test fixtures");
         }
-        battle.createPlayer(sessionId, 1, factions.get(0).factionName(), "cpu", factions.get(0).factionId());
-        battle.createPlayer(sessionId, 2, factions.get(1).factionName(), "cpu", factions.get(1).factionId());
+        DefinitionRepository.Faction first = faction(factions, fixture.factionOne(), 0);
+        DefinitionRepository.Faction second = faction(factions, fixture.factionTwo(), 1);
+        battle.createPlayer(sessionId, 1, first.factionName(), "cpu", first.factionId());
+        battle.createPlayer(sessionId, 2, second.factionName(), "cpu", second.factionId());
         List<BattleRepository.SessionPlayer> players = battle.findPlayers(sessionId);
         if (setup.boardDefinitionId() > 0) battle.createBoard(sessionId, setup.boardDefinitionId(), "primary", null);
         if (setup.fleetFormatId() > 0) {
@@ -135,26 +156,47 @@ public class TestFixtureController {
                         player.factionName()))
                 .toList();
         GameSetup gameSetup = new GameSetup(2, 2, enginePlayers,
-                new BoardState(setup.boardCode(), setup.boardWidth(), setup.boardHeight()), setup.options());
+                new BoardState(setup.boardCode(), setup.boardWidth(), setup.boardHeight()), fixture.options(setup.options()));
+        definitions.captureSessionDefinition(sessionId, definition);
         GameState state = engine.createInitialState(sessionId, definition, gameSetup);
         state = applyAndPersist(definition, state, new Action("start_game", 0, Map.of()));
         for (int index = 0; index < enginePlayers.size(); index++) {
             Player player = enginePlayers.get(index);
-            UnitDefinition profile = definition.unitDefinitions().stream()
-                    .filter(unit -> unit.factionCode().equals(player.factionCode()))
-                    .filter(unit -> "ship".equalsIgnoreCase(unit.classification()))
-                    .findFirst()
-                    .orElseGet(() -> definition.unitDefinitions().stream()
-                            .filter(unit -> unit.factionCode().equals(player.factionCode()))
-                            .findFirst()
-                            .orElseThrow(() -> new IllegalStateException(
-                                    "No test unit is available for " + player.factionCode())));
-            state = applyAndPersist(definition, state, new Action("deploy_unit", player.playerId(), Map.of(
-                    "unitId", fixture.unitId(index), "unitCode", profile.code(),
-                    "positionX", fixture.positionX(index), "positionY", fixture.positionY(index),
-                    "facing", index == 0 ? 0 : 180)));
+            List<UnitDefinition> profiles = selectProfiles(definition, player.factionCode(), fixture.loadout());
+            for (int unitIndex = 0; unitIndex < profiles.size(); unitIndex++) {
+                UnitDefinition profile = profiles.get(unitIndex);
+                state = applyAndPersist(definition, state, new Action("deploy_unit", player.playerId(), Map.of(
+                        "unitId", fixture.unitId(index, unitIndex), "unitCode", profile.code(),
+                        "positionX", fixture.positionX(index, unitIndex), "positionY", fixture.positionY(index, unitIndex),
+                        "facing", index == 0 ? 0 : 180)));
+            }
         }
         syncRelationalUnits(sessionId, state);
+    }
+
+    private static DefinitionRepository.Faction faction(List<DefinitionRepository.Faction> factions,
+                                                        String name, int fallbackIndex) {
+        return name == null ? factions.get(fallbackIndex) : factions.stream()
+                .filter(item -> name.equals(item.factionName())).findFirst()
+                .orElseThrow(() -> new IllegalStateException("Faction " + name + " is unavailable"));
+    }
+
+    private static List<UnitDefinition> selectProfiles(GameDefinition definition, String factionName,
+                                                        Loadout loadout) {
+        List<UnitDefinition> available = definition.unitDefinitions().stream()
+                .filter(unit -> unit.factionCode().equals(factionName)).toList();
+        List<UnitDefinition> ships = available.stream()
+                .filter(unit -> "ship".equalsIgnoreCase(unit.classification())).limit(2).toList();
+        List<UnitDefinition> squadrons = available.stream()
+                .filter(unit -> "squadron".equalsIgnoreCase(unit.classification())).limit(2).toList();
+        List<UnitDefinition> selected = switch (loadout) {
+            case SINGLE -> ships.isEmpty() ? available.stream().limit(1).toList() : ships.stream().limit(1).toList();
+            case CAPITAL -> ships;
+            case SQUADRON -> squadrons;
+            case MIXED -> java.util.stream.Stream.concat(ships.stream().limit(1), squadrons.stream().limit(1)).toList();
+        };
+        if (selected.isEmpty()) throw new IllegalStateException("No " + loadout + " units are available for " + factionName);
+        return selected;
     }
 
     private void syncRelationalUnits(long sessionId, GameState state) {
@@ -207,9 +249,34 @@ public class TestFixtureController {
         List<FixtureSpec> fixtures = new ArrayList<>();
         for (int ordinal = 1; ordinal <= 10; ordinal++) {
             fixtures.add(new FixtureSpec(ordinal, String.format("metis-test-game-%02d", ordinal),
-                    String.format("METIS-TEST-GAME-%02d", ordinal)));
+                    String.format("METIS-TEST-GAME-%02d", ordinal), null, null, Loadout.SINGLE,
+                    "CPU versus CPU regression battle template"));
         }
         return List.copyOf(fixtures);
+    }
+
+    private static List<FixtureSpec> buildCpuSuite() {
+        List<FixtureSpec> suite = new ArrayList<>();
+        String[][] pairings = {
+                {"Galactic Empire", "Rebel Alliance"},
+                {"Galactic Republic", "Separatist Alliance"},
+                {"Galactic Empire", "Galactic Republic"},
+                {"Rebel Alliance", "Separatist Alliance"}
+        };
+        int ordinal = 101;
+        for (String[] pairing : pairings) {
+            for (Loadout loadout : List.of(Loadout.CAPITAL, Loadout.SQUADRON, Loadout.MIXED)) {
+                String key = "cpu-suite-" + slug(pairing[0]) + "-vs-" + slug(pairing[1]) + "-" + loadout.name().toLowerCase();
+                String name = "CPU SUITE / " + pairing[0] + " vs " + pairing[1] + " / " + loadout.name();
+                suite.add(new FixtureSpec(ordinal++, key, name, pairing[0], pairing[1], loadout,
+                        "CPU suite battle using " + loadout.name().toLowerCase() + " loadouts"));
+            }
+        }
+        return List.copyOf(suite);
+    }
+
+    private static String slug(String value) {
+        return value.toLowerCase().replace(" ", "-");
     }
 
     public record LoadRequest(Boolean resetExisting) {}
@@ -220,21 +287,42 @@ public class TestFixtureController {
                                 String sessionName, String sessionCode, String status,
                                 String resource) {}
 
-    private record FixtureSpec(int ordinal, String key, String name) {
+    private enum Loadout { SINGLE, CAPITAL, SQUADRON, MIXED }
+
+    private record FixtureSpec(int ordinal, String key, String name, String factionOne, String factionTwo,
+                               Loadout loadout, String description) {
+        private Map<String, Object> options(Map<String, Object> base) {
+            Map<String, Object> options = new LinkedHashMap<>(base);
+            options.put("loadoutProfile", loadout.name().toLowerCase());
+            return options;
+        }
+
         private String boardCode() {
             return "standard_6x3";
         }
 
         private long unitId(int playerIndex) {
-            return ordinal * 10L + playerIndex + 1;
+            return unitId(playerIndex, 0);
+        }
+
+        private long unitId(int playerIndex, int unitIndex) {
+            return ordinal * 1000L + playerIndex * 100L + unitIndex + 1;
         }
 
         private double positionX(int playerIndex) {
-            return playerIndex == 0 ? 200 + ordinal * 10 : 1600 - ordinal * 10;
+            return positionX(playerIndex, 0);
+        }
+
+        private double positionX(int playerIndex, int unitIndex) {
+            return playerIndex == 0 ? 200 + ordinal * 2 + unitIndex * 80 : 1600 - ordinal * 2 - unitIndex * 80;
         }
 
         private double positionY(int playerIndex) {
-            return playerIndex == 0 ? 200 + ordinal * 15 : 700 - ordinal * 15;
+            return positionY(playerIndex, 0);
+        }
+
+        private double positionY(int playerIndex, int unitIndex) {
+            return playerIndex == 0 ? 200 + ordinal * 2 + unitIndex * 150 : 700 - ordinal * 2 - unitIndex * 150;
         }
     }
 }

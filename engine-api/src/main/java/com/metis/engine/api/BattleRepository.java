@@ -47,8 +47,11 @@ public class BattleRepository {
                 WHERE (CAST(? AS bigint) IS NULL OR s.game_id = ?)
                   AND (CAST(? AS text) IS NULL OR s.status = ?)
                   AND (? OR s.visibility = 'public' OR s.owner_user_id = ?
-                       OR EXISTS (SELECT 1 FROM game_instance.session_invitation i
-                                  WHERE i.session_id = s.session_id AND i.user_id = ?))
+                        OR EXISTS (SELECT 1 FROM game_instance.session_invitation i
+                                   WHERE i.session_id = s.session_id AND i.user_id = ?)
+                        OR EXISTS (SELECT 1 FROM game_instance.session_player member
+                                   JOIN game_instance.session_seat_owner seat USING(session_player_id)
+                                   WHERE member.session_id=s.session_id AND seat.user_id=?))
                  GROUP BY s.session_id, g.game_name, t.template_name
                 ORDER BY s.updated_at DESC, s.session_id DESC
                 """, (rs, rowNum) -> new BattleSession(
@@ -59,7 +62,7 @@ public class BattleRepository {
                  rs.getObject("run_number", Integer.class), rs.getString("status"),
                 rs.getInt("current_round"), rs.getLong("player_count"),
                 rs.getString("created_at"), rs.getString("updated_at")),
-                gameId, gameId, status, status, user.admin(), user.userId(), user.userId());
+                gameId, gameId, status, status, user.admin(), user.userId(), user.userId(), user.userId());
     }
 
     public Optional<BattleSessionDetail> findSession(long sessionId) {
@@ -94,6 +97,29 @@ public class BattleRepository {
                 Boolean.class, sessionId, user.userId(), user.admin());
         return Boolean.TRUE.equals(allowed);
     }
+
+    public List<SeatAssignment> findSeats(long sessionId) {
+        return jdbc.query("SELECT * FROM game_instance.fn_session_seats(?)", (rs,row)->
+                new SeatAssignment(rs.getLong("session_player_id"),rs.getObject("user_id",Long.class),
+                        rs.getString("display_name"),rs.getString("player_kind")),sessionId);
+    }
+    public java.util.Set<Long> controlledPlayers(long sessionId, long userId) {
+        return findSeats(sessionId).stream().filter(seat->"human".equals(seat.playerKind()) && seat.userId()!=null && seat.userId()==userId)
+                .map(SeatAssignment::sessionPlayerId).collect(java.util.stream.Collectors.toSet());
+    }
+    public void assignSeat(long playerId,long userId) {
+        jdbc.update("CALL game_instance.sp_seat_owner_assign(?,?)",playerId,userId);
+    }
+    public Optional<Long> playerIdForResource(String resource,long id) {
+        String sql=switch(resource) {
+            case "players" -> "SELECT session_player_id FROM game_instance.session_player WHERE session_player_id=?";
+            case "fleets" -> "SELECT session_player_id FROM game_instance.player_fleet WHERE fleet_id=?";
+            case "units" -> "SELECT f.session_player_id FROM game_instance.fleet_unit u JOIN game_instance.player_fleet f USING(fleet_id) WHERE u.unit_instance_id=?";
+            default -> null;
+        };
+        return sql==null?Optional.empty():jdbc.query(sql,rs->rs.next()?Optional.of(rs.getLong(1)):Optional.empty(),id);
+    }
+    public record SeatAssignment(long sessionPlayerId, Long userId, String displayName, String playerKind) {}
 
     public void assignSessionOwner(long sessionId, long userId) {
         execute("{call game_instance.sp_session_owner_set(?,?)}", statement -> {

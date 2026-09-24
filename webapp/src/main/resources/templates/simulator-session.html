@@ -11,7 +11,7 @@
     <a class="tactical-brand" href="/simulator"><strong>METIS</strong><span>BATTLE SIMULATOR / V0.1</span></a>
     <div class="tactical-system">MODULAR ENGINE FOR<br>TABLETOP INTELLIGENCE &amp; STRATEGY</div>
     <a class="tactical-user" href="/logout" th:text="${currentUser.displayName + ' / LOG OUT'}"></a>
-    <div class="tactical-readout"><div><span>GAME</span><strong th:text="${battleSession.gameName}"></strong></div><div><span>SCENARIO</span><strong th:text="${scenarioName}"></strong></div><div th:if="${battleSession.templateName != null}"><span>TEMPLATE / RUN</span><strong th:text="|${battleSession.templateName} / ${battleSession.runNumber}|" ></strong></div><div><span>TURN</span><strong id="session-round" th:text="|${engineState != null ? engineState.round : battleSession.currentRound} / ${engineState != null and engineState.values['maximumRounds'] != null ? engineState.values['maximumRounds'] : 6}|"></strong></div><div><span>PHASE</span><strong id="session-status" th:text="${engineState != null ? engineState.phaseCode : battleSession.status}"></strong></div></div>
+    <div class="tactical-readout"><div><span>GAME</span><strong th:text="${battleSession.gameName}"></strong></div><div><span>SCENARIO</span><strong th:text="${scenarioName}"></strong></div><div th:if="${battleSession.templateName != null}"><span>TEMPLATE / RUN</span><strong th:text="|${battleSession.templateName} / ${battleSession.runNumber}|" ></strong></div><div><span>TURN</span><strong id="session-round" th:text="|${engineState != null ? engineState.round : battleSession.currentRound} / ${engineState != null and engineState.values['unlimitedRounds'] == true ? 'Unlimited' : (engineState != null and engineState.values['maximumRounds'] != null ? engineState.values['maximumRounds'] : 6)}|"></strong></div><div><span>PHASE</span><strong id="session-status" th:text="${battleSession.status == 'paused' ? 'Paused' : (engineState != null ? engineState.phaseCode : battleSession.status)}"></strong></div></div>
 </header>
 <main class="tactical-shell">
     <div class="tactical-screen-grid">
@@ -65,9 +65,12 @@
 </main>
  <script th:inline="javascript">
      const unitProfiles = /*[[${engineDefinition != null ? engineDefinition.unitDefinitions : {}}]]*/ [];
+     const turnStructure = /*[[${engineDefinition != null ? engineDefinition.turnStructure : null}]]*/ null;
+     const viewingUserId = /*[[${currentUser.userId}]]*/ null;
      const unitProfileByCode = new Map(unitProfiles.map(profile => [String(profile.code), profile]));
       const unitProfile = unit => unitProfileByCode.get(String(unit.unitCode));
-      const phaseLabel = phase => ({ deployment: 'Deployment', command: 'Command', ship: 'Movement', squadron: 'Squadron', status: 'Status', victory: 'Victory' }[phase] || phase || 'Setup');
+      const phaseLabel = phase => turnStructure?.phases?.find(item => item.code === phase)?.label
+          || ({ deployment: 'Deployment', command: 'Command', ship: 'Movement', squadron: 'Squadron', status: 'Status', victory: 'Victory' }[phase] || phase || 'Setup');
       const unitColour = (unit, state) => {
           const playerIndex = state?.players?.findIndex(player => player.playerId === unit.playerId) ?? 0;
           return playerIndex === 0 ? '#53d9ff' : '#ff6670';
@@ -110,7 +113,7 @@
               if (!unit) {
                   const empty = document.createElement('p');
                   empty.className = 'roster-empty';
-                  empty.textContent = 'No units deployed.';
+                  empty.textContent = turnStructure?.visibility?.units && turnStructure.visibility.units !== 'PUBLIC' ? 'No visible units.' : 'No units deployed.';
                   return empty;
               }
               const control = document.createElement('button');
@@ -236,23 +239,33 @@
           let status = 'setup';
           let round = 1;
           let phaseCode = 'setup';
-          let activePlayerId = null;
+           let activePlayerId = null;
+           let activation = {};
+            let responseWindow = null;
+            let orderState = {}, orderActivations = {}, orderQueues = {};
           const initialUnit = (base, payload, playerId) => {
               const profile = unitProfile(base);
               const maximumSpeed = Number(profile?.maximumMovementDistance ?? base.currentSpeed ?? 0);
               return { ...base, playerId: Number(playerId ?? base.playerId),
-                  positionX: Number(payload.positionX), positionY: Number(payload.positionY), facing: 0,
+                   positionX: Number(payload.positionX), positionY: Number(payload.positionY), facing: Number(payload.facing || 0),
                    status: 'ready', hullPoints: Number(profile?.maximumHullPoints ?? base.hullPoints),
                    shieldPoints: Number(profile?.maximumShieldPoints ?? base.shieldPoints),
                    defenseTokens: Number(profile?.defenseTokenCount ?? base.defenseTokens),
                    readyDefenseTokens: { ...(profile?.defenseTokenCounts || base.readyDefenseTokens || {}) },
                    exhaustedDefenseTokens: {},
-                   currentSpeed: Math.min(1, maximumSpeed),
+                    currentSpeed: payload.speed == null ? Math.min(1, maximumSpeed) : Number(payload.speed),
                   shieldZones: { ...(profile?.shieldZones || base.shieldZones || {}) } };
           };
           events.forEach(event => {
               const payload = event.payload || {};
-              const type = event.type;
+                const type = event.type;
+                if (payload.orderState) orderState = payload.orderState;
+                if (payload.orderActivations) orderActivations = payload.orderActivations;
+                if (type === 'orders_planned') orderQueues[payload.unitId] = { entries: [...payload.entries] };
+                if (type === 'unit_activated' && orderQueues[payload.unitId] && orderState[payload.unitId]) {
+                    orderQueues[payload.unitId] = { entries: orderQueues[payload.unitId].entries.slice(1) };
+                }
+               responseWindow = type === 'response_opened' ? payload.responseWindow : null;
               if (type === 'game_started') {
                   status = 'running';
                   phaseCode = payload.phase || 'deployment';
@@ -262,13 +275,13 @@
                   const unitId = Number(payload.unitId);
                   const base = finalUnits.get(unitId);
                   if (base) units.set(unitId, initialUnit(base, payload, event.actorPlayerId));
-              } else if (type === 'unit_moved') {
+               } else if (type === 'unit_moved' || type === 'unit_movement_reset') {
                   const unit = units.get(Number(payload.unitId));
                   if (unit) units.set(Number(payload.unitId), { ...unit,
                       positionX: Number(payload.positionX), positionY: Number(payload.positionY),
                       facing: payload.facing == null ? unit.facing : Number(payload.facing),
                       currentSpeed: payload.speed == null ? unit.currentSpeed : Number(payload.speed),
-                      status: 'activated' });
+                       status: type === 'unit_movement_reset' ? 'ready' : 'activated' });
               } else if (type === 'unit_attacked' || type === 'game_won') {
                   const attackerId = Number(payload.unitId);
                   const targetId = Number(payload.targetUnitId);
@@ -326,14 +339,22 @@
                                readyDefenseTokens, exhaustedDefenseTokens: {} });
                        }
                    });
-              } else if (type === 'round_limit_reached') {
-                  status = 'finished';
-                  phaseCode = 'victory';
-                  activePlayerId = null;
-              }
-          });
-          return { ...source, status, round, phaseCode, activePlayerId,
-              stateVersion: eventCount, units: [...units.values()], events };
+               } else if (type === 'round_limit_reached') {
+                   status = 'finished';
+                   phaseCode = 'victory';
+                   activePlayerId = null;
+               }
+               if (payload.activation) {
+                   activation = payload.activation;
+                   phaseCode = payload.phase;
+                   round = Number(payload.round);
+                   activePlayerId = Number(payload.activePlayerId) || null;
+                   status = payload.status;
+                   for (const changed of payload.unitChanges || []) units.set(Number(changed.unitId), { ...changed });
+               }
+           });
+           return { ...source, status, round, phaseCode, activePlayerId,
+                stateVersion: eventCount, units: [...units.values()], events, values: { ...source.values, activation, responseWindow, orderState, orderActivations, orderQueues } };
       };
       const replayDescription = state => {
           if (!state) return 'No recorded events';
@@ -343,7 +364,7 @@
           if (!replaySlider || !state) return;
           const max = Number(replaySlider.max);
           const historical = replayIndex < max;
-          replayPositionLabel.textContent = historical ? `EVENT ${replayIndex} / ${max}` : 'FINAL STATE';
+           replayPositionLabel.textContent = historical ? `EVENT ${replayIndex} / ${max}` : state.status === 'paused' ? 'PAUSED STATE' : 'FINAL STATE';
           replayEventLabel.textContent = `${replayDescription(state)} // ${state.events.length} recorded event${state.events.length === 1 ? '' : 's'}`;
       };
       const renderReplayEffects = state => {
@@ -378,8 +399,12 @@
           const terrain = svgNode('g', { class: 'overlay-terrain' });
           const plans = svgNode('g', { class: 'overlay-plans' });
           const measurementLayer = svgNode('g', { class: 'overlay-measurement' });
-          const trajectoryPoints = new Map();
-          (state.events || []).filter(event => event.type === 'unit_deployed' || event.type === 'unit_moved')
+           const trajectoryPoints = new Map();
+           const resetMovements = new Set((state.events || [])
+               .flatMap(event => [Number(event.payload?.movementSequence), Number(event.payload?.replacesMovementSequence)])
+               .filter(sequence => sequence > 0));
+           (state.events || []).filter(event => event.type === 'unit_deployed' || event.type === 'unit_moved')
+               .filter(event => !resetMovements.has(Number(event.sequence)))
               .forEach(event => {
                   const unitId = Number(event.payload?.unitId);
                   const x = Number(event.payload?.positionX);
@@ -425,13 +450,15 @@
          visibleUnits.forEach(unit => {
              const profile = unitProfile(unit);
               const distancePerSpeed = Number(state.values?.distancePerSpeed || state.values?.maximumMovementDistance || 100);
-              const moveRadius = (Number(unit.currentSpeed) || 0) * distancePerSpeed;
+               const origin = movementOrigin(unit, state);
+               const moveRadius = (Number(origin.currentSpeed) || 0) * distancePerSpeed;
              const rangeRadius = profile?.maximumAttackRange || 100;
              const point = boardPoint(unit, state);
              const colour = unitColour(unit, state);
-             if (layerState.movement && moveRadius > 0) {
-                 movement.append(svgNode('circle', { cx: point.x, cy: point.y, r: moveRadius, class: 'movement-ring', stroke: colour }));
-                 movement.append(svgNode('circle', { cx: point.x, cy: point.y, r: Math.max(18, moveRadius * .52), class: 'turning-ring', stroke: colour }));
+              if (layerState.movement && moveRadius > 0) {
+                  const movementCenter = boardPoint(origin, state);
+                  movement.append(svgNode('circle', { cx: movementCenter.x, cy: movementCenter.y, r: moveRadius, class: 'movement-ring', stroke: colour }));
+                  movement.append(svgNode('circle', { cx: movementCenter.x, cy: movementCenter.y, r: Math.max(18, moveRadius * .52), class: 'turning-ring', stroke: colour }));
              }
              if (layerState.range) {
                  ranges.append(svgNode('circle', { cx: point.x, cy: point.y, r: rangeRadius, class: 'firing-range', stroke: colour }));
@@ -498,8 +525,14 @@
          const detail = document.querySelector('#cpu-activity-detail');
          if (!panel || !label || !detail) return;
          const active = state.players?.find(player => player.playerId === state.activePlayerId);
-         const cpu = active?.kind === 'cpu';
-         panel.classList.toggle('human-active', !cpu);
+          const cpu = active?.kind === 'cpu';
+          panel.classList.toggle('human-active', !cpu || state.status !== 'running');
+          panel.classList.toggle('battle-paused', state.status === 'paused');
+          if (state.status === 'paused') {
+              label.textContent = 'BATTLE PAUSED';
+              detail.textContent = 'CPU processing is stopped. State and history are preserved.';
+              return;
+          }
          if (state.status === 'finished') {
              label.textContent = 'BATTLE COMPLETE';
              detail.textContent = 'Authoritative result recorded.';
@@ -527,7 +560,7 @@
          const effects = document.querySelector('#battle-effects');
          if (!effects || !state?.board) return;
          effects.setAttribute('viewBox', `0 0 ${state.board.width} ${state.board.height}`);
-         if (event.type === 'unit_moved') {
+          if (event.type === 'unit_moved' || event.type === 'unit_movement_reset') {
              const unit = state.units.find(item => item.unitId === Number(event.payload?.unitId));
              if (!unit) return;
              const previous = previousState?.units.find(item => item.unitId === unit.unitId);
@@ -556,14 +589,18 @@
          const target = state.units.find(item => item.unitId === Number(payload.targetUnitId));
          const actor = state.players.find(item => item.playerId === event.actorPlayerId);
          const actorName = actor?.factionCode || 'COMMAND';
-          if (event.type === 'unit_moved') return `${actorName} moved ${unit ? unitLabel(unit) : 'unit'} at speed ${payload.speed || unit?.currentSpeed || 0} to ${Math.round(payload.positionX)}, ${Math.round(payload.positionY)}`;
+           if (event.type === 'unit_moved') return `${actorName} moved ${unit ? unitLabel(unit) : 'unit'} at speed ${payload.speed || unit?.currentSpeed || 0} to ${Math.round(payload.positionX)}, ${Math.round(payload.positionY)}`;
+           if (event.type === 'unit_movement_reset') return `${actorName} reset movement for ${unit ? unitLabel(unit) : 'unit'} // ready to move again`;
+           if (event.type === 'unit_activated') return `${actorName} activated ${unit ? unitLabel(unit) : 'unit'}`;
+           if (event.type === 'activation_completed') return `${actorName} completed ${unit ? unitLabel(unit) : 'unit'} // ${phaseLabel(payload.phase)}`;
          if (event.type === 'unit_attacked') return `${actorName} fired ${unit ? unitLabel(unit) : 'unit'} at ${target ? unitLabel(target) : 'target'} // ${payload.arc || 'front'} arc / ${payload.rangeBand || 'short'} range / ${payload.hits || 0} hits / ${payload.damage || 0} hull damage`;
          if (event.type === 'game_won') return `${actorName} destroyed ${target ? unitLabel(target) : 'the final target'} // VICTORY`;
          if (event.type === 'turn_started') {
              const next = state.players.find(item => item.playerId === Number(payload.activePlayerId));
              return `Turn passed to ${next?.factionCode || 'next commander'} // ${next?.kind === 'cpu' ? 'CPU planning' : 'commander input'}`;
          }
-         if (event.type === 'phase_changed') return `Battlefield phase changed // ${payload.to || state.phaseCode}`;
+          if (event.type === 'phase_changed') return `Battlefield phase changed // ${payload.to || state.phaseCode}`;
+          if (event.type === 'game_paused') return 'Battle paused // state and history preserved';
          if (event.type === 'round_limit_reached') return `Round limit reached // ${payload.maximumRounds || state.round} rounds // DRAW`;
          if (event.type === 'unit_deployed') return `${actorName} deployed a unit at ${Math.round(payload.positionX)}, ${Math.round(payload.positionY)}`;
          return event.type.replaceAll('_', ' ');
@@ -608,6 +645,8 @@
         return response.ok ? response.json() : null;
     };
     const submitAction = async (form, type, parameters) => {
+        if (!snapshotCompatible || replayActive) return false;
+        if (!(type === 'advance_phase' && controlledPlayerIds.size) && !controlledPlayerIds.has(Number(parameters.actorPlayerId))) return false;
         const state = await stateFor(form.dataset.sessionId);
         if (!state) {
             engineMessage.textContent = 'The current game state is unavailable.';
@@ -619,8 +658,20 @@
                 expectedStateVersion: state.stateVersion, parameters })
         });
         const result = await response.json();
-        if (response.ok && result.accepted !== false) window.location.reload();
-        else engineMessage.textContent = result.message || result.error || result.code || 'The engine rejected the action.';
+         if (response.ok && result.accepted !== false) {
+             engineMessage.textContent = '';
+             const interaction = document.querySelector('#interaction-message');
+             if (interaction) interaction.textContent = result.code === 'RESPONSE_REQUIRED' ? 'Waiting for the designated player to respond.' : type === 'move_unit'
+                 ? 'Movement updated. Adjust position or heading, reset movement, or finish this unit’s activation.'
+                 : type === 'reset_movement' ? 'Movement reset. This unit is ready to move again.' : 'Action applied.';
+             await refreshLiveView();
+             return true;
+         }
+         const message = result.message || result.error || result.code || 'The engine rejected the action.';
+         engineMessage.textContent = message;
+         const interaction = document.querySelector('#interaction-message');
+         if (interaction) interaction.textContent = message;
+         return false;
     };
     const startForm = document.querySelector('#start-form');
     startForm?.addEventListener('submit', async (event) => {
@@ -667,6 +718,31 @@
     const liveBoard = document.querySelector('#live-board-panel');
     const engineStatus = document.querySelector('#engine-status');
       const sessionId = liveBoard?.dataset.sessionId || engineStatus?.dataset.sessionId;
+      let snapshotCompatible = false;
+      let controlledPlayerIds = new Set();
+      let compatibilityChecked = false;
+      const compatibilityPanel = document.createElement('div');
+      compatibilityPanel.className = 'snapshot-notice';
+      compatibilityPanel.hidden = true;
+      const compatibilityMessage = document.createElement('p');
+      const restartBattle = document.createElement('button');
+      restartBattle.type = 'button';
+      restartBattle.className = 'tactical-button';
+      restartBattle.textContent = 'Restart as a new battle';
+      compatibilityPanel.append(compatibilityMessage, restartBattle);
+      liveBoard?.prepend(compatibilityPanel);
+      restartBattle.addEventListener('click', async () => {
+          restartBattle.disabled = true;
+          try {
+              const response = await fetch(`/api/v1/sessions/${sessionId}/restart`, { method: 'POST' });
+              const result = await response.json();
+              if (!response.ok) throw new Error(result.message || result.error || 'Could not restart this battle.');
+              window.location.assign(`/simulator/sessions/${result.sessionId}`);
+          } catch (error) {
+              compatibilityMessage.textContent = error.message;
+              restartBattle.disabled = false;
+          }
+      });
       const replaySlider = document.querySelector('#replay-slider');
       const replayPositionLabel = document.querySelector('#replay-position-label');
       const replayEventLabel = document.querySelector('#replay-event-label');
@@ -678,7 +754,9 @@
       let selectedUnitId = null;
       let initializedSelection = false;
       let measurement = null;
-      let interactionMode = 'select';
+       let interactionMode = 'select';
+        let suppressBoardClick = false;
+       let boardInteractionActive = false;
      let panMode = false;
      let zoomLevel = 1;
      const setMapZoom = nextZoom => {
@@ -698,7 +776,222 @@
          });
      };
      let legalActionTypes = new Set();
-     let legalTargetIds = new Set();
+      let legalTargetIds = new Set();
+      let resettableUnitIds = new Set();
+      let currentLegalActions = [];
+      const legalForUnit = (type, unit) => Boolean(unit && currentLegalActions.some(action => action.type === type
+          && (!turnStructure || Number(action.parameters?.unitId) === unit.unitId)));
+      const resetMovementButton = document.createElement('button');
+      resetMovementButton.id = 'reset-movement';
+      resetMovementButton.type = 'button';
+      resetMovementButton.className = 'tactical-button';
+      resetMovementButton.textContent = 'Reset movement';
+      resetMovementButton.title = 'Restore position, heading and speed before finishing this unit’s activation';
+      resetMovementButton.disabled = true;
+      document.querySelector('#end-activation')?.before(resetMovementButton);
+      const endPhaseButton = document.querySelector('#end-activation');
+      if (endPhaseButton) endPhaseButton.textContent = 'End phase';
+      const activateUnitButton = document.createElement('button');
+      activateUnitButton.type = 'button';
+      activateUnitButton.className = 'tactical-button';
+      activateUnitButton.textContent = 'Activate selected unit';
+      activateUnitButton.disabled = true;
+      endPhaseButton?.before(activateUnitButton);
+      const nextActivationStep = document.createElement('button');
+      nextActivationStep.type = 'button';
+      nextActivationStep.className = 'tactical-button';
+      nextActivationStep.textContent = 'Next activation step';
+      nextActivationStep.disabled = true;
+      endPhaseButton?.before(nextActivationStep);
+      nextActivationStep.addEventListener('click', () => {
+          if (!nextActivationStep.disabled) submitAction(liveBoard, 'advance_step', { actorPlayerId: currentState.activePlayerId });
+      });
+      const activationSummary = document.createElement('p');
+      activationSummary.className = 'activation-summary';
+      activationSummary.setAttribute('aria-live', 'polite');
+      document.querySelector('.board-status')?.after(activationSummary);
+      const decisionPanel = document.createElement('section');
+      decisionPanel.className = 'tactical-decision-panel';
+      decisionPanel.hidden = true;
+      activationSummary.after(decisionPanel);
+      const privateChoiceDrafts = new Map();
+      const orderPanel = document.createElement('section');
+      orderPanel.className = 'tactical-decision-panel order-panel';
+      orderPanel.hidden = true;
+      decisionPanel.after(orderPanel);
+      const orderDrafts = new Map();
+      const orderLabel = code => turnStructure?.orders?.orders?.find(order => order.code === code)?.label || code;
+      const orderedMovement = unit => Boolean(turnStructure?.orders && unit
+          && turnStructure.orders.activationPhase === currentState?.phaseCode
+          && currentState?.values?.orderState?.[unit.unitId]);
+      const renderOrders = () => {
+          orderPanel.replaceChildren();
+          const unit = selectedUnit();
+          const record = currentState?.values?.orderState?.[unit?.unitId];
+          const queue = currentState?.values?.orderQueues?.[unit?.unitId];
+          const actions = replayActive ? [] : currentLegalActions.filter(action => ['plan_orders', 'store_order', 'discard_order', 'resolve_order',
+              'activate_support_unit', 'end_support_activation', 'end_order_grant'].includes(action.type));
+          orderPanel.hidden = !record && !queue && !actions.length;
+          if (record || queue) {
+              const summary = document.createElement('p');
+              const tokens = Object.entries(record?.tokens || {}).map(([code, count]) => `${orderLabel(code)} × ${count}`).join(', ') || 'none';
+              summary.textContent = `${unitLabel(unit)} — revealed: ${record?.revealed ? orderLabel(record.revealed) + (record.available ? ' (available)' : ' (spent)') : 'none'}; tokens: ${tokens}.`
+                  + (queue ? ` Private queue, next first: ${(queue.entries || []).map(orderLabel).join(' → ') || 'empty'}.` : '');
+              orderPanel.append(summary);
+          }
+          for (const action of actions) {
+              const p = action.parameters || {};
+              const key = `${currentState.round}:${action.type}:${p.unitId || ''}:${p.orderCode || ''}:${p.source || ''}`;
+              const draft = orderDrafts.get(key) || {};
+              const row = document.createElement('form'); row.className = 'order-form';
+              const heading = document.createElement('strong'); heading.textContent = action.description;
+              row.append(heading);
+              const params = { actorPlayerId: action.actorPlayerId };
+              if (p.unitId != null) params.unitId = p.unitId;
+              const fields = [];
+              const selectField = (labelText, name, choices, initial) => {
+                  const label = document.createElement('label'); label.textContent = labelText;
+                  const select = document.createElement('select'); select.name = name;
+                  for (const choice of choices) select.add(new Option(choice.label ?? choice, choice.code ?? choice));
+                  select.value = String(draft[name] ?? initial ?? select.options[0]?.value ?? '');
+                  select.addEventListener('change', () => { draft[name] = select.value; orderDrafts.set(key, draft); });
+                  label.append(select); row.append(label); fields.push(select); return select;
+              };
+              let readParameters = () => Object.fromEntries(fields.map(field => [field.name, field.value]));
+              if (action.type === 'plan_orders') {
+                  heading.textContent += ` (private / ${p.needed ? 'needs orders' : 'saved'})`;
+                  if (p.locked) {
+                      const locked = document.createElement('span'); locked.textContent = `Committed: ${p.queue.slice(0, p.locked).map(orderLabel).join(' → ')}`; row.append(locked);
+                  }
+                  for (let i = 0; i < p.count; i++) selectField(`Queue slot ${p.locked + i + 1}`, `slot${i}`, p.choices, p.queue[p.locked + i] ?? p.choices[0].code);
+                  readParameters = () => ({ orders: fields.map(field => field.value) });
+              } else if (action.type === 'store_order' && p.replacementRequired) {
+                  selectField('Token to replace (bank full)', 'replaceToken', p.replaceChoices.map(code => ({ code, label: orderLabel(code) })));
+              } else if (action.type === 'resolve_order') {
+                  params.orderCode = p.orderCode; params.source = p.source;
+                  const acting = currentState.units.find(item => item.unitId === Number(p.unitId));
+                  const profile = unitProfile(acting);
+                  const total = kind => p.effects.filter(effect => effect.kind === kind).reduce((sum, effect) => sum + effect.amount, 0);
+                  if (p.effects.some(effect => effect.kind === 'CHANGE_SPEED')) {
+                      const allowance = total('CHANGE_SPEED');
+                      const min = Math.max(-allowance, -acting.currentSpeed), max = Math.min(allowance, profile.maximumMovementDistance - acting.currentSpeed);
+                      selectField('Speed change', 'speedDelta', Array.from({length: max - min + 1}, (_, i) => i + min), 0);
+                  }
+                  if (p.effects.some(effect => effect.kind === 'EXTRA_YAW')) {
+                      const joint = selectField('Extra yaw joint', 'yawJoint', [], 0);
+                      const updateJoints = () => {
+                          const delta = fields.find(field => field.name === 'speedDelta');
+                          const speed = acting.currentSpeed + Number(delta?.value || 0);
+                          const chart = profile.maneuverProfiles?.[speed];
+                          const previous = draft.yawJoint ?? joint.value;
+                          joint.replaceChildren(...(chart?.maximumYawClicks || [0]).map((_, i) => new Option(`Joint ${i + 1}`, i)));
+                          joint.value = [...joint.options].some(option => option.value === String(previous)) ? previous : '0';
+                      };
+                      fields.find(field => field.name === 'speedDelta')?.addEventListener('change', updateJoints); updateJoints();
+                  }
+                  if (p.effects.some(effect => effect.kind === 'ADD_ATTACK_DICE')) {
+                      const colors = [...new Set([...Object.values(profile.batteryArcs || {}).flat(), ...(profile.antiSquadronDice || [])].map(die => die.color))];
+                      selectField('Bonus die color (must exist in chosen attack)', 'color', [{code:'auto',label:'Automatic'}, ...colors]);
+                  }
+                  if (p.effects.some(effect => effect.kind === 'RESTORE')) {
+                      const policy = p.effects.find(effect => effect.kind === 'RESTORE').parameters.costs;
+                      const hint = document.createElement('span'); hint.textContent = `Budget ${total('RESTORE')}; costs: ${Object.entries(policy).map(([kind, cost]) => `${kind} ${cost}`).join(', ')}.`; row.append(hint);
+                      const operations = draft.operations || [{resource:Object.keys(policy)[0], amount:1}];
+                      draft.operations = operations;
+                      const operationsPanel = document.createElement('div'); row.append(operationsPanel);
+                      const drawOperations = () => {
+                          operationsPanel.replaceChildren();
+                          operations.forEach((operation, index) => {
+                              const line = document.createElement('div'); line.className = 'decision-row';
+                              const field = (labelText, name, choices) => {
+                                  const label = document.createElement('label'); label.textContent = labelText;
+                                  const control = document.createElement(choices ? 'select' : 'input');
+                                  if (choices) choices.forEach(choice => control.add(new Option(choice, choice)));
+                                  else { control.type = 'number'; control.min = 1; control.step = 1; control.required = true; }
+                                  control.value = operation[name] ?? choices?.[0] ?? 1; operation[name] = choices ? control.value : Number(control.value);
+                                  control.addEventListener('change', () => { operation[name] = choices ? control.value : Number(control.value); orderDrafts.set(key, draft); if (name === 'resource') drawOperations(); });
+                                  label.append(control); line.append(label);
+                              };
+                              field('Resource', 'resource', Object.keys(policy)); field('Amount', 'amount');
+                              const zones = Object.keys(profile.shieldZones || {});
+                              if (operation.resource === 'shield') field('Zone', 'zone', zones);
+                              if (operation.resource === 'transfer') { field('From', 'from', zones); field('To', 'to', zones); }
+                              const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove';
+                              remove.addEventListener('click', () => { operations.splice(index, 1); orderDrafts.set(key, draft); drawOperations(); });
+                              line.append(remove); operationsPanel.append(line);
+                          });
+                      };
+                      drawOperations();
+                      const add = document.createElement('button'); add.type = 'button'; add.textContent = 'Add restoration operation';
+                      add.addEventListener('click', () => { operations.push({resource:Object.keys(policy)[0],amount:1}); orderDrafts.set(key,draft); drawOperations(); }); row.append(add);
+                      readParameters = () => ({ operations: operations.map(operation => ({...operation})) });
+                  } else readParameters = () => Object.fromEntries(fields.map(field => [field.name, ['speedDelta','yawJoint'].includes(field.name) ? Number(field.value) : field.value]));
+              }
+              const button = document.createElement('button'); button.type = 'submit'; button.className = 'tactical-button';
+              button.textContent = action.type === 'plan_orders' ? 'Save private queue' : action.type === 'resolve_order' ? 'Resolve' : action.description;
+              row.append(button);
+              row.addEventListener('submit', async event => {
+                  event.preventDefault(); button.disabled = true;
+                  try {
+                      if (await submitAction(liveBoard, action.type, {...params, ...readParameters()})) orderDrafts.delete(key);
+                  } finally { if (button.isConnected) button.disabled = false; }
+              });
+              orderPanel.append(row);
+          }
+      };
+      const renderDecisions = () => {
+          decisionPanel.replaceChildren();
+          const response = currentState?.values?.responseWindow;
+          const decisions = replayActive ? [] : currentLegalActions.filter(action => ['respond', 'submit_private_choice'].includes(action.type));
+          decisionPanel.hidden = !response && !decisions.length;
+          if (response) {
+              const heading = document.createElement('p');
+              const subject = currentState.units.find(unit => unit.unitId === Number(response.subject?.unitId));
+               heading.textContent = currentState.status === 'paused' ? 'Pending response retained while the battle is paused.' : controlledPlayerIds.has(Number(response.responderPlayerId))
+                  ? `${response.label}${subject ? ' / ' + unitLabel(subject) : ''}` : 'Waiting for the designated player to respond.';
+              decisionPanel.append(heading);
+          }
+          for (const action of decisions) {
+              const row = document.createElement('div');
+              row.className = 'decision-row';
+              const button = document.createElement('button');
+              button.type = 'button'; button.className = 'tactical-button'; button.disabled = replayActive;
+              if (action.type === 'respond') {
+                  button.textContent = action.description;
+                  button.addEventListener('click', async () => {
+                      button.disabled = true;
+                      try { await submitAction(liveBoard, 'respond', { actorPlayerId: action.actorPlayerId, ...action.parameters }); }
+                      finally { if (button.isConnected) button.disabled = replayActive; }
+                  });
+                  row.append(button);
+              } else {
+                  const label = document.createElement('label');
+                  label.textContent = `Seat ${currentState.players.find(player => player.playerId === action.actorPlayerId)?.seatNumber ?? action.actorPlayerId} / ${action.description} (private)`;
+                  const select = document.createElement('select');
+                  for (const choice of action.parameters.choices) select.add(new Option(choice, choice));
+                  const stage = `${currentState.round}:${currentState.phaseCode}`;
+                  const draftKey = `${stage}:${action.actorPlayerId}:${action.parameters.inputCode}`;
+                  const saved = currentState.values.privateChoices?.[stage]?.[String(action.actorPlayerId)]?.[action.parameters.inputCode];
+                  if (privateChoiceDrafts.has(draftKey)) select.value = privateChoiceDrafts.get(draftKey);
+                  else if (saved != null) select.value = saved;
+                  select.addEventListener('change', () => privateChoiceDrafts.set(draftKey, select.value));
+                  label.append(select); button.textContent = 'Submit private choice';
+                  button.addEventListener('click', async () => {
+                      const chosen = select.value;
+                      const accepted = await submitAction(liveBoard, 'submit_private_choice', {
+                          actorPlayerId: action.actorPlayerId, inputCode: action.parameters.inputCode, value: chosen
+                      });
+                      if (accepted && privateChoiceDrafts.get(draftKey) === chosen) privateChoiceDrafts.delete(draftKey);
+                  });
+                  row.append(label, button);
+              }
+              decisionPanel.append(row);
+          }
+      };
+      activateUnitButton.addEventListener('click', () => {
+          const unit = selectedUnit();
+          if (unit && !activateUnitButton.disabled) submitAction(liveBoard, 'activate_unit', { actorPlayerId: unit.playerId, unitId: unit.unitId });
+      });
      const movementCommand = document.createElement('div');
      movementCommand.className = 'movement-command';
      movementCommand.hidden = true;
@@ -717,19 +1010,24 @@
              return option;
          }));
      };
-     const renderMovementCommand = unit => {
+      const renderMovementCommand = (unit, requestedSpeed) => {
          const profile = unit && unitProfile(unit);
-         if (!profile || !currentState || unit.playerId !== currentState.activePlayerId || unit.status !== 'ready') {
+          if (!profile || !directMoveAllowed(unit, currentState)) {
              movementCommand.hidden = true;
              return;
          }
          const profiles = profile.maneuverProfiles || {};
-         const speeds = Object.keys(profiles).map(Number).sort((first, second) => first - second);
-         const selectedSpeed = speeds.includes(Number(unit.currentSpeed)) ? Number(unit.currentSpeed) : speeds[0];
+          const speeds = Object.keys(profiles).map(Number).filter(speed => !orderedMovement(unit) || speed === Number(unit.currentSpeed)).sort((first, second) => first - second);
+          const desiredSpeed = requestedSpeed ?? Number(unit.currentSpeed);
+          const selectedSpeed = speeds.includes(desiredSpeed) ? desiredSpeed : speeds[0];
          selectOptions(maneuverSpeed, speeds, selectedSpeed);
           const chart = profiles[String(selectedSpeed)] || profiles[selectedSpeed] || { maximumYawClicks: [0] };
           maneuverYawControls.replaceChildren();
-          maneuverYaw = (chart.maximumYawClicks || [0]).map((maximum, index) => {
+           maneuverYaw = (chart.maximumYawClicks || [0]).map((maximum, index) => {
+               const modifiers = currentState?.values?.orderState?.[unit.unitId]?.modifiers || {};
+               if (orderedMovement(unit) && index === Number(modifiers.yawJoint) && selectedSpeed >= Number(modifiers.yawMinimumSpeed || 0)) {
+                   maximum = Math.min(Number(modifiers.yawMaximumClicks) || Infinity, Number(maximum) + Number(modifiers.yawBonus || 0));
+               }
               const label = document.createElement('label');
               label.textContent = `Yaw ${index + 1}`;
               const select = document.createElement('select');
@@ -740,17 +1038,139 @@
           });
          movementCommand.hidden = !legalActionTypes.has('move_unit');
      };
-     maneuverSpeed?.addEventListener('change', () => renderMovementCommand(selectedUnit()));
-     document.querySelector('#execute-maneuver')?.addEventListener('click', () => {
-         const unit = selectedUnit();
-         if (!unit || !currentState?.activePlayerId) return;
-         submitAction(liveBoard, 'move_unit', {
-             actorPlayerId: currentState.activePlayerId,
+      maneuverSpeed?.addEventListener('change', () => renderMovementCommand(selectedUnit(), Number(maneuverSpeed.value)));
+      document.querySelector('#execute-maneuver')?.addEventListener('click', () => {
+          const unit = selectedUnit();
+          if (!unit || !currentState?.activePlayerId) return;
+          submitAction(liveBoard, 'move_unit', {
+              actorPlayerId: currentState.activePlayerId,
              unitId: unit.unitId,
              speed: Number(maneuverSpeed.value),
-             yaw: maneuverYaw.map(select => Number(select.value))
-         });
-     });
+              yaw: maneuverYaw.map(select => Number(select.value))
+          });
+      });
+      const boardPointerPosition = (state, event) => {
+          const map = document.querySelector('#battlefield');
+          const bounds = map.getBoundingClientRect();
+          return {
+              x: Math.max(0, Math.min(state.board.width, (event.clientX - bounds.left) / bounds.width * state.board.width)),
+              y: Math.max(0, Math.min(state.board.height, (bounds.bottom - event.clientY) / bounds.height * state.board.height))
+          };
+      };
+      const directMoveAllowed = (unit, state) => Boolean(unit && state && snapshotCompatible && !replayActive
+          && state.status === 'running'
+          && state.activePlayerId === unit.playerId
+          && controlledPlayerIds.has(unit.playerId)
+          && legalForUnit('move_unit', unit) && unit.hullPoints > 0
+          && state.players.find(player => player.playerId === unit.playerId)?.kind !== 'cpu');
+      const movementOrigin = (unit, state) => {
+          if (!resettableUnitIds.has(unit.unitId)) return unit;
+          const movement = [...state.events].reverse().find(event => event.type === 'unit_moved'
+              && Number(event.payload?.unitId) === unit.unitId);
+          const origin = movement?.payload?.previousMovement;
+          return origin ? { ...unit, ...origin, currentSpeed: unit.currentSpeed } : unit;
+      };
+      const movementLimit = (unit, state) => {
+          const distancePerSpeed = Number(state.values?.distancePerSpeed || state.values?.maximumMovementDistance || 100);
+           const speed = Number(movementOrigin(unit, state).currentSpeed);
+           return Math.max(0, (orderedMovement(unit) ? speed : speed || 1) * distancePerSpeed);
+      };
+      const validMoveTarget = (unit, state, position) => {
+          const origin = movementOrigin(unit, state);
+          const distance = Math.hypot(position.x - origin.positionX, position.y - origin.positionY);
+          const limit = movementLimit(unit, state);
+           if (limit <= 0) return { x: origin.positionX, y: origin.positionY };
+           if (distance <= limit) return position;
+          const ratio = limit / distance;
+          return { x: origin.positionX + (position.x - origin.positionX) * ratio,
+              y: origin.positionY + (position.y - origin.positionY) * ratio };
+      };
+      const previewFacing = (marker, facing) => {
+          const svg = marker.querySelector('.unit-art svg');
+          if (svg) svg.style.transform = `rotate(${-facing}deg)`;
+      };
+      const submitBoardMove = async (unit, position, facing) => submitAction(liveBoard, 'move_unit', {
+          actorPlayerId: unit.playerId, unitId: unit.unitId,
+          positionX: Number(position.x.toFixed(2)), positionY: Number(position.y.toFixed(2)),
+          facing: Number((((facing % 360) + 360) % 360).toFixed(2))
+      });
+      const beginUnitMoveDrag = (event, marker, unit, state) => {
+          if (event.button !== 0 || !directMoveAllowed(unit, state)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          marker.setPointerCapture(event.pointerId);
+          boardInteractionActive = true;
+          const start = boardPointerPosition(state, event);
+          let latest = start;
+          let moved = false;
+          marker.classList.add('dragging');
+          const move = moveEvent => {
+              moveEvent.stopPropagation();
+              latest = validMoveTarget(unit, state, boardPointerPosition(state, moveEvent));
+              moved = Math.hypot(latest.x - start.x, latest.y - start.y) > 5 || moved;
+              marker.style.left = `${latest.x * 100 / state.board.width}%`;
+              marker.style.bottom = `${latest.y * 100 / state.board.height}%`;
+          };
+          const stop = async stopEvent => {
+              stopEvent.preventDefault();
+              stopEvent.stopPropagation();
+              marker.releasePointerCapture(stopEvent.pointerId);
+              marker.removeEventListener('pointermove', move);
+              marker.removeEventListener('pointerup', stop);
+              marker.removeEventListener('pointercancel', stop);
+              marker.classList.remove('dragging');
+              boardInteractionActive = false;
+              if (stopEvent.type === 'pointercancel' || !moved) {
+                  renderState(currentState);
+                  return;
+              }
+              suppressBoardClick = true;
+              document.querySelector('#interaction-message').textContent = 'Submitting movement...';
+              const accepted = await submitBoardMove(unit, latest, unit.facing);
+              if (accepted === false) renderState(currentState);
+          };
+          marker.addEventListener('pointermove', move);
+          marker.addEventListener('pointerup', stop);
+          marker.addEventListener('pointercancel', stop);
+      };
+      const beginHeadingDrag = (event, marker, unit, state) => {
+          if (event.button !== 0 || !directMoveAllowed(unit, state)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          marker.setPointerCapture(event.pointerId);
+          boardInteractionActive = true;
+          let facing = Number(unit.facing) || 0;
+          let changed = false;
+          marker.classList.add('heading-dragging');
+          const move = moveEvent => {
+              moveEvent.stopPropagation();
+              const point = boardPointerPosition(state, moveEvent);
+              facing = (Math.atan2(point.y - unit.positionY, point.x - unit.positionX) * 180 / Math.PI + 360) % 360;
+              changed = true;
+              previewFacing(marker, facing);
+          };
+          const stop = async stopEvent => {
+              stopEvent.preventDefault();
+              stopEvent.stopPropagation();
+              marker.releasePointerCapture(stopEvent.pointerId);
+              marker.removeEventListener('pointermove', move);
+              marker.removeEventListener('pointerup', stop);
+              marker.removeEventListener('pointercancel', stop);
+              marker.classList.remove('heading-dragging');
+              boardInteractionActive = false;
+              if (stopEvent.type === 'pointercancel' || !changed) {
+                  renderState(currentState);
+                  return;
+              }
+              suppressBoardClick = true;
+              document.querySelector('#interaction-message').textContent = 'Submitting heading change...';
+              const accepted = await submitBoardMove(unit, { x: unit.positionX, y: unit.positionY }, facing);
+              if (accepted === false) renderState(currentState);
+          };
+          marker.addEventListener('pointermove', move);
+          marker.addEventListener('pointerup', stop);
+          marker.addEventListener('pointercancel', stop);
+      };
        const renderState = (state) => {
          if (!state) return;
          if (!initializedSelection && state.units.length) {
@@ -759,9 +1179,9 @@
                  || state.units.find(unit => unit.hullPoints > 0)?.unitId || null;
              initializedSelection = true;
          }
-         document.querySelector('#session-status').textContent = phaseLabel(state.phaseCode);
-         document.querySelector('#session-round').textContent = `${state.round} / ${state.values?.maximumRounds || 6}`;
-         document.querySelector('#board-phase').textContent = `PHASE ${phaseLabel(state.phaseCode)}`;
+          document.querySelector('#session-status').textContent = state.status === 'paused' ? 'Paused' : phaseLabel(state.phaseCode);
+          document.querySelector('#session-round').textContent = `${state.round} / ${state.values?.unlimitedRounds === true ? 'Unlimited' : (state.values?.maximumRounds ?? 6)}`;
+          document.querySelector('#board-phase').textContent = `${state.status === 'paused' ? 'PAUSED /' : 'PHASE'} ${phaseLabel(state.phaseCode)}`;
         document.querySelector('#board-version').textContent = `State ${state.stateVersion}`;
         const activePlayer = document.querySelector('#board-active-player');
         if (state.activePlayerId == null) activePlayer?.remove();
@@ -779,6 +1199,7 @@
             const empty = document.querySelector('#battlefield-empty');
             if (empty) {
                 empty.hidden = state.units.length > 0;
+                if (turnStructure?.visibility?.units && turnStructure.visibility.units !== 'PUBLIC') empty.querySelector('strong').textContent = 'NO VISIBLE UNITS';
                 empty.querySelector('span').textContent = state.phaseCode === 'deployment'
                     ? 'Use the deployment controls below to place the first unit.'
                     : 'The battlefield has no active units.';
@@ -802,6 +1223,22 @@
                  const resources = document.createElement('small');
                  resources.textContent = `H${unit.hullPoints} / S${unit.shieldPoints}`;
                   marker.replaceChildren(unitArtwork(unit, state), name, resources);
+                  if (directMoveAllowed(unit, state) && unit.unitId === selectedUnitId) {
+                      const headingGrip = document.createElement('span');
+                      headingGrip.className = 'unit-heading-grip';
+                      headingGrip.title = 'Drag to change heading';
+                      headingGrip.setAttribute('aria-label', 'Drag to change heading');
+                      headingGrip.textContent = '◆';
+                      headingGrip.addEventListener('pointerdown', event => beginHeadingDrag(event, marker, unit, state));
+                      marker.appendChild(headingGrip);
+                      if (!marker.dataset.dragBound) {
+                          marker.addEventListener('pointerdown', event => {
+                              const liveUnit = currentState?.units.find(item => item.unitId === Number(marker.dataset.unitId));
+                              if (liveUnit) beginUnitMoveDrag(event, marker, liveUnit, currentState);
+                          });
+                          marker.dataset.dragBound = 'true';
+                      }
+                  }
                  if (!existingMarkers.has(unit.unitId)) map.appendChild(marker);
                  renderedIds.add(unit.unitId);
              });
@@ -809,8 +1246,9 @@
              renderRoster(state);
              renderTacticalOverlay(state);
              if (replayActive) renderReplayEffects(state);
-             if (previousState) state.events.filter(event => event.sequence > (previousState.events.at(-1)?.sequence || 0))
-                 .forEach(event => addBattleEffect(state, event));
+              if (previousState) state.events.filter(event => event.sequence > (previousState.events.at(-1)?.sequence || 0))
+                  .forEach(event => addBattleEffect(state, event));
+              previousState = null;
         }
         const unitList = document.querySelector('#unit-state-list');
         if (unitList) {
@@ -840,8 +1278,10 @@
                  ? `${state.events.length} event${state.events.length === 1 ? '' : 's'} recorded.`
                  : 'No events recorded yet.';
          }
-         renderCpuActivity(state);
-         renderSelectedUnit();
+          renderCpuActivity(state);
+          renderSelectedUnit();
+          syncSelectedActions();
+          renderDecisions();
     };
     const syncControls = (actions, state) => {
         const permitted = new Set(actions.map(action => action.type));
@@ -997,22 +1437,47 @@
            if (cpuControlled) document.querySelector('#interaction-message').textContent = 'CPU controls this unit automatically.';
            renderMovementCommand(unit);
      };
-    const syncSelectedActions = () => {
-        const unit = selectedUnit();
+      const syncSelectedActions = () => {
+          renderOrders();
+         const unit = selectedUnit();
+         resetMovementButton.disabled = !snapshotCompatible || replayActive || !unit || !controlledPlayerIds.has(unit.playerId) || !resettableUnitIds.has(unit.unitId)
+             || currentState?.status !== 'running' || currentState.activePlayerId !== unit.playerId
+             || currentState.players.find(player => player.playerId === unit.playerId)?.kind === 'cpu';
         const active = unit && currentState?.activePlayerId === unit.playerId
             && unit.status === 'ready' && unit.hullPoints > 0;
-        document.querySelector('#set-move').disabled = !active || !legalActionTypes.has('move_unit');
-        document.querySelector('#set-attack').disabled = !active || !legalTargetIds.size
-            || !legalActionTypes.has('attack_unit');
-        document.querySelector('#end-activation').disabled = !currentState?.activePlayerId
-            || !legalActionTypes.has('end_turn');
-    };
+         document.querySelector('#set-move').disabled = !directMoveAllowed(unit, currentState) || !legalActionTypes.has('move_unit');
+         if (turnStructure) legalTargetIds = new Set(currentLegalActions.filter(action => action.type === 'attack_unit'
+             && Number(action.parameters?.unitId) === unit?.unitId).map(action => Number(action.parameters?.targetUnitId)));
+         document.querySelector('#set-attack').disabled = !snapshotCompatible || replayActive || !unit
+             || currentState?.activePlayerId !== unit.playerId || !legalTargetIds.size || !legalForUnit('attack_unit', unit);
+         const endType = turnStructure ? (legalActionTypes.has('advance_phase') ? 'advance_phase' : 'end_activation') : 'end_turn';
+         endPhaseButton.disabled = !snapshotCompatible || replayActive || !legalActionTypes.has(endType);
+         endPhaseButton.textContent = endType === 'end_activation' ? 'Finish activation' : 'End phase';
+         activateUnitButton.disabled = !snapshotCompatible || replayActive || !legalForUnit('activate_unit', unit);
+         activateUnitButton.hidden = !turnStructure || Boolean(currentState?.values?.activation?.unitId);
+         nextActivationStep.disabled = !snapshotCompatible || replayActive || !legalActionTypes.has('advance_step');
+         nextActivationStep.hidden = !turnStructure || !legalActionTypes.has('advance_step');
+         const context = currentState?.values?.activation;
+         const phase = turnStructure?.phases?.find(item => item.code === currentState?.phaseCode);
+         const acting = currentState?.units?.find(item => item.unitId === Number(context?.unitId));
+          activationSummary.textContent = !snapshotCompatible ? 'Historical battle: restart to use captured profiles and current sequencing.'
+              : currentState?.status === 'paused' ? 'Battle paused. State and pending decisions are preserved.'
+             : !controlledPlayerIds.size ? 'Spectator view — read only.'
+             : currentState?.values?.responseWindow ? 'An action is paused for a response.'
+             : currentState?.activePlayerId && !controlledPlayerIds.has(currentState.activePlayerId) ? 'Waiting for the active player.'
+             : acting ? `${unitLabel(acting)} / ${phase?.steps?.[context.stepIndex]?.label || 'Activation'} / finish this unit before selecting another.`
+              : phase?.mode === 'MANUAL' ? `${phase.label} / ${legalActionTypes.has('advance_phase') ? 'End phase to continue.' : 'Waiting for required private plans.'}` : 'Choose an eligible unit to activate.';
+     };
     const renderLegalActions = (actions, state) => {
         if (!legalActions) return;
-        legalActionTypes = new Set(actions.map(action => action.type));
-        legalTargetIds = new Set(actions.filter(action => action.type === 'attack_unit')
-            .map(action => action.description.match(/Attack unit (\d+)/)?.[1])
-            .filter(Boolean).map(Number));
+         legalActionTypes = new Set(actions.map(action => action.type));
+         currentLegalActions = actions;
+         legalTargetIds = new Set(actions.filter(action => action.type === 'attack_unit')
+             .map(action => action.description.match(/Attack unit (\d+)/)?.[1])
+             .filter(Boolean).map(Number));
+         resettableUnitIds = new Set(actions.filter(action => action.type === 'reset_movement')
+             .map(action => action.description.match(/Reset movement for unit (\d+)/)?.[1])
+             .filter(Boolean).map(Number));
         legalActions.replaceChildren(...actions.map(action => {
             const item = document.createElement('li');
             item.textContent = `${action.type} / ${action.description}`;
@@ -1021,8 +1486,9 @@
         document.querySelector('#legal-actions-message').textContent = actions.length
             ? `${actions.length} action${actions.length === 1 ? '' : 's'} available to the active player.`
             : 'No actions are currently available.';
-        syncSelectedActions();
-        syncControls(actions, state);
+         syncSelectedActions();
+         syncControls(actions, state);
+         renderDecisions();
     };
     const updateEngineStatus = (state, actions = []) => {
         if (!engineStatus) return;
@@ -1047,7 +1513,9 @@
         events.textContent = state.events?.length ?? 0;
         refresh.textContent = new Date().toLocaleTimeString();
         const cpuOnly = state.players?.length > 0 && state.players.every(item => item.kind === 'cpu');
-        if (state.status === 'running' && cpuOnly && actions.length > 0) {
+         if (state.status === 'paused') {
+             message.textContent = 'Battle paused. CPU processing is stopped.';
+         } else if (state.status === 'running' && cpuOnly && actions.length > 0) {
             message.textContent = 'CPU runner is choosing actions automatically.';
         } else if (state.status === 'running' && actions.length > 0) {
             message.textContent = 'Engine is running and waiting for the active player.';
@@ -1057,34 +1525,64 @@
             message.textContent = 'Engine is running with no legal actions currently available.';
         }
     };
-    const refreshLiveView = async () => {
-        if (!sessionId) return;
-        try {
-            const stateResponse = await fetch(`/api/v1/sessions/${sessionId}/state`, { cache: 'no-store' });
-            if (!stateResponse.ok) {
-                updateEngineStatus(null);
-                return;
+    let liveRefreshInFlight = null;
+    const refreshLiveView = () => {
+        if (!sessionId || boardInteractionActive) return Promise.resolve();
+        if (liveRefreshInFlight) return liveRefreshInFlight;
+        liveRefreshInFlight = (async () => {
+            try {
+                if (!compatibilityChecked) {
+                    const response = await fetch(`/api/v1/sessions/${sessionId}/compatibility`, { cache: 'no-store' });
+                    if (!response.ok) throw new Error('Could not check snapshot compatibility');
+                    const compatibility = await response.json();
+                    const permissionsResponse = await fetch(`/api/v1/sessions/${sessionId}/permissions`, { cache: 'no-store' });
+                    if (!permissionsResponse.ok) throw new Error('Could not load seat permissions');
+                    const permissions = await permissionsResponse.json();
+                    controlledPlayerIds = new Set(permissions.controlledPlayerIds.map(Number));
+                    restartBattle.hidden = !permissions.canManage;
+                    snapshotCompatible = compatibility.compatible;
+                    compatibilityChecked = true;
+                    compatibilityPanel.hidden = snapshotCompatible;
+                    compatibilityMessage.textContent = compatibility.message;
+                }
+                const stateResponse = await fetch(`/api/v1/sessions/${sessionId}/state`, { cache: 'no-store' });
+                if (stateResponse.headers.get('X-Metis-User-Id') !== String(viewingUserId)) {
+                    window.location.reload();
+                    return;
+                }
+                if (!stateResponse.ok) {
+                    updateEngineStatus(null);
+                    return;
+                }
+                const incomingState = await stateResponse.json();
+                // Leave DOM nodes, animations, scroll positions and edited controls alone
+                // until the engine has actually advanced. Never apply an older response.
+                if (boardInteractionActive || (latestState && incomingState.stateVersion <= latestState.stateVersion)) return;
+                const actionsResponse = await fetch(`/api/v1/sessions/${sessionId}/legal-actions`, { cache: 'no-store' });
+                if (!actionsResponse.ok) throw new Error('Legal actions unavailable');
+                const actions = await actionsResponse.json();
+                // A pointer interaction may have started while either request was pending.
+                if (boardInteractionActive) return;
+                previousState = latestState;
+                latestState = incomingState;
+                if (!replayActive) {
+                    currentState = latestState;
+                    replayIndex = latestState.events?.length || 0;
+                    if (replaySlider) {
+                        replaySlider.max = replayIndex;
+                        replaySlider.value = replayIndex;
+                        replaySlider.disabled = replayIndex === 0;
+                    }
+                    renderLegalActions(actions, currentState);
+                    renderState(currentState);
+                    updateReplayLabel(currentState);
+                    updateEngineStatus(currentState, actions);
+                }
+            } catch (error) {
+                document.querySelector('#engine-status-message').textContent = 'Could not reach the engine status endpoint.';
             }
-             previousState = latestState;
-             latestState = await stateResponse.json();
-             if (!replayActive) {
-                 currentState = latestState;
-                 replayIndex = latestState.events?.length || 0;
-                 if (replaySlider) {
-                     replaySlider.max = replayIndex;
-                     replaySlider.value = replayIndex;
-                     replaySlider.disabled = replayIndex === 0;
-                 }
-                 renderState(currentState);
-                 updateReplayLabel(currentState);
-             }
-            const actionsResponse = await fetch(`/api/v1/sessions/${sessionId}/legal-actions`, { cache: 'no-store' });
-            const actions = actionsResponse.ok ? await actionsResponse.json() : [];
-            renderLegalActions(actions, currentState);
-            updateEngineStatus(currentState, actions);
-        } catch (error) {
-            document.querySelector('#engine-status-message').textContent = 'Could not reach the engine status endpoint.';
-        }
+        })().finally(() => { liveRefreshInFlight = null; });
+        return liveRefreshInFlight;
     };
      replaySlider?.addEventListener('input', () => {
          if (!latestState) return;
@@ -1165,11 +1663,15 @@
         selectedUnitId = Number(control.dataset.selectUnit);
         interactionMode = 'select';
         renderState(currentState);
-        document.querySelector('#interaction-message').textContent = 'Unit selected. Choose an action.';
+         document.querySelector('#interaction-message').textContent = 'Unit selected. Drag it to move. Drag ◆ to change heading.';
         syncSelectedActions();
     });
     document.querySelector('#battlefield')?.addEventListener('click', async event => {
-         if (!currentState || !sessionId || panMode) return;
+          if (!currentState || !sessionId || panMode) return;
+          if (suppressBoardClick) {
+              suppressBoardClick = false;
+              return;
+          }
          if (mapViewport?.dataset.suppressClick === 'true') {
              delete mapViewport.dataset.suppressClick;
              return;
@@ -1192,13 +1694,14 @@
                 unitId: selectedUnitId, targetUnitId: clickedUnit.unitId });
             return;
         }
-        if (clickedUnit) {
-            selectedUnitId = clickedUnit.unitId;
-            interactionMode = 'select';
-            renderState(currentState);
-            syncSelectedActions();
-            return;
-        }
+         if (clickedUnit) {
+             selectedUnitId = clickedUnit.unitId;
+             interactionMode = 'select';
+             renderState(currentState);
+             document.querySelector('#interaction-message').textContent = 'Unit selected. Drag it to move. Drag ◆ to change heading.';
+             syncSelectedActions();
+             return;
+         }
      });
      document.querySelector('#set-move')?.addEventListener('click', () => {
          interactionMode = 'maneuver';
@@ -1209,8 +1712,22 @@
         interactionMode = 'attack';
         document.querySelector('#interaction-message').textContent = 'Attack mode: click a highlighted hostile unit.';
     });
-     document.querySelector('#end-activation')?.addEventListener('click', () =>
-         submitAction(liveBoard, 'end_turn', { actorPlayerId: currentState.activePlayerId }));
+      resetMovementButton.addEventListener('click', async () => {
+          const unit = selectedUnit();
+          if (resetMovementButton.disabled || !unit) return;
+          resetMovementButton.disabled = true;
+          try {
+              await submitAction(liveBoard, 'reset_movement', {
+                  actorPlayerId: unit.playerId, unitId: unit.unitId
+              });
+          } finally {
+              syncSelectedActions();
+          }
+      });
+      document.querySelector('#end-activation')?.addEventListener('click', () => {
+          const type = turnStructure ? (legalActionTypes.has('advance_phase') ? 'advance_phase' : 'end_activation') : 'end_turn';
+          submitAction(liveBoard, type, { actorPlayerId: currentState.activePlayerId || 0 });
+      });
      document.querySelector('#invite-form')?.addEventListener('submit', async event => {
          event.preventDefault();
          const form = event.currentTarget;

@@ -8,3 +8,4 @@ target/
 **/.env
 !.env.example
 **/node_modules/
+**/.jqwik-database

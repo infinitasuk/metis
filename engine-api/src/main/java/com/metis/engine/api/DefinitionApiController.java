@@ -59,6 +59,33 @@ public class DefinitionApiController {
         return definitions.validate(definitionId);
     }
 
+    @GetMapping("/definitions/{definitionId}/profile-mapping")
+    public JsonNode profileMapping(@PathVariable long definitionId) {
+        definition(definitionId);
+        return definitions.findProfileMapping(definitionId);
+    }
+
+    @GetMapping("/definitions/{definitionId}/turn-structure")
+    public com.metis.engine.core.TurnStructure turnStructure(@PathVariable long definitionId) {
+        definition(definitionId);
+        return definitions.findTurnStructure(definitionId);
+    }
+
+    @PatchMapping("/definitions/{definitionId}/turn-structure")
+    public com.metis.engine.core.TurnStructure updateTurnStructure(@PathVariable long definitionId,
+            @RequestBody com.metis.engine.core.TurnStructure configuration) {
+        definition(definitionId);
+        definitions.updateTurnStructure(definitionId, configuration);
+        return definitions.findTurnStructure(definitionId);
+    }
+
+    @PatchMapping("/definitions/{definitionId}/profile-mapping")
+    public JsonNode updateProfileMapping(@PathVariable long definitionId, @RequestBody JsonNode mapping) {
+        definition(definitionId);
+        definitions.updateProfileMapping(definitionId, mapping);
+        return definitions.findProfileMapping(definitionId);
+    }
+
     @GetMapping("/definitions/{definitionId}/audit")
     public List<DefinitionRepository.DefinitionAudit> audit(@PathVariable long definitionId) {
         definition(definitionId);

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>METIS / CPU Suite</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main class="shell" th:attr="data-game-id=${suiteGameId}">
+    <a class="back-link" href="/admin">&lt;- Admin</a>
+    <section class="intro compact-intro">
+        <p class="eyebrow">ADMIN / CPU EVALUATION</p>
+        <h1>Watch the AI<br><em>learn the matchup.</em></h1>
+        <p class="lede">The suite compares four faction pairings across capital, squadron, and mixed loadouts. Every source battle and later run remains available for review.</p>
+    </section>
+    <section class="section-heading">
+        <div><p class="eyebrow">RETAINED RUNS</p><h2>CPU suite monitor</h2></div>
+        <span class="count" id="suite-count" th:text="${sessions.size()} + ' tracked'"></span>
+    </section>
+    <section class="game-grid cpu-suite-grid" id="cpu-suite-grid">
+        <article class="game-card live-game-card" th:each="suiteSession : ${sessions}" th:attr="data-session-id=${suiteSession.sessionId}">
+            <div class="card-kicker" th:text="${suiteSession.status == 'running' ? 'RUNNING' : 'RECORDED'}"></div>
+            <h3 th:text="${suiteSession.templateName}"></h3>
+            <p th:text="${suiteSession.sessionName}"></p>
+            <p class="template-meta" th:text="|RUN ${suiteSession.runNumber} / AI ${suiteSession.aiVersion}|"></p>
+            <div class="metric-row"><span><b th:text="|Round ${suiteSession.currentRound}|"></b></span><span><b th:text="${suiteSession.status}"></b></span></div>
+            <a class="arrow" th:href="@{/simulator/sessions/{id}(id=${suiteSession.sessionId})}">Open replay <span>-&gt;</span></a>
+        </article>
+    </section>
+    <p class="muted" id="suite-empty" th:hidden="${!sessions.isEmpty()}">Load the CPU suite from Admin to begin tracking runs.</p>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+<script>
+    const suiteGrid = document.querySelector('#cpu-suite-grid');
+    const suiteCount = document.querySelector('#suite-count');
+    const suiteEmpty = document.querySelector('#suite-empty');
+    const suiteGameId = document.querySelector('main').dataset.gameId;
+    const refreshSuite = async () => {
+        const response = await fetch('/api/v1/test-fixtures/suites/' + suiteGameId, {cache: 'no-store'});
+        if (!response.ok) return;
+        const sessions = await response.json();
+        suiteCount.textContent = sessions.length + ' tracked';
+        suiteGrid.replaceChildren(...sessions.map(session => {
+            const card = document.createElement('article');
+            card.className = 'game-card live-game-card';
+            const kicker = document.createElement('div');
+            kicker.className = 'card-kicker';
+            kicker.textContent = session.status === 'running' ? 'RUNNING' : 'RECORDED';
+            const title = document.createElement('h3');
+            title.textContent = session.templateName;
+            const name = document.createElement('p');
+            name.textContent = session.sessionName;
+            const metadata = document.createElement('p');
+            metadata.className = 'template-meta';
+            metadata.textContent = `RUN ${session.runNumber} / AI ${session.aiVersion}`;
+            const metrics = document.createElement('div');
+            metrics.className = 'metric-row';
+            metrics.innerHTML = `<span><b>Round ${session.currentRound}</b></span><span><b>${session.status}</b></span>`;
+            const link = document.createElement('a');
+            link.className = 'arrow';
+            link.href = '/simulator/sessions/' + session.sessionId;
+            link.textContent = 'Open replay ->';
+            card.append(kicker, title, name, metadata, metrics, link);
+            return card;
+        }));
+        suiteGrid.hidden = sessions.length === 0;
+        suiteEmpty.hidden = sessions.length > 0;
+    };
+    window.setInterval(refreshSuite, 5000);
+</script>
+</body>
+</html>

@@ -7,6 +7,13 @@ spring:
     password: ${DB_PASSWORD:metis-local-dev-password}
   thymeleaf:
     cache: false
+  flyway:
+    default-schema: game_engine
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 31
+    baseline-description: Legacy catalogue bootstrap
+    clean-disabled: true
 
 server:
   port: ${PORT:8080}
@@ -17,9 +24,14 @@ metis:
   api:
     version: ${METIS_API_VERSION:v1}
   event:
-    schema-version: ${METIS_EVENT_SCHEMA_VERSION:1}
+    schema-version: ${METIS_EVENT_SCHEMA_VERSION:3}
   git:
     sha: ${METIS_GIT_SHA:unknown}
   cpu:
     tick-ms: ${METIS_CPU_TICK_MS:1800}
     initial-delay-ms: ${METIS_CPU_INITIAL_DELAY_MS:1000}
+  rules:
+    cpu:
+      enabled: ${METIS_RULES_CPU_ENABLED:true}
+      tick-ms: ${METIS_RULES_CPU_TICK_MS:500}
+      initial-delay-ms: ${METIS_RULES_CPU_INITIAL_DELAY_MS:1000}

@@ -1,0 +1,18 @@
+{
+  "parameters":{"actor":"player","counter":"entity:counter"},
+  "steps":[
+    {"op":"core.let","name":"remembered","value":{"get":{"entity":{"var":"counter"},"field":"score"}}},
+    {"op":"core.if","condition":true,"then":[{"op":"core.setState","field":"target","value":10}],"else":[]},
+    {"op":"core.forEach","source":{"list":{"elementType":"integer","items":[1,2]}},"as":"amount","maxItems":2,"steps":[{"op":"core.setState","field":"target","value":{"var":"amount"}}]},
+    {"op":"core.call","procedure":"finish","args":{"actor":{"var":"actor"},"counter":{"var":"counter"}}},
+    {"op":"core.choose","player":{"var":"actor"},"options":{"list":{"elementType":"boolean","items":[true,false]}},"as":"answer","visibility":"PUBLIC"},
+    {"op":"core.setState","field":"target","value":{"var":"remembered"}},
+    {"op":"core.setAttribute","entity":{"var":"counter"},"field":"score","value":3},
+    {"op":"core.modifyResource","entity":{"var":"counter"},"resource":"energy","delta":-1},
+    {"op":"core.createEntity","type":"counter","id":"copy","owner":{"var":"actor"},"attributes":{"score":1},"resources":{"energy":2},"as":"copy"},
+    {"op":"core.removeEntity","entity":{"var":"copy"}},
+    {"op":"core.emit","event":"progress","values":{"player":{"var":"actor"},"score":3}},
+    {"op":"core.window","window":"empty","args":{}},
+    {"op":"core.endGame","outcome":"victory","winners":{"list":{"elementType":"player","items":[{"var":"actor"}]}}}
+  ]
+}

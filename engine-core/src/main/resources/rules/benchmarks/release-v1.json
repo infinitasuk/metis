@@ -1,0 +1,5 @@
+{
+ "version":"release-benchmark-1","fixture":"grid-skirmish","warmups":10,"iterations":30,
+ "p95Milliseconds":{"compile":250,"offers":1500,"preview":250,"submit":250,"restore":150,"replay":50},
+ "historyCommands":100,"maximumCheckpointBytes":500000
+}

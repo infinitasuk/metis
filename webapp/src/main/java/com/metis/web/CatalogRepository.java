@@ -341,6 +341,30 @@ public class CatalogRepository {
          ), gameId, definitionId);
     }
 
+    public List<UnitVariantSummary> findUnitVariants(long gameId, long definitionId) {
+        return jdbc.query("""
+                SELECT uv.unit_variant_id, uv.unit_variant_name, uv.unit_variant_description,
+                       f.faction_id, f.faction_name, uc.unit_classification_name, ut.unit_type_name,
+                       uvp.points_cost
+                FROM game_engine.unit_variant uv
+                JOIN game_engine.unit_type ut ON ut.unit_type_id = uv.unit_type_id
+                JOIN game_engine.unit_classification uc
+                    ON uc.unit_classification_id = ut.unit_classification_id
+                JOIN game_engine.faction f ON f.faction_id = uc.faction_id
+                LEFT JOIN game_engine.unit_variant_points uvp
+                    ON uvp.unit_variant_id = uv.unit_variant_id
+                   AND uvp.game_version_id = f.game_version_id
+                WHERE f.game_id = ? AND f.game_version_id = ?
+                ORDER BY f.faction_name, uc.unit_classification_name, ut.unit_type_name,
+                         uv.unit_variant_name
+                """, (rs, rowNum) -> new UnitVariantSummary(
+                rs.getLong("unit_variant_id"), rs.getString("unit_variant_name"),
+                rs.getString("unit_variant_description"), rs.getLong("faction_id"),
+                rs.getString("faction_name"), rs.getString("unit_classification_name"),
+                rs.getString("unit_type_name"), rs.getInt("points_cost")
+        ), gameId, definitionId);
+    }
+
     public List<GameObjectTypeSummary> findObjectTypes(long gameId) {
         return findObjectTypes(gameId, publishedDefinitionId(gameId));
     }
@@ -622,6 +646,11 @@ public class CatalogRepository {
             long unitTypeCount,
             long variantCount
     ) {
+    }
+
+    public record UnitVariantSummary(long variantId, String name, String description,
+                                     long factionId, String factionName, String classification,
+                                     String unitTypeName, int pointsCost) {
     }
 
     public record Terrain(long terrainTypeId, String name, String type, String characteristics) {

@@ -76,6 +76,11 @@ class TestFixtureControllerTest {
         }
 
         @Override
+        public void captureSessionDefinition(long sessionId, GameDefinition definition) {
+            assertEquals(this.definition, definition);
+        }
+
+        @Override
         public List<Faction> findFactions(long definitionId) {
             return List.of(new Faction(101, "rebel"), new Faction(102, "empire"));
         }
