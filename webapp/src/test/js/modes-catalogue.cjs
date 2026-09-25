@@ -102,7 +102,17 @@ async function main() {
    if(entry.mode==='close-engagement')assert.equal(start.state.entities.alice.attributes.x.value,300);if(entry.mode==='short-battle')assert.equal(start.state.globals.roundLimit.value,3);
    await finish(session.id);
   }
+  const m8Body={gameVersionId:version,pack:'armada-squadron-training-m8'};
+  const m8Entries=await request(5,'/api/v1/admin/rules/catalogue/imports','POST',m8Body);assert.equal(m8Entries.length,3);
+  const m8Standard=m8Entries.find(e=>e.mode==='standard');const m8Source=JSON.parse((await request(5,author(m8Standard.definitionId)+'/resolved')).source);
+  assert.equal(m8Source.flow.initial,'deployment');assert.equal(m8Source.scenario.rosters.fleet.maximum,1);assert.equal(m8Source.space.zones.deployment0.ownerSeat,0);assert.equal(m8Source.space.zones.deployment1.ownerSeat,1);
+  const m8Session=await request(1,`/api/v1/rules/catalogue/${m8Standard.id}/sessions`,'POST',members,201);sessions.push(m8Session.id);await command(m8Session.id,1,{type:'start'});assert.equal((await state(m8Session.id)).state.phase,'deployment');
+  await command(m8Session.id,1,{type:'activate',actor:'alice',entityId:'alice'});await command(m8Session.id,1,{type:'act',actor:'alice',action:'deploy',parameters:{entity:'alice',zone:'deployment1',x:800,y:300,heading:0}},422);await command(m8Session.id,1,{type:'act',actor:'alice',action:'deploy',parameters:{entity:'alice',zone:'deployment0',x:200,y:300,heading:0}});
+  await command(m8Session.id,2,{type:'activate',actor:'bob',entityId:'bob'});await command(m8Session.id,2,{type:'act',actor:'bob',action:'deploy',parameters:{entity:'bob',zone:'deployment1',x:800,y:300,heading:0}});
+  assert.equal((await state(m8Session.id)).state.phase,'squadrons');
+  assert.deepEqual(await request(5,'/api/v1/admin/rules/catalogue/imports','POST',m8Body),m8Entries);
   await restart();assert.deepEqual(await request(5,'/api/v1/admin/rules/catalogue/imports','POST',importBody),entries);
+  assert.deepEqual(await request(5,'/api/v1/admin/rules/catalogue/imports','POST',m8Body),m8Entries);
   console.log('PASS: catalogue profiles imported atomically and idempotently; base and two modes complete through interpreted commands with replay and restart.');
  } finally { for(const id of sessions)await request(1,route(id),'DELETE',undefined,204); }
 }

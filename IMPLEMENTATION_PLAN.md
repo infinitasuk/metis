@@ -5,7 +5,9 @@
 M0–M7 are implemented with local verification: compiler/runtime, durable APIs, reactions,
 mechanics/spatial modules, pinned modes, catalogue migration, generic browser and persistent CPU seats. Recovery, coverage
 and mutation gates pass. Hosted CI awaits repository execution.
-**Next release step: hosted CI on the committed revision.** See `RULES_CLIENT_M7.md`.
+The first M8 setup slice is now implemented locally as an additive catalogue pack; see
+`RULES_M8_ARMADA_SLICE.md`. Hosted CI awaits repository execution.
+**Next release step: qualify and deploy the M8 revision.**
 
 The primary priority is an actual rules-driven engine: executable game/mode JSON,
 a shared resumable interpreter and reusable mechanical modules, backed by a full
@@ -29,6 +31,7 @@ contains the detailed implementation tasks.
 | M5 | Spatial modules, setup/scoring and three complete headless acceptance games |
 | M6 | Mode resolution, immutable version captures and catalogue migration |
 | M7 | Thin generic UI/CPU integration and full automated release qualification |
+| M8 slice | Definition-owned roster policy, legal deployment and activation handoff for a closed Armada squadron training pack |
 
 Tests are delivered with every milestone, beginning in M0. Existing-session
 maintenance remains possible, but new UI work serves interpreter contracts after
@@ -391,6 +394,7 @@ A feature is complete only when:
 1. Run hosted fast/full/mutation/performance CI on the committed revision.
 2. Preserve the local browser/CPU, recovery, privacy and replay acceptance gates.
 3. Expand catalogue scope through classified rule migrations and richer R21 authoring tools.
+4. Add canonical Armada costs and roster legality before broadening the M8 pack beyond its closed training scope.
 
-M0–M7 implementation/local gates are delivered; hosted release qualification remains pending. Preserve the
+M0–M8 implementation/local gates are delivered; hosted release qualification remains pending. Preserve the
 combined command: `mvn -B "-Prules-full,rules-mutation" clean verify`.

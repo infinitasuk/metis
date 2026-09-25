@@ -291,6 +291,25 @@ editing JavaScript. No mandatory suite is optional or silently skipped.
 **Demonstration:** create a definition/mode, validate/publish it, start and finish a
 game, interrupt/resume it and replay it through the generic client and API.
 
+## M8 slice — Armada setup and activation conformance
+
+The first post-M7 slice is additive and intentionally closed in scope:
+
+- A new catalogue pack applies `scenario.roster` to one definition-owned squadron per
+  seat with explicit faction/count rules.
+- Deployment is a real alternating phase. The generic client submits typed zone,
+  coordinate and heading inputs; the shared spatial validator enforces ownership,
+  footprint, board and collision rules.
+- Completion of deployment hands into the existing alternating squadron activation
+  controller. Human and CPU commands remain on the same action boundary.
+- The pack documents its development-derived zero-cost boundary. It does not claim
+  canonical Armada fleet legality, ship rules, upgrades, objectives or calibrated
+  ruler behavior.
+
+The conformance fixture is `ArmadaM8ConformanceTest`; the catalogue/API acceptance is
+covered by `modes-catalogue.cjs`. The next rules slice requires a provenance-backed
+points projection before roster legality can expand beyond this training pack.
+
 ## Definition of done for this initiative
 
 1. The declared supported-v1 game/mode behavior is expressed in captured JSON and

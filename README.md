@@ -177,6 +177,7 @@ private drafts, retries/replay, performance budgets and the release boundary.
 - `RULES_SPATIAL_M5.md` documents geometry, scenarios, movement preview and complete CPU games.
 - `RULES_MODES_M6.md` documents pinned modes, resolved captures and the first catalogue migration.
 - `RULES_CLIENT_M7.md` documents the generic browser, persistent CPU seats and release qualification.
+- `RULES_M8_ARMADA_SLICE.md` documents the additive Armada roster/deployment/activation slice and its cost boundary.
 - `RULES_ENGINE_M0_BASELINE.md` maps H01–H22 hardcoded behaviors to their replacements
   and defines the supported-v1 scope and compatibility boundary.
 - `GAME_ENGINE_FIX_BACKLOG.md` prioritizes corrections and the reusable-rule-module

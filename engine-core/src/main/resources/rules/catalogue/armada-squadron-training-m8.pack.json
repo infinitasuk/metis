@@ -1,0 +1,9 @@
+{
+ "pack":"armada-squadron-training-m8","game":"Star Wars: Armada","definition":"armada-squadron-training-m8","title":"Squadron training M8","classification":"Squadron",
+ "units":["TIE Fighter Squadron","X-Wing Squadron"],
+ "scope":{"supported":["One definition-owned squadron roster per seat","Development-derived zero point costs with faction/count policy","Owner-specific deployment zones and bounded placement choices","Alternating deployment followed by alternating squadron activations","Captured catalogue hull, speed, base radius and anti-squadron pool"],"inapplicable":["Swarm has no second friendly squadron","Escort has no alternative friendly target","Bomber has no ship target"],"unsupported":["Canonical fleet point legality","Ship combat and manoeuvre tools","Aces, upgrades and multi-squadron keyword interactions","Official ruler calibration and full fleet formats"],"geometry":"Development-unit geometry: catalogue speed times 100, edge range 100"},
+ "modes":[
+  {"code":"close-engagement","name":"Close engagement","overrides":[{"op":"replace","path":"/state/startX/initial","value":[300,700]}]},
+  {"code":"short-battle","name":"Short battle","overrides":[{"op":"replace","path":"/state/roundLimit/initial","value":3}]}
+ ]
+}

@@ -12,7 +12,9 @@ import java.util.*;
 /** One-way catalogue data import. Executable policy is authored in the packaged JSON recipe. */
 @Service
 public class RulesCatalogueService {
-    private static final Map<String,String> PACKS=Map.of("armada-squadron-training-v1","armada-squadron-training");
+    private static final Map<String,String> PACKS=Map.of(
+            "armada-squadron-training-v1","armada-squadron-training",
+            "armada-squadron-training-m8","armada-squadron-training-m8");
     private final RulesRepository repository;
     private final RulesService rules;
     public RulesCatalogueService(RulesRepository repository,RulesService rules) { this.repository=repository;this.rules=rules; }

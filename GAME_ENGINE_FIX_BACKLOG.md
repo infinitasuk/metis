@@ -44,7 +44,8 @@ verified:** see `RULES_ENGINE_M0_BASELINE.md` and `tools/rules-tests/README.md`.
 **M5's spatial/setup/scoring and headless CPU contracts are delivered:** see `RULES_SPATIAL_M5.md`.
 **M6's mode resolver and bounded catalogue migration are delivered:** see `RULES_MODES_M6.md`.
 **M7's generic client and persistent CPU path are implemented:** see `RULES_CLIENT_M7.md`.
-Hosted release CI and broader classified catalogue work are next. Remaining F08–F22 work should build on these
+**M8's first setup slice is implemented:** see `RULES_M8_ARMADA_SLICE.md`. Hosted release CI and broader
+classified catalogue work are next. Remaining F08–F22 work should build on these
 contracts. Existing delivered foundations and their statuses below are retained.
 
 ## Prioritized fixes
