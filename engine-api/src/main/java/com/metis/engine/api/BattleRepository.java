@@ -3,11 +3,17 @@ package com.metis.engine.api;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.CallableStatementCreator;
+import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.stereotype.Repository;
 
 import java.sql.CallableStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Types;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -35,15 +41,23 @@ public class BattleRepository {
     }
 
     public List<BattleSession> findVisibleSessions(Long gameId, String status, MetisUser user) {
-        return jdbc.query("""
-                 SELECT s.session_id, s.game_id, g.game_name, s.session_name, s.session_code,
-                        s.visibility, s.owner_user_id, s.template_id, t.template_name,
-                        s.ai_version, s.run_number, s.status, s.current_round,
-                       count(sp.session_player_id) AS player_count, s.created_at, s.updated_at
+        String sql = """
+                SELECT s.session_id, s.game_id, g.game_name, s.session_name, s.session_code,
+                       s.visibility, s.owner_user_id, s.template_id, t.template_name,
+                       s.ai_version, s.run_number, s.status, s.current_round,
+                       s.created_at, s.updated_at,
+                       sp.session_player_id AS participant_id, sp.seat_number AS participant_seat,
+                       sp.display_name AS participant_name, sp.player_kind AS participant_kind,
+                       f.faction_name AS participant_team, controller.display_name AS controller_name,
+                       s.state_json #>> '{values,winnerPlayerId}' AS winner_player_id,
+                       s.state_json #>> '{values,outcome}' AS outcome_code
                 FROM game_instance.game_session s
-                 JOIN game_engine.game g ON g.game_id = s.game_id
-                 LEFT JOIN game_instance.battle_template t ON t.template_id = s.template_id
+                JOIN game_engine.game g ON g.game_id = s.game_id
+                LEFT JOIN game_instance.battle_template t ON t.template_id = s.template_id
                 LEFT JOIN game_instance.session_player sp ON sp.session_id = s.session_id
+                LEFT JOIN game_engine.faction f ON f.faction_id = sp.faction_id
+                LEFT JOIN game_instance.session_seat_owner seat_owner ON seat_owner.session_player_id = sp.session_player_id
+                LEFT JOIN game_instance.app_user controller ON controller.user_id = seat_owner.user_id
                 WHERE (CAST(? AS bigint) IS NULL OR s.game_id = ?)
                   AND (CAST(? AS text) IS NULL OR s.status = ?)
                   AND (? OR s.visibility = 'public' OR s.owner_user_id = ?
@@ -52,16 +66,28 @@ public class BattleRepository {
                         OR EXISTS (SELECT 1 FROM game_instance.session_player member
                                    JOIN game_instance.session_seat_owner seat USING(session_player_id)
                                    WHERE member.session_id=s.session_id AND seat.user_id=?))
-                 GROUP BY s.session_id, g.game_name, t.template_name
-                ORDER BY s.updated_at DESC, s.session_id DESC
-                """, (rs, rowNum) -> new BattleSession(
-                rs.getLong("session_id"), rs.getLong("game_id"), rs.getString("game_name"),
-                rs.getString("session_name"), rs.getString("session_code"), rs.getString("visibility"),
-                 rs.getObject("owner_user_id", Long.class), rs.getObject("template_id", Long.class),
-                 rs.getString("template_name"), rs.getString("ai_version"),
-                 rs.getObject("run_number", Integer.class), rs.getString("status"),
-                rs.getInt("current_round"), rs.getLong("player_count"),
-                rs.getString("created_at"), rs.getString("updated_at")),
+                ORDER BY s.updated_at DESC, s.session_id DESC, sp.seat_number
+                """;
+        ResultSetExtractor<List<BattleSession>> extractor = rs -> {
+            Map<Long, SessionCard> cards = new LinkedHashMap<>();
+            while (rs.next()) {
+                long sessionId = rs.getLong("session_id");
+                SessionCard card = cards.get(sessionId);
+                if (card == null) {
+                    card = new SessionCard(rs);
+                    cards.put(sessionId, card);
+                }
+                Long participantId = rs.getObject("participant_id", Long.class);
+                if (participantId != null) {
+                    card.participants.add(new SessionParticipant(
+                            participantId, rs.getInt("participant_seat"),
+                            rs.getString("participant_team"), rs.getString("participant_name"),
+                            rs.getString("participant_kind"), rs.getString("controller_name")));
+                }
+            }
+            return cards.values().stream().map(SessionCard::session).toList();
+        };
+        return jdbc.query(sql, extractor,
                 gameId, gameId, status, status, user.admin(), user.userId(), user.userId(), user.userId());
     }
 
@@ -120,6 +146,84 @@ public class BattleRepository {
         return sql==null?Optional.empty():jdbc.query(sql,rs->rs.next()?Optional.of(rs.getLong(1)):Optional.empty(),id);
     }
     public record SeatAssignment(long sessionPlayerId, Long userId, String displayName, String playerKind) {}
+
+    private static final class SessionCard {
+        private final long sessionId;
+        private final long gameId;
+        private final String gameName;
+        private final String sessionName;
+        private final String sessionCode;
+        private final String visibility;
+        private final Long ownerUserId;
+        private final Long templateId;
+        private final String templateName;
+        private final String aiVersion;
+        private final Integer runNumber;
+        private final String status;
+        private final int currentRound;
+        private final String createdAt;
+        private final String updatedAt;
+        private final Long winnerPlayerId;
+        private final String outcomeCode;
+        private final List<SessionParticipant> participants = new ArrayList<>();
+
+        private SessionCard(ResultSet rs) throws SQLException {
+            sessionId = rs.getLong("session_id");
+            gameId = rs.getLong("game_id");
+            gameName = rs.getString("game_name");
+            sessionName = rs.getString("session_name");
+            sessionCode = rs.getString("session_code");
+            visibility = rs.getString("visibility");
+            ownerUserId = rs.getObject("owner_user_id", Long.class);
+            templateId = rs.getObject("template_id", Long.class);
+            templateName = rs.getString("template_name");
+            aiVersion = rs.getString("ai_version");
+            runNumber = rs.getObject("run_number", Integer.class);
+            status = rs.getString("status");
+            currentRound = rs.getInt("current_round");
+            createdAt = rs.getString("created_at");
+            updatedAt = rs.getString("updated_at");
+            winnerPlayerId = parseLong(rs.getString("winner_player_id"));
+            outcomeCode = rs.getString("outcome_code");
+        }
+
+        private BattleSession session() {
+            return new BattleSession(sessionId, gameId, gameName, sessionName, sessionCode, visibility,
+                    ownerUserId, templateId, templateName, aiVersion, runNumber, status, currentRound,
+                    participants.size(), createdAt, updatedAt, List.copyOf(participants),
+                    resultLabel(status, outcomeCode, winnerPlayerId, participants));
+        }
+    }
+
+    private static Long parseLong(String value) {
+        if (value == null || value.isBlank()) return null;
+        try { return Long.valueOf(value); } catch (NumberFormatException ignored) { return null; }
+    }
+
+    static String resultLabel(String status, String outcomeCode, Long winnerPlayerId,
+                              List<SessionParticipant> participants) {
+        if (!"finished".equals(status) && !"completed".equals(status)) return null;
+        if ("draw".equalsIgnoreCase(outcomeCode) || "round_limit_draw".equalsIgnoreCase(outcomeCode)) {
+            return "DRAW";
+        }
+        if (winnerPlayerId != null) {
+            return participants.stream().filter(player -> player.sessionPlayerId() == winnerPlayerId).findFirst()
+                    .map(player -> "WINNER: " + teamLabel(player) + " / " + playerLabel(player))
+                    .orElse("WINNER RECORDED");
+        }
+        return "RESULT NOT RECORDED";
+    }
+
+    private static String teamLabel(SessionParticipant participant) {
+        return participant.teamName() == null || participant.teamName().isBlank()
+                ? "UNASSIGNED TEAM" : participant.teamName();
+    }
+
+    private static String playerLabel(SessionParticipant participant) {
+        if ("cpu".equals(participant.playerKind())) return "CPU";
+        return participant.controllerName() == null || participant.controllerName().isBlank()
+                ? participant.playerName() : participant.controllerName();
+    }
 
     public void assignSessionOwner(long sessionId, long userId) {
         execute("{call game_instance.sp_session_owner_set(?,?)}", statement -> {
@@ -554,7 +658,21 @@ public class BattleRepository {
                                 Long templateId, String templateName, String aiVersion, Integer runNumber,
                                 String status,
                                 int currentRound, long playerCount,
-                                String createdAt, String updatedAt) {}
+                                String createdAt, String updatedAt,
+                                List<SessionParticipant> participants, String resultLabel) {
+        public BattleSession(long sessionId, long gameId, String gameName,
+                             String sessionName, String sessionCode, String visibility, Long ownerUserId,
+                             Long templateId, String templateName, String aiVersion, Integer runNumber,
+                             String status, int currentRound, long playerCount,
+                             String createdAt, String updatedAt) {
+            this(sessionId, gameId, gameName, sessionName, sessionCode, visibility, ownerUserId,
+                    templateId, templateName, aiVersion, runNumber, status, currentRound, playerCount,
+                    createdAt, updatedAt, List.of(), null);
+        }
+    }
+
+    public record SessionParticipant(long sessionPlayerId, int seatNumber, String teamName,
+                                     String playerName, String playerKind, String controllerName) {}
 
     public record BattleSessionDetail(long sessionId, long gameId, String gameName,
                                       Long gameVersionId, String gameVersionCode,

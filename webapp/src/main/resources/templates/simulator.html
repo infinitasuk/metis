@@ -39,8 +39,14 @@
                   <h3 th:text="${gameSession.sessionName}"></h3>
                   <p th:text="${gameSession.gameName}"></p>
                   <p class="template-meta" th:if="${gameSession.templateName != null}" th:text="|${gameSession.templateName} / RUN ${gameSession.runNumber}|"></p>
+                  <div class="session-participants" th:if="${!gameSession.participants.isEmpty()}">
+                      <div class="session-participant" th:each="participant : ${gameSession.participants}">
+                          <strong class="session-team" th:text="${participant.teamName != null ? participant.teamName : 'Unassigned team'}"></strong>
+                          <span class="session-player" th:text="${participant.playerKind == 'cpu' ? 'CPU' : (participant.controllerName != null ? participant.controllerName : participant.playerName)}"></span>
+                      </div>
+                  </div>
                   <div class="metric-row"><span><b th:text="|Round ${gameSession.currentRound}|"></b></span><span><b th:text="${gameSession.playerCount}"></b> players</span></div>
-                 <span class="arrow">View game <span>-&gt;</span></span>
+                  <span class="arrow">View game <span>-&gt;</span></span>
              </a>
               <button class="text-button delete-session" type="button" th:if="${currentUser.admin() or gameSession.ownerUserId == currentUser.userId}" th:attr="data-session-id=${gameSession.sessionId}">Delete session</button>
          </article>
@@ -57,8 +63,15 @@
                  <h3 th:text="${gameSession.sessionName}"></h3>
                  <p th:text="${gameSession.gameName}"></p>
                  <p class="template-meta" th:if="${gameSession.templateName != null}" th:text="|${gameSession.templateName} / RUN ${gameSession.runNumber}|"></p>
+                 <div class="session-participants" th:if="${!gameSession.participants.isEmpty()}">
+                     <div class="session-participant" th:each="participant : ${gameSession.participants}">
+                         <strong class="session-team" th:text="${participant.teamName != null ? participant.teamName : 'Unassigned team'}"></strong>
+                         <span class="session-player" th:text="${participant.playerKind == 'cpu' ? 'CPU' : (participant.controllerName != null ? participant.controllerName : participant.playerName)}"></span>
+                     </div>
+                 </div>
+                 <p class="session-result" th:if="${gameSession.resultLabel != null}" th:text="${gameSession.resultLabel}"></p>
                  <div class="metric-row"><span><b th:text="|Round ${gameSession.currentRound}|"></b></span><span><b th:text="${gameSession.playerCount}"></b> players</span></div>
-                <span class="arrow">Open session <span>-&gt;</span></span>
+                 <span class="arrow">Open session <span>-&gt;</span></span>
             </a>
              <button class="text-button delete-session" type="button" th:if="${currentUser.admin() or gameSession.ownerUserId == currentUser.userId}" th:attr="data-session-id=${gameSession.sessionId}">Delete session</button>
         </article>
@@ -75,6 +88,30 @@
     const oldGames = document.querySelector('#old-games');
     const oldGamesEmpty = document.querySelector('#old-games-empty');
     const oldGameCount = document.querySelector('#old-game-count');
+    const appendSessionParticipants = (sessionLink, gameSession) => {
+        const participants = document.createElement('div');
+        participants.className = 'session-participants';
+        for (const participant of gameSession.participants || []) {
+            const row = document.createElement('div');
+            row.className = 'session-participant';
+            const team = document.createElement('strong');
+            team.className = 'session-team';
+            team.textContent = participant.teamName || 'Unassigned team';
+            const player = document.createElement('span');
+            player.className = 'session-player';
+            player.textContent = participant.playerKind === 'cpu'
+                ? 'CPU' : (participant.controllerName || participant.playerName);
+            row.append(team, player);
+            participants.append(row);
+        }
+        if (participants.childElementCount) sessionLink.append(participants);
+        if (gameSession.resultLabel) {
+            const result = document.createElement('p');
+            result.className = 'session-result';
+            result.textContent = gameSession.resultLabel;
+            sessionLink.append(result);
+        }
+    };
     const removeSessionCard = (container, count, empty, sessionId, suffix) => {
         container.querySelector(`[data-session-id="${sessionId}"]`)?.remove();
         const remaining = container.children.length;
@@ -118,11 +155,11 @@
             name.textContent = gameSession.sessionName;
             const game = document.createElement('p');
             game.textContent = gameSession.gameName;
+            let template;
             if (gameSession.templateName) {
-                const template = document.createElement('p');
+                template = document.createElement('p');
                 template.className = 'template-meta';
                 template.textContent = gameSession.templateName + ' / RUN ' + gameSession.runNumber;
-                sessionLink.append(template);
             }
             const metrics = document.createElement('div');
             metrics.className = 'metric-row';
@@ -130,7 +167,10 @@
             const link = document.createElement('span');
             link.className = 'arrow';
             link.textContent = 'View game ->';
-            sessionLink.append(kicker, name, game, metrics, link);
+            sessionLink.append(kicker, name, game);
+            if (template) sessionLink.append(template);
+            appendSessionParticipants(sessionLink, gameSession);
+            sessionLink.append(metrics, link);
              if (currentUserAdmin || Number(gameSession.ownerUserId) === Number(currentUserId)) {
                  const deleteButton = document.createElement('button');
                  deleteButton.className = 'text-button delete-session';

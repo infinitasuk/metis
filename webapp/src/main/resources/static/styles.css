@@ -63,6 +63,11 @@ h3 { margin-bottom: 9px; font-size: 1.12rem; }
 .game-card h3, .faction-card h3 { margin-top: 28px; font-family: Georgia, serif; font-size: 2rem; font-weight: 400; letter-spacing: -.035em; }
 .game-card p, .faction-card p, .type-card p, .data-item p, .rule-item p, .variant-heading p { color: var(--muted); font-size: .88rem; line-height: 1.55; }
 .template-meta { margin: -3px 0 0; color: var(--teal) !important; font-size: .66rem !important; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.session-participants { display: grid; gap: 6px; margin-top: 17px; }
+.session-participant { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; padding-top: 7px; border-top: 1px solid var(--line); font-size: .72rem; }
+.session-team { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-player { color: var(--muted); font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.session-result { margin: 16px 0 0 !important; color: var(--accent) !important; font-size: .68rem !important; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .metric-row { display: flex; flex-wrap: wrap; gap: 17px; margin-top: auto; padding-top: 26px; color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
 .metric-row b { color: var(--ink); font-size: 1rem; }
 .arrow { margin-top: 22px; color: var(--accent); font-size: .78rem; font-weight: 800; }
