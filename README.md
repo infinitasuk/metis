@@ -164,6 +164,17 @@ See [RULES_MODES_M6.md](RULES_MODES_M6.md) for mode authoring, resolved provenan
 catalogue import/session APIs and the supported Armada squadron-training scope.
 See [RULES_CLIENT_M7.md](RULES_CLIENT_M7.md) for browser play/authoring, CPU seats,
 private drafts, retries/replay, performance budgets and the release boundary.
+See [RULES_SOURCED_POINTS.md](RULES_SOURCED_POINTS.md) for the sourced 8/13-point
+Armada training pack, immutable cost provenance, shared roster validation and
+the `/rules` roster-cost display. Import recipe: `armada-squadron-points-v1`.
+See [RULES_ROSTER_SELECTION.md](RULES_ROSTER_SELECTION.md) for faction/unit
+selection, a 26-point squadron-training format and immutable starting-roster
+capture. Import recipe: `armada-squadron-rosters-v1`.
+See [RULES_FLEET_PRESETS.md](RULES_FLEET_PRESETS.md) for personal saved fleets in
+`/rules`, owner-only management and revision-aware validation when loading them.
+See [RULES_COUNTER_SQUADRONS.md](RULES_COUNTER_SQUADRONS.md) for mixed TIE Fighter,
+TIE Interceptor, X-Wing and A-Wing fleets with Counter, Swarm and Escort timing.
+Import recipe: `armada-squadron-counter-v1`.
 
 - `RULES_ENGINE_DEVELOPMENT_PLAN.md` is the primary delivery plan: establish a
   working rules-driven engine through milestones M0–M7 before extending battle UI.

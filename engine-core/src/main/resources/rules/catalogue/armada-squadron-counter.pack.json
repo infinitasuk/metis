@@ -1,0 +1,69 @@
+{
+ "pack":"armada-squadron-counter-v1","game":"Star Wars: Armada","definition":"armada-squadron-counter-v1","title":"Mixed squadron training with Counter","classification":"Squadron",
+ "extendsPack":"armada-squadron-rosters","pointsSource":"bsdata-armada-counter-47bfca1","captureKeywords":true,
+ "units":["TIE Fighter Squadron","X-Wing Squadron","A-Wing Squadron","TIE Interceptor Squadron"],
+ "keywordDefaults":{"swarmProfiles":false,"escortProfiles":false,"counterPools":[]},
+ "keywordBindings":{"Swarm":{"field":"swarmProfiles","value":true},"Escort":{"field":"escortProfiles","value":true},"Counter 2":{"field":"counterPools","value":["blue","blue"]},"Bomber":{"inapplicable":"There are no ship targets in this format"}},
+ "rulesSource":{"version":"1.6.0","url":"https://cdn.svc.asmodee.net/production-amgcom/uploads/2025/01/SWM_Rules_Reference_Guide_1.6.0_web.pdf","sha256":"c48ee9e97676aec77e998b58d36fe88e3024740a7206060352f64531c472e7fb","sections":["Squadron Keywords: Counter, Escort, Swarm"]},
+ "scope":{"supported":["Mixed TIE Fighter, TIE Interceptor, X-Wing and A-Wing rosters with sourced profiles and costs","26-point training allowance and one to three units per seat","Optional Counter after a normal attack, including a destroyed defender","Swarm during normal and Counter attacks; no Counter chains","Escort targeting restriction with the Counter exception","Elimination after the attack and all responses; mutual elimination draws"],"inapplicable":["Bomber has no ship target"],"unsupported":["Standard fleet legality, ships, aces, upgrades and squadron-percentage caps","Official ruler calibration"],"geometry":"Development-unit geometry: catalogue speed times 100, edge range 100"},
+ "overrides":[
+  {"op":"add","path":"/state/escortProfiles","value":{"type":{"list":"boolean"},"initial":[false,false],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/counterPools","value":{"type":{"list":{"list":"string"}},"initial":[[],[]],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/keywordProfiles","value":{"type":{"list":{"list":"string"}},"initial":[[],[]],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/keywordSources","value":{"type":{"list":"string"},"initial":["",""],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/entities/squadron/attributes/escort","value":{"type":"boolean","initial":false,"visibility":"PUBLIC"}},
+  {"op":"add","path":"/entities/squadron/attributes/counterPool","value":{"type":{"list":"string"},"initial":[],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/entities/squadron/attributes/keywords","value":{"type":{"list":"string"},"initial":[],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/events/attackResolved","value":{"visibility":"PUBLIC","fields":{"attacker":"entity:squadron","target":"entity:squadron","counter":"boolean","damage":"integer","roll":"string"}}},
+  {"op":"replace","path":"/procedures/prepare","value":{"parameters":{},"steps":[
+   {"op":"scenario.require","args":{"condition":{"op":"eq","args":[{"op":"count","args":[{"var":"players"}]},2]},"code":"TWO_PLAYERS"}},
+   {"op":"scenario.require","args":{"condition":{"op":"and","args":[{"op":"eq","args":[{"op":"count","args":[{"state":"selectedRosters"}]},2]},{"op":"eq","args":[{"op":"count","args":[{"state":"selectedPolicies"}]},2]}]},"code":"ROSTER_SEAT_COUNT"}},
+   {"op":"core.forEach","source":{"list":{"elementType":"integer","items":[0,1]}},"as":"seat","maxItems":2,"steps":[
+    {"op":"core.let","name":"p","value":{"op":"at","args":[{"var":"players"},{"var":"seat"}]}},
+    {"op":"core.let","name":"roster","value":{"op":"at","args":[{"state":"selectedRosters"},{"var":"seat"}]}},
+    {"op":"core.let","name":"policy","value":{"op":"at","args":[{"state":"selectedPolicies"},{"var":"seat"}]}},
+    {"op":"scenario.require","args":{"condition":{"op":"contains","args":[{"op":"at","args":[{"state":"rosterPolicyChoices"},{"var":"seat"}]},{"var":"policy"}]},"code":"ROSTER_POLICY"}},
+    {"op":"scenario.require","args":{"condition":{"op":"lte","args":[{"op":"count","args":[{"var":"roster"}]},{"op":"count","args":[{"state":"rosterSlots"}]}]},"code":"ROSTER_COUNT"}},
+    {"op":"core.forEach","source":{"filter":{"source":{"state":"rosterSlots"},"as":"slot","where":{"op":"lt","args":[{"var":"slot"},{"op":"count","args":[{"var":"roster"}]}]}}},"as":"slot","maxItems":3,"steps":[
+     {"op":"core.let","name":"profile","value":{"op":"at","args":[{"var":"roster"},{"var":"slot"}]}},
+     {"op":"core.createEntity","type":"squadron","id":{"op":"at","args":[{"op":"at","args":[{"state":"rosterEntityIds"},{"var":"seat"}]},{"var":"slot"}]},"owner":{"var":"p"},"attributes":{"catalogueId":{"op":"at","args":[{"state":"catalogueIds"},{"var":"profile"}]},"name":{"op":"at","args":[{"state":"names"},{"var":"profile"}]},"faction":{"op":"at","args":[{"state":"factions"},{"var":"profile"}]},"points":{"op":"at","args":[{"state":"points"},{"var":"profile"}]},"uniqueKey":{"op":"at","args":[{"state":"uniqueKeys"},{"var":"profile"}]},"speed":{"op":"at","args":[{"state":"speeds"},{"var":"profile"}]},"pool":{"op":"at","args":[{"state":"pools"},{"var":"profile"}]},"swarm":{"op":"at","args":[{"state":"swarmProfiles"},{"var":"profile"}]},"escort":{"op":"at","args":[{"state":"escortProfiles"},{"var":"profile"}]},"counterPool":{"op":"at","args":[{"state":"counterPools"},{"var":"profile"}]},"keywords":{"op":"at","args":[{"state":"keywordProfiles"},{"var":"profile"}]},"deployX":{"op":"at","args":[{"state":"startX"},{"var":"seat"}]},"deployY":{"op":"at","args":[{"state":"deploymentY"},{"var":"slot"}]}},"resources":{"health":{"op":"at","args":[{"state":"hulls"},{"var":"profile"}]}},"as":"unit"}
+    ]},
+    {"op":"scenario.roster","args":{"owner":{"var":"p"},"entities":{"filter":{"source":{"entities":"squadron"},"as":"unit","where":{"op":"eq","args":[{"owner":{"var":"unit"}},{"var":"p"}]}}},"policy":{"var":"policy"}}}
+   ]}
+  ]}},
+  {"op":"replace","path":"/actions/attack/availableWhen","value":{"op":"and","args":[
+   {"op":"eq","args":[{"owner":{"var":"entity"}},{"var":"actor"}]},
+   {"op":"ne","args":[{"owner":{"var":"target"}},{"var":"actor"}]},
+   {"get":{"entity":{"var":"entity"},"field":"alive"}},{"get":{"entity":{"var":"target"},"field":"alive"}},
+   {"op":"lte","args":[{"query":{"op":"space.distance","args":{"from":{"var":"entity"},"to":{"var":"target"},"mode":"EDGES"}}},100]},
+   {"query":{"op":"space.lineOfSight","args":{"from":{"var":"entity"},"to":{"var":"target"}}}},
+   {"op":"or","args":[{"get":{"entity":{"var":"target"},"field":"escort"}},{"op":"eq","args":[{"op":"count","args":[{"filter":{"source":{"entities":"squadron"},"as":"screen","where":{"op":"and","args":[{"op":"ne","args":[{"owner":{"var":"screen"}},{"var":"actor"}]},{"get":{"entity":{"var":"screen"},"field":"alive"}},{"get":{"entity":{"var":"screen"},"field":"escort"}},{"op":"lte","args":[{"query":{"op":"space.distance","args":{"from":{"var":"entity"},"to":{"var":"screen"},"mode":"EDGES"}}},100]},{"query":{"op":"space.lineOfSight","args":{"from":{"var":"entity"},"to":{"var":"screen"}}}}]}}}]},0]}]}
+  ]}},
+  {"op":"replace","path":"/procedures/attack","value":{"parameters":{"actor":"player","entity":"entity:squadron","target":"entity:squadron"},"steps":[
+   {"op":"core.call","procedure":"strike","args":{"actor":{"var":"actor"},"entity":{"var":"entity"},"target":{"var":"target"},"pool":{"get":{"entity":{"var":"entity"},"field":"pool"}},"counter":false}},
+   {"op":"core.window","window":"counter","args":{"attacker":{"var":"entity"},"defender":{"var":"target"}}},
+   {"op":"core.call","procedure":"finishCombat","args":{}}
+  ]}},
+  {"op":"add","path":"/procedures/strike","value":{"parameters":{"actor":"player","entity":"entity:squadron","target":"entity:squadron","pool":{"list":"string"},"counter":"boolean"},"steps":[
+   {"op":"dice.roll","args":{"owner":{"var":"actor"},"visibility":"PUBLIC","dice":{"var":"pool"}},"as":"roll"},
+   {"op":"core.if","condition":{"op":"and","args":[{"get":{"entity":{"var":"entity"},"field":"swarm"}},{"op":"gt","args":[{"op":"count","args":[{"filter":{"source":{"entities":"squadron"},"as":"ally","where":{"op":"and","args":[{"op":"eq","args":[{"owner":{"var":"ally"}},{"var":"actor"}]},{"op":"ne","args":[{"var":"ally"},{"var":"entity"}]},{"get":{"entity":{"var":"ally"},"field":"alive"}},{"op":"lte","args":[{"query":{"op":"space.distance","args":{"from":{"var":"ally"},"to":{"var":"target"},"mode":"EDGES"}}},100]}]}}}]},0]}]},"then":[{"op":"core.window","window":"swarm","args":{"actor":{"var":"actor"},"roll":{"var":"roll"}}}],"else":[]},
+   {"op":"scenario.damage","args":{"target":{"var":"target"},"policy":"wounds","amount":{"query":{"op":"dice.resolve","args":{"roll":{"var":"roll"},"table":"squadron"}}}},"as":"damage"},
+   {"op":"core.emit","event":"attackResolved","values":{"attacker":{"var":"entity"},"target":{"var":"target"},"counter":{"var":"counter"},"damage":{"var":"damage"},"roll":{"var":"roll"}}},
+   {"op":"dice.close","args":{"roll":{"var":"roll"}}},{"op":"dice.clear","args":{"roll":{"var":"roll"}}}
+  ]}},
+  {"op":"add","path":"/procedures/counterAttack","value":{"parameters":{"actor":"player","entity":"entity:squadron","target":"entity:squadron"},"steps":[
+   {"op":"core.call","procedure":"strike","args":{"actor":{"var":"actor"},"entity":{"var":"entity"},"target":{"var":"target"},"pool":{"get":{"entity":{"var":"entity"},"field":"counterPool"}},"counter":true}}
+  ]}},
+  {"op":"add","path":"/windows/counter","value":{"parameters":{"attacker":"entity:squadron","defender":"entity:squadron"},"responders":{"list":{"elementType":"player","items":[{"owner":{"var":"defender"}}]}},"maxResponders":1,"allowPass":true,"visibility":"PUBLIC","choices":[{"id":"counter","when":{"op":"and","args":[{"get":{"entity":{"var":"attacker"},"field":"alive"}},{"op":"gt","args":[{"op":"count","args":[{"get":{"entity":{"var":"defender"},"field":"counterPool"}}]},0]}]},"procedure":"counterAttack","args":{"actor":{"var":"responder"},"entity":{"var":"defender"},"target":{"var":"attacker"}}}]}},
+  {"op":"add","path":"/procedures/finishCombat","value":{"parameters":{},"steps":[
+   {"op":"core.let","name":"survivors","value":{"filter":{"source":{"var":"players"},"as":"p","where":{"op":"gt","args":[{"op":"count","args":[{"filter":{"source":{"entities":"squadron"},"as":"unit","where":{"op":"and","args":[{"op":"eq","args":[{"owner":{"var":"unit"}},{"var":"p"}]},{"get":{"entity":{"var":"unit"},"field":"alive"}}]}}}]},0]}}}},
+   {"op":"core.if","condition":{"op":"eq","args":[{"op":"count","args":[{"var":"survivors"}]},0]},"then":[{"op":"core.endGame","outcome":"mutual-elimination-draw","winners":{"var":"survivors"}}],"else":[
+    {"op":"core.if","condition":{"op":"eq","args":[{"op":"count","args":[{"var":"survivors"}]},1]},"then":[{"op":"core.endGame","outcome":"elimination","winners":{"var":"survivors"}}],"else":[]}
+   ]}
+  ]}}
+ ],
+ "modes":[
+  {"code":"close-engagement","name":"Close engagement","overrides":[{"op":"replace","path":"/state/startX/initial","value":[300,700]}]},
+  {"code":"short-battle","name":"Short battle","overrides":[{"op":"replace","path":"/state/roundLimit/initial","value":3}]}
+ ]
+}

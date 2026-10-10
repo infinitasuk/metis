@@ -97,10 +97,43 @@ async function main() {
    const form=page.locator('form.order-form').filter({hasText:'Focus / order'});
    await form.getByRole('button',{name:'Resolve',exact:true}).click();await wait(game,s=>s.values.orderState[u].available===false);
   } else await act(game,1,'resolve_order',a,{unitId:u,orderCode:'focus',source:'order'});
-  const opened=await act(game,1,'attack_unit',a,{unitId:u,targetUnitId:v});assert.equal(opened.code,'RESPONSE_REQUIRED');
+   const beforeAttack=await state(game);
+   const opened=await act(game,1,'attack_unit',a,{unitId:u,targetUnitId:v});assert.equal(opened.code,'RESPONSE_REQUIRED');
+   const roll=opened.resultingState.values.attackRoll;
+   assert.equal(roll.status,'awaiting_defense');assert.equal(roll.dice.length,roll.attackDice);
+   assert.deepEqual(opened.resultingState.units,beforeAttack.units,'Damage waits for the defender');
+   const recorded=await api(1,`/api/v1/sessions/${game.id}/events`);
+   assert.equal(recorded.length,opened.resultingState.events.length);
+   assert.deepEqual(JSON.parse(recorded.at(-1).payload).roll,roll,'SQL history retains the authoritative roll');
+   if(browser) {
+    const defenderContext=await browser.newContext();
+    await defenderContext.addCookies(cookies[2].split('; ').map(item=>{const [name,...value]=item.split('=');return {name,value:value.join('='),url:base};}));
+    const defender=await defenderContext.newPage();defender.on('pageerror',error=>browserErrors.push(error.message));
+    await defender.clock.install();await defender.clock.pauseAt(new Date());
+    await defender.goto(`${base}/simulator/sessions/${game.id}`);
+    await defender.locator('.attack-die').first().waitFor();
+    const decline=defender.getByRole('button',{name:'Decline response',exact:true});
+    assert.equal(await decline.isDisabled(),true);
+    assert.equal(await defender.locator('.attack-die.rolling').count(),roll.dice.length);
+    await defender.clock.runFor(360);
+    assert.equal(await defender.locator('.attack-die.revealed').count(),1);
+    await defender.reload();await defender.locator('.attack-die').first().waitFor();
+    assert.equal(await decline.isDisabled(),true);
+    await defender.clock.runFor(360*roll.dice.length);
+    assert.equal(await decline.isEnabled(),true);
+    assert.deepEqual(await defender.locator('.attack-die strong').allTextContents(),roll.dice.map(d=>String(d.face)));
+    assert.deepEqual((await state(game)).values.attackRoll,roll,'Reload does not reroll');
+    await defenderContext.close();
+   }
   assert.equal((await state(game)).values.orderState[u].modifiers.attackDice,1);
   await act(game,2,'respond',b,{windowId:opened.resultingState.values.responseWindow.windowId,choice:'decline'});
-  const after=await state(game);assert.equal(after.events.at(-1).payload.orderBonusDice,1);assert.equal(after.values.orderState[u].modifiers.attackDice,undefined);assert.equal(after.values.activation.uses.attack,1);
+   const after=await state(game);assert.equal(after.events.at(-1).payload.orderBonusDice,1);assert.equal(after.values.orderState[u].modifiers.attackDice,undefined);assert.equal(after.values.activation.uses.attack,1);
+   assert.deepEqual(after.values.attackRoll.dice,roll.dice);assert.equal(after.values.attackRoll.rollId,roll.rollId);
+   if(page) {
+    const replay=await page.evaluate(({source,count})=>replayStateAt(source,count),{source:after,count:opened.resultingState.events.length});
+    assert.equal(replay.values.attackRoll.status,'awaiting_defense');assert.deepEqual(replay.values.attackRoll.dice,roll.dice);
+    assert.deepEqual(replay.units,beforeAttack.units);
+   }
   await hold(game,1,u,a);await act(game,1,'end_activation',a);await act(game,2,'activate_unit',b,{unitId:v});await act(game,2,'store_order',b,{unitId:v});
   await hold(game,2,v,b);await act(game,2,'end_activation',b);
   assert.equal((await state(game)).round,2);
@@ -121,7 +154,8 @@ async function main() {
   assert.deepEqual(Object.keys(cs.values.orderQueues),[String(cpu.units[0])]);
   assert.deepEqual(browserErrors,[]);
   console.log('PASS: F07 queue privacy/readiness, actor ownership, locked tail, public reveal, single attack bonus across response pause, tokens, clean restart, CPU planning/resolution/handover.');
-  if(page)console.log('PASS: browser private planning controls, draft preservation across opponent polling, order resolution, no browser errors.');
+   if(page)console.log('PASS: browser private planning controls, draft preservation across opponent polling, order resolution, no browser errors.');
+   if(page)console.log('PASS: authoritative attack roll survives reload and replay; defender controls wait for the dice reveal.');
  } catch(error) {
   if(page && process.env.TEST_ARTIFACT_DIR) {
    await page.screenshot({path:path.join(process.env.TEST_ARTIFACT_DIR,'orders-failure.png'),fullPage:true}).catch(()=>{});

@@ -10,11 +10,11 @@ import java.util.Set;
 /** Pure player/spectator projection. Unknown state fields and event types are private. */
 public final class StateProjection {
     private static final Object OMIT = new Object();
-    private static final Set<String> PUBLIC_VALUES = Set.of("activation", "responseWindow", "privateChoices", "publicChoices",
+    private static final Set<String> PUBLIC_VALUES = Set.of("activation", "responseWindow", "attackRoll", "privateChoices", "publicChoices",
             "maximumRounds", "unlimitedRounds", "distancePerSpeed", "maximumMovementDistance", "shortRange", "mediumRange", "longRange", "outcome", "winnerPlayerId",
             "orderQueues", "orderState", "orderActivations");
     private static final Set<String> PUBLIC_EVENTS = Set.of("game_started", "game_paused", "phase_changed", "round_started", "round_limit_reached",
-            "turn_started", "unit_deployed", "unit_moved", "unit_movement_reset", "unit_attacked", "game_won", "unit_activated",
+            "turn_started", "unit_deployed", "unit_moved", "unit_movement_reset", "attack_roll", "unit_attacked", "game_won", "unit_activated",
             "activation_completed", "activation_step_changed", "response_opened", "order_resolved", "order_stored", "order_discarded", "support_activated", "support_completed", "order_grant_ended");
     private final VisibilityRules rules;
     private final Set<Long> owned;

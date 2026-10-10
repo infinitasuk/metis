@@ -64,11 +64,11 @@ contracts. Existing delivered foundations and their statuses below are retained.
 | F10 | P1 | Replace simplified attack resolution | Attack-step state machine, selectable sources/targets, attack budgets, configurable dice faces/pools and modifiers; remove automatic-hit rule from normal combat | Planned |
 | F11 | P1 | Implement defensive responses and damage effects | Defender input, reusable resource/token effects, spend/exhaust/discard lifecycle, optional damage-deck and persistent-effect modules | Planned |
 | F12 | P1 | Separate unit-class activation/movement behavior | Traits select eligibility, movement measure, engagement rules and action budgets; no hardcoded ship/squadron split in shared engine | Planned |
-| F13 | P1 | Use canonical costs and common roster validation | Definition-owned costs/provenance, uniqueness, slot/cap/faction constraints; validate presets, CPU and live rosters at start | Planned |
+| F13 | P1 | Use canonical costs and common roster validation | Definition-owned costs/provenance, uniqueness, slot/cap/faction constraints; validate presets, CPU and live rosters at start | Sourced costs, shared validator, selected training rosters, immutable capture and personal revision-aware presets delivered; broader profiles/full-format caps remain |
 | F14 | P1 | Implement initiative, legal deployment and setup choices | Configurable setup workflow, initiative policy, deployment regions, group placement, initial-resource choices | Planned |
 | F15 | P1 | Implement scoring and victory | Pluggable elimination/scoring/round-limit/tie policies; support scored battles and grid target elimination | Planned |
 | F16 | P2 | Replace decorative terrain/objectives with runtime objects | Geometry, placement rules, interactions, triggers and scoring; UI renders state rather than fixed shapes | Planned |
-| F17 | P2 | Implement upgrades, keywords and named effects | Optional loadouts, eligibility, reusable effect/timing hooks, executable support registry per revision | Planned |
+| F17 | P2 | Implement upgrades, keywords and named effects | Optional loadouts, eligibility, reusable effect/timing hooks, executable support registry per revision | Generic squadron Counter/Swarm/Escort slice delivered in captured JSON; upgrades and broader named effects remain |
 | F18 | P2 | Complete refresh/end-of-round behavior | Definition-driven resource refresh, effect expiration, order cleanup, recurring/paid refresh, objective timing | Planned |
 | F19 | P2 | Adapt CPU to the selected mechanics | Budget-legal roster generation and activation-aware actions through shared interfaces; no privileged movement path | Planned |
 | F20 | P2 | Correct labels and legal-action UI | Labels from definitions; distinguish current/min/max resources; selected-actor legal targets; previews from rules; preserve view settings | Planned |
@@ -172,9 +172,10 @@ Delivered and verified:
 - `mvn -q test`, rolled-back SQL ownership checks and isolated four-user HTTP
   integration checks passed. V34 applied on existing and clean databases.
 
-F07 now adds per-unit queues and effects on top of private choices. The
-registered attack response opens before rolling, and token effects remain the
-existing simplified adapter. Correct post-roll combat/defenses remain F10/F11.
+F07 now adds per-unit queues and effects on top of private choices. The legacy
+attack response now opens after a persisted roll and before damage, with visible
+dice and reload/replay coverage. Token effects remain the simplified adapter;
+full combat and token-specific rules remain F10/F11.
 New captures use event schema 3. Existing captured rule configurations are retained.
 
 ## Queued orders milestone (F07)

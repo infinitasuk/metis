@@ -141,7 +141,8 @@ class OrderEngineTest {
                 List.of(new TurnStructure.ResponseRule("attack_unit","targetUnitId","Respond",Map.of("declineDefense",true),List.of(),null,null)),turns.orders()));
         var rolls=new java.util.concurrent.atomic.AtomicInteger(); var respondingEngine=new AuthoritativeGameEngine(bound->{rolls.incrementAndGet();return 5;});
         var opened=respondingEngine.applyAction(def,s,new Action("attack_unit",10,Map.of("unitId",3,"targetUnitId",2)));
-        assertEquals("RESPONSE_REQUIRED",opened.code()); assertEquals(0,rolls.get());
+        assertEquals("RESPONSE_REQUIRED",opened.code()); assertEquals(1,rolls.get());
+        assertEquals("awaiting_defense",ResponseWindows.object(opened.resultingState().values().get("attackRoll")).get("status"));
         assertEquals(List.of(),OrderEngine.grant(opened.resultingState()).get("used"));
         var response=new Action("respond",20,Map.of("windowId",ResponseWindows.pending(opened.resultingState()).get("windowId"),"choice","decline"));
         var resumed=respondingEngine.applyAction(def,opened.resultingState(),response);assertTrue(resumed.accepted());assertEquals(1,rolls.get());

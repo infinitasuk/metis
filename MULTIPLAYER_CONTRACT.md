@@ -166,8 +166,13 @@ the same hook; declaring a rule does not implement a missing effect module.
 - The server retains the original actor and parameters under `serverOnly`.
 - Public state announces the pending window and designated responder. The subject
   and available response choices are owner-visible to that responder.
-- The original action has not consumed its activation budget or rolled dice yet
-  in the current attack adapter.
+- The attack adapter rolls once before opening the response. Public `attackRoll`
+  contains the roll ID, colored numeric faces, hit/reroll information and
+  `awaiting_defense` status; no damage or activation budget is consumed yet.
+- `response_opened.payload.roll` stores the same roll in the atomic action event.
+  Resolution records it in `unit_attacked`/`game_won` and changes its status to
+  `resolved`. Each accepted action still advances one state version and one event,
+  keeping the SQL event history and state JSON aligned.
 - While a window is pending, other actions—including phase/activation completion—
   are blocked.
 - `respond` requires the current `windowId` and an offered `choice` code.
@@ -183,11 +188,13 @@ the same hook; declaring a rule does not implement a missing effect module.
   projected view; it does not plan movement toward concealed enemy units. Automatic
   deployment and legality checking remain server-side operations.
 
-**Timing boundary:** this is currently a pre-resolution response window, not the
-full post-dice-roll combat sequence. The existing attack adapter still uses its
-simple token mitigation. Exact dice faces, post-roll choices and token/card-specific
-effects remain F10/F11. Resource bindings select parameters; their actual effects
-must be implemented by the mechanical module.
+The simulator reveals the persisted dice one at a time and enables defender
+controls after the reveal. Reload and replay retain the same roll; resumption
+does not draw again. Older pending windows that predate stored rolls still draw
+once when resumed. The adapter continues to use six-sided numeric hit rolls and
+simple token mitigation. Armada symbolic dice and token/card-specific effects
+remain F10/F11; resource bindings select parameters whose effects belong to the
+mechanical module.
 
 ## Migration and compatibility
 

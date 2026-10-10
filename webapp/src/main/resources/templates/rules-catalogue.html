@@ -9,7 +9,8 @@
  <div class="rules-columns">
   <section class="rules-panel"><h2>Create a session</h2><form id="create-session">
    <label>Definition or catalogue mode<select id="definition" required></select></label>
-   <div id="scope" class="muted"></div>
+    <div id="scope" class="muted"></div>
+    <section id="catalogue-roster" hidden aria-label="Captured roster and point costs"></section>
    <div class="rules-toolbar"><h3>Seats</h3><button type="button" id="add-seat">Add seat</button></div>
    <div id="seats"></div>
    <label>Visibility<select id="visibility"><option value="private">Private</option><option value="public">Public spectators</option></select></label>
@@ -24,7 +25,7 @@
   <label>Source JSON<textarea id="source" rows="14" spellcheck="false" placeholder='{"languageVersion":1,"id":"my-game","revision":"1",...}'></textarea></label>
   <div class="rules-toolbar"><button id="save-definition" type="button">Save draft</button><button id="validate-definition" type="button">Validate saved draft</button><button id="resolve-definition" type="button">Inspect resolved rules</button><button id="publish-definition" type="button">Publish saved draft</button></div>
   <pre id="author-result" class="rules-json" aria-live="polite"></pre>
-  <h3>Catalogue import</h3><form id="import-catalogue"><label>Published catalogue revision ID<input id="catalogue-version" type="number" min="1" required></label><label>Import recipe<input id="catalogue-pack" value="armada-squadron-training-v1" required></label><button type="submit">Import catalogue entries</button></form>
+    <h3>Catalogue import</h3><form id="import-catalogue"><label>Published catalogue revision ID<input id="catalogue-version" type="number" min="1" required></label><label>Import recipe<input id="catalogue-pack" value="armada-squadron-counter-v1" required></label><button type="submit">Import catalogue entries</button></form>
  </section>
 </main><footer th:replace="~{fragments :: footer}"></footer><script type="module" src="/rules-catalogue.js"></script>
 </body></html>

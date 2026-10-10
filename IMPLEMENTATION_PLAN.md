@@ -394,7 +394,10 @@ A feature is complete only when:
 1. Run hosted fast/full/mutation/performance CI on the committed revision.
 2. Preserve the local browser/CPU, recovery, privacy and replay acceptance gates.
 3. Expand catalogue scope through classified rule migrations and richer R21 authoring tools.
-4. Add canonical Armada costs and roster legality before broadening the M8 pack beyond its closed training scope.
+4. Expand the delivered player-selected roster capture (`RULES_ROSTER_SELECTION.md`)
+   and personal fleet presets (`RULES_FLEET_PRESETS.md`) beyond the four-profile
+   Counter squadron pack (`RULES_COUNTER_SQUADRONS.md`) into ship rules and explicit
+   standard-format/cap policies.
 
 M0–M8 implementation/local gates are delivered; hosted release qualification remains pending. Preserve the
 combined command: `mvn -B "-Prules-full,rules-mutation" clean verify`.

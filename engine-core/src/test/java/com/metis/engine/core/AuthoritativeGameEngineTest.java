@@ -289,7 +289,17 @@ class AuthoritativeGameEngineTest {
         assertTrue(attack.accepted());
         assertEquals(1, attack.resultingState().units().get(1).hullPoints());
         assertEquals("activated", attack.resultingState().units().get(0).status());
+        Map<String, Object> roll = ResponseWindows.object(attack.resultingState().values().get("attackRoll"));
+        assertEquals("resolved", roll.get("status"));
+        assertEquals(1, roll.get("attackDice"));
+        assertEquals(1, roll.get("rawHits"));
+        assertEquals(1, ((List<?>) roll.get("dice")).size());
+        Map<?, ?> die = (Map<?, ?>) ((List<?>) roll.get("dice")).getFirst();
+        assertEquals(6, die.get("face"));
+        assertEquals(true, die.get("hit"));
+        assertEquals(state.events().size() + 1, attack.resultingState().events().size());
         assertEquals("unit_attacked", attack.resultingState().events().getLast().type());
+        assertEquals(roll, attack.resultingState().events().getLast().payload().get("roll"));
         assertTrue(engine.legalActions(catalogue, state).stream()
                 .anyMatch(action -> "attack_unit".equals(action.type())));
 

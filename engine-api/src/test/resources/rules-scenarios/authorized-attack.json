@@ -34,8 +34,8 @@
          {"players":[20],"state":{"/values/privateChoices/1:ship/20/intent":"RIGHT_SENTINEL"},"absent":["/values/privateChoices/1:ship/10"]},
          {"players":[],"state":{"/values/privateChoices/1:ship":{}},"absent":["/values/privateChoices/1:ship/10","/values/privateChoices/1:ship/20"]}
        ]}},
-    {"action":{"type":"attack_unit","actorPlayerId":10,"parameters":{"unitId":1,"targetUnitId":2}},
-     "expect":{"accepted":true,"code":"ACTION_ACCEPTED","randomConsumed":1,"state":{"/stateVersion":1,"/units/1/hullPoints":19,"/events/0/type":"unit_attacked","/events/0/payload/hits":1}}},
+     {"action":{"type":"attack_unit","actorPlayerId":10,"parameters":{"unitId":1,"targetUnitId":2}},
+      "expect":{"accepted":true,"code":"ACTION_ACCEPTED","randomConsumed":1,"state":{"/stateVersion":1,"/units/1/hullPoints":19,"/values/attackRoll/status":"resolved","/events/0/payload/roll/dice/0/face":6,"/events/0/type":"unit_attacked","/events/0/payload/hits":1}}},
     {"action":{"type":"attack_unit","actorPlayerId":10,"parameters":{"unitId":1,"targetUnitId":2}},
      "expect":{"accepted":false,"code":"UNIT_ALREADY_ACTIVATED","randomConsumed":1,"state":{"/stateVersion":1,"/units/1/hullPoints":19}}}
   ]

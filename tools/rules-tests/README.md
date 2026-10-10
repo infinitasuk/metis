@@ -37,8 +37,21 @@ This command:
    three contrasting games through authenticated projected HTTP offers.
    M6 adds mode provenance/capture compatibility, exact overrides, concurrent catalogue
    imports, injected import rollback and base/two-mode completion with restart/replay.
-   M7 adds persistent CPU recovery and mandatory generic-browser authoring/play,
-   exact numbers, role privacy, drafts/focus/pan preservation, retry and historical views.
+    M7 adds persistent CPU recovery and mandatory generic-browser authoring/play,
+    exact numbers, role privacy, drafts/focus/pan preservation, retry and historical views.
+    The sourced-points slice adds source-revision/immutability SQL checks, shared
+    preflight/setup validation, priced human/CPU games, restart/replay and browser
+    cost controls. Legacy browser checks also verify post-roll defense gating and
+    roll preservation across reload and replay.
+    The selected-roster suite adds faction/quantity selection, atomic creation
+    failures, immutable initial selections, newer-revision isolation, multi-unit
+    human/CPU games, browser draft preservation and stale-setup rejection.
+    The personal preset suite adds owner-only save/read/load/rename/delete,
+    optimistic edit races, transaction rollback, cross-revision remapping and
+    validation, immutable saved snapshots, session independence and browser reuse.
+    The Counter squadron suite adds four-profile/keyword provenance, mixed fleets,
+    Counter/Swarm response recovery, exact weighted-die outcomes and a browser
+    lost-acknowledgement retry during a Counter reroll.
 8. Captures logs, reports and browser traces, removes its labeled containers/network,
    and verifies removal.
 9. Starts a second disposable environment and intentionally fails an assertion after

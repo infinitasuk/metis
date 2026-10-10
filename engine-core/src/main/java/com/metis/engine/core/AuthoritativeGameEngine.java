@@ -616,37 +616,92 @@ public final class AuthoritativeGameEngine implements GameEngine {
             return rejected("ATTACK_OUT_OF_RANGE", "The target is outside the attacking unit's range");
         }
         if (!validOrderAttackColor(definition, state, attacker, attackPlan)) return rejected("ORDER_DIE_COLOR_INVALID", "The selected bonus color is not present in this attack pool");
-        if (!resumed) {
-            ActionResult window = ResponseWindows.open(definition, state, action);
-            if (window != null) return window;
+        Map<String, Object> previousRoll = ResponseWindows.object(state.values().get("attackRoll"));
+        boolean resumingRoll = resumed && "awaiting_defense".equals(previousRoll.get("status"));
+        if (resumingRoll && (longParameter(previousRoll, "unitId") != attacker.unitId()
+                || longParameter(previousRoll, "targetUnitId") != target.unitId())) {
+            return rejected("ATTACK_ROLL_MISMATCH", "The pending roll belongs to another attack");
         }
         UnitDefinition attackerDefinition = unitDefinition(definition, attacker.unitCode());
         boolean orderedAttack = new OrderEngine(definition).activation(state, attacker);
         int bonus = orderedAttack ? OrderEngine.modifier(state, attacker.unitId(), "attackDice") : 0;
         int rerolls = orderedAttack ? OrderEngine.modifier(state, attacker.unitId(), "rerolls") : 0;
-        int attackDice = attackPlan.dice().stream().mapToInt(AttackDie::count).sum() + bonus;
-        Map<String, Integer> diceByColor = new HashMap<>();
-        attackPlan.dice().forEach(die -> diceByColor.merge(die.color(), die.count(), Integer::sum));
-        String bonusColor = String.valueOf(OrderEngine.modifiers(state, attacker.unitId()).getOrDefault("color", "auto"));
-        if (bonusColor.equals("auto")) bonusColor = attackPlan.dice().getFirst().color();
-        if (bonus > 0) diceByColor.merge(bonusColor, bonus, Integer::sum);
-        var outcomes = new ArrayList<Boolean>();
-        for (int die = 0; die < attackDice; die++) outcomes.add(random.nextInt(6) >= 3);
-        int rerolled = 0;
-        for (int die = 0; die < outcomes.size() && rerolled < rerolls; die++) {
-            if (!outcomes.get(die)) { outcomes.set(die, random.nextInt(6) >= 3); rerolled++; }
+        boolean responseConfigured = !resumed && hasResponseRule(definition, action.type());
+        Map<String, Object> roll;
+        if (resumingRoll) {
+            roll = new HashMap<>(previousRoll);
+        } else {
+            int attackDice = attackPlan.dice().stream().mapToInt(AttackDie::count).sum() + bonus;
+            Map<String, Integer> diceByColor = new HashMap<>();
+            List<String> dieColors = new ArrayList<>();
+            attackPlan.dice().forEach(die -> {
+                diceByColor.merge(die.color(), die.count(), Integer::sum);
+                for (int index = 0; index < die.count(); index++) dieColors.add(die.color());
+            });
+            String bonusColor = String.valueOf(OrderEngine.modifiers(state, attacker.unitId()).getOrDefault("color", "auto"));
+            if (bonusColor.equals("auto")) bonusColor = attackPlan.dice().getFirst().color();
+            if (bonus > 0) {
+                diceByColor.merge(bonusColor, bonus, Integer::sum);
+                for (int index = 0; index < bonus; index++) dieColors.add(bonusColor);
+            }
+            var dice = new ArrayList<Map<String, Object>>();
+            for (int index = 0; index < dieColors.size(); index++) {
+                int face = random.nextInt(6) + 1;
+                dice.add(die(face, index, dieColors.get(index), false));
+            }
+            int rerolled = 0;
+            for (int index = 0; index < dice.size() && rerolled < rerolls; index++) {
+                if (!Boolean.TRUE.equals(dice.get(index).get("hit"))) {
+                    int face = random.nextInt(6) + 1;
+                    var rerolledDie = new HashMap<>(dice.get(index));
+                    rerolledDie.put("initialFace", rerolledDie.get("face"));
+                    rerolledDie.put("face", face);
+                    rerolledDie.put("hit", face >= 4);
+                    rerolledDie.put("rerolled", true);
+                    dice.set(index, rerolledDie);
+                    rerolled++;
+                }
+            }
+            int rawHits = (int) dice.stream().filter(item -> Boolean.TRUE.equals(item.get("hit"))).count();
+            int noDamageAttacks = numericOption(state.values(), "noDamageAttacks", 0);
+            boolean stabilizedRoll = rawHits == 0 && ++noDamageAttacks >= 3;
+            int hits = stabilizedRoll ? 1 : rawHits;
+            if (stabilizedRoll || hits > 0) noDamageAttacks = 0;
+            Map<String, Object> values = new HashMap<>(state.values());
+            values.put("noDamageAttacks", noDamageAttacks);
+            roll = new HashMap<>();
+            roll.put("rollId", state.sessionId() + ":" + (state.stateVersion() + 1L));
+            roll.put("status", responseConfigured ? "awaiting_defense" : "resolved");
+            roll.put("unitId", attacker.unitId());
+            roll.put("targetUnitId", target.unitId());
+            roll.put("arc", attackPlan.arc());
+            roll.put("rangeBand", attackPlan.rangeBand());
+            roll.put("attackDice", attackDice);
+            roll.put("diceByColor", diceByColor);
+            roll.put("dice", dice);
+            roll.put("rawHits", rawHits);
+            roll.put("hits", hits);
+            roll.put("orderBonusDice", bonus);
+            roll.put("orderRerolls", rerolled);
+            roll.put("stabilizedRoll", stabilizedRoll);
+            values.put("attackRoll", roll);
+            GameState rolled = new GameState(state.sessionId(), state.definitionVersionId(), state.status(), state.round(),
+                    state.phaseCode(), state.activePlayerId(), state.stateVersion(), state.players(), state.units(),
+                    state.board(), state.events(), values);
+            if (responseConfigured) {
+                ActionResult window = ResponseWindows.open(definition, rolled, action, Map.of("roll", roll));
+                if (window != null) return window;
+            }
+            state = rolled;
         }
-        int hits = (int) outcomes.stream().filter(Boolean::booleanValue).count();
         Map<String, Object> values = new HashMap<>(state.values());
-        int noDamageAttacks = numericOption(state.values(), "noDamageAttacks", 0);
-        boolean stabilizedRoll = hits == 0 && ++noDamageAttacks >= 3;
-        if (stabilizedRoll) {
-            hits = 1;
-            noDamageAttacks = 0;
-        } else if (hits > 0) {
-            noDamageAttacks = 0;
-        }
-        values.put("noDamageAttacks", noDamageAttacks);
+        List<Map<String, Object>> dice = mapList(roll.get("dice"));
+        Map<String, Integer> diceByColor = integerMap(roll.get("diceByColor"));
+        int attackDice = number(roll, "attackDice");
+        int rawHits = number(roll, "rawHits");
+        int hits = number(roll, "hits");
+        int rerolled = number(roll, "orderRerolls");
+        boolean stabilizedRoll = Boolean.TRUE.equals(roll.get("stabilizedRoll"));
         int rolledDamage = hits * (attackPlan.generic() && attackerDefinition != null
                 ? attackerDefinition.attackDamage() : 1);
         String defenseTokenType = hits > 0 && !Boolean.TRUE.equals(action.parameters().get("declineDefense")) ? selectedDefenseToken(action, target) : null;
@@ -685,6 +740,17 @@ public final class AuthoritativeGameEngine implements GameEngine {
         List<UnitState> units = new ArrayList<>(state.units());
         units.set(units.indexOf(attacker), activated);
         units.set(units.indexOf(target), damaged);
+        Map<String, Object> finalRoll = new HashMap<>(roll);
+        finalRoll.put("status", "resolved");
+        finalRoll.put("rawHits", rawHits);
+        finalRoll.put("hits", hits);
+        finalRoll.put("damage", hullDamage);
+        finalRoll.put("shieldDamage", shieldDamage);
+        finalRoll.put("defenseTokenSpent", defenseTokenSpent);
+        if (defenseTokenType != null) finalRoll.put("defenseTokenType", defenseTokenType);
+        finalRoll.put("remainingHullPoints", remainingHull);
+        finalRoll.put("remainingShieldPoints", remainingShields);
+        values.put("attackRoll", finalRoll);
         Set<Long> survivingPlayers = units.stream()
                 .filter(unit -> unit.hullPoints() > 0)
                 .map(UnitState::playerId)
@@ -709,6 +775,9 @@ public final class AuthoritativeGameEngine implements GameEngine {
         eventPayload.put("diceByColor", diceByColor);
         eventPayload.put("orderBonusDice", bonus);
         eventPayload.put("orderRerolls", rerolled);
+        eventPayload.put("rawHits", rawHits);
+        eventPayload.put("dice", dice);
+        eventPayload.put("roll", finalRoll);
         String nextStatus = state.status();
         String nextPhase = state.phaseCode();
         Long nextActivePlayerId = state.activePlayerId();
@@ -727,6 +796,33 @@ public final class AuthoritativeGameEngine implements GameEngine {
         return accepted(new GameState(state.sessionId(), state.definitionVersionId(), nextStatus, state.round(),
                 nextPhase, nextActivePlayerId, state.stateVersion() + 1, state.players(), units, state.board(),
                 append(state.events(), event), values), event);
+    }
+
+    private static boolean hasResponseRule(GameDefinition definition, String actionType) {
+        return definition != null && definition.turnStructure() != null
+                && definition.turnStructure().responses().stream().anyMatch(rule -> rule.action().equals(actionType));
+    }
+
+    private static Map<String, Object> die(int face, int index, String color, boolean rerolled) {
+        return new HashMap<>(Map.of("index", index, "color", color, "face", face,
+                "hit", face >= 4, "rerolled", rerolled));
+    }
+
+    private static int number(Map<String, Object> values, String key) {
+        Object value = values.get(key);
+        return value instanceof Number number ? number.intValue() : 0;
+    }
+
+    private static List<Map<String, Object>> mapList(Object value) {
+        if (!(value instanceof List<?> list)) return List.of();
+        return list.stream().filter(Map.class::isInstance).map(ResponseWindows::object).toList();
+    }
+
+    private static Map<String, Integer> integerMap(Object value) {
+        if (!(value instanceof Map<?, ?> map)) return Map.of();
+        Map<String, Integer> result = new HashMap<>();
+        map.forEach((key, item) -> { if (item instanceof Number number) result.put(String.valueOf(key), number.intValue()); });
+        return result;
     }
 
     private static boolean visibleTarget(GameDefinition definition, long actor, UnitState target) {

@@ -1,0 +1,30 @@
+{
+ "pack":"armada-squadron-points-v1","game":"Star Wars: Armada","definition":"armada-squadron-points-v1","title":"Squadron training with sourced points","classification":"Squadron",
+ "template":"armada-squadron-training-m8","pointsSource":"bsdata-armada-47bfca1",
+ "units":["TIE Fighter Squadron","X-Wing Squadron"],
+ "scope":{"supported":["Source-backed TIE Fighter 8 and X-Wing 13 point costs","One fixed squadron per seat with a 13-point training allowance","Shared count, faction, points and unique-key validation","Owner-specific deployment and alternating squadron activations"],"inapplicable":["Swarm has no second friendly squadron","Escort has no alternative friendly target","Bomber has no ship target"],"unsupported":["Standard fleet legality, ships, upgrades and squadron-percentage caps","Multi-squadron keyword interactions","Official ruler calibration"],"geometry":"Development-unit geometry: catalogue speed times 100, edge range 100"},
+ "overrides":[
+  {"op":"add","path":"/state/pointSources","value":{"type":{"list":"string"},"initial":["",""],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/uniqueKeys","value":{"type":{"list":"string"},"initial":["",""],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/rosterPolicies","value":{"type":{"list":"string"},"initial":["imperial","rebel"],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/entities/squadron/attributes/uniqueKey","value":{"type":"string","initial":"","visibility":"PUBLIC"}},
+  {"op":"replace","path":"/actions/deploy/choices/zone","value":{"map":{"source":{"filter":{"source":{"list":{"elementType":"integer","items":[0,1]}},"as":"seat","where":{"op":"eq","args":[{"op":"at","args":[{"var":"players"},{"var":"seat"}]},{"var":"actor"}]}}},"as":"seat","value":{"op":"at","args":[{"state":"deploymentZones"},{"var":"seat"}]}}}},
+  {"op":"replace","path":"/actions/deploy/choices/x","value":{"map":{"source":{"filter":{"source":{"list":{"elementType":"integer","items":[0,1]}},"as":"seat","where":{"op":"eq","args":[{"op":"at","args":[{"var":"players"},{"var":"seat"}]},{"var":"actor"}]}}},"as":"seat","value":{"op":"at","args":[{"state":"startX"},{"var":"seat"}]}}}},
+  {"op":"replace","path":"/scenario/rosters","value":{
+   "imperial":{"entityType":"squadron","points":"points","budget":13,"minimum":1,"maximum":1,"unique":"uniqueKey","faction":"faction","factions":["Galactic Empire"]},
+   "rebel":{"entityType":"squadron","points":"points","budget":13,"minimum":1,"maximum":1,"unique":"uniqueKey","faction":"faction","factions":["Rebel Alliance"]}
+  }},
+  {"op":"replace","path":"/procedures/prepare","value":{"parameters":{},"steps":[
+   {"op":"scenario.require","args":{"condition":{"op":"eq","args":[{"op":"count","args":[{"var":"players"}]},2]},"code":"TWO_PLAYERS"}},
+   {"op":"core.forEach","source":{"list":{"elementType":"integer","items":[0,1]}},"as":"seat","maxItems":2,"steps":[
+    {"op":"core.let","name":"p","value":{"op":"at","args":[{"var":"players"},{"var":"seat"}]}},
+    {"op":"core.createEntity","type":"squadron","id":{"op":"id","args":[{"var":"p"}]},"owner":{"var":"p"},"attributes":{"catalogueId":{"op":"at","args":[{"state":"catalogueIds"},{"var":"seat"}]},"name":{"op":"at","args":[{"state":"names"},{"var":"seat"}]},"faction":{"op":"at","args":[{"state":"factions"},{"var":"seat"}]},"points":{"op":"at","args":[{"state":"points"},{"var":"seat"}]},"uniqueKey":{"op":"at","args":[{"state":"uniqueKeys"},{"var":"seat"}]},"speed":{"op":"at","args":[{"state":"speeds"},{"var":"seat"}]},"pool":{"op":"at","args":[{"state":"pools"},{"var":"seat"}]}},"resources":{"health":{"op":"at","args":[{"state":"hulls"},{"var":"seat"}]}},"as":"unit"},
+    {"op":"scenario.roster","args":{"owner":{"var":"p"},"entities":{"list":{"elementType":"entity:squadron","items":[{"var":"unit"}]}},"policy":{"op":"at","args":[{"state":"rosterPolicies"},{"var":"seat"}]}}}
+   ]}
+  ]}}
+ ],
+ "modes":[
+  {"code":"close-engagement","name":"Close engagement","overrides":[{"op":"replace","path":"/state/startX/initial","value":[300,700]}]},
+  {"code":"short-battle","name":"Short battle","overrides":[{"op":"replace","path":"/state/roundLimit/initial","value":3}]}
+ ]
+}

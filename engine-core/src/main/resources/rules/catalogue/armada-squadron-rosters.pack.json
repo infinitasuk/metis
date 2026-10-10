@@ -1,0 +1,62 @@
+{
+ "pack":"armada-squadron-rosters-v1","game":"Star Wars: Armada","definition":"armada-squadron-rosters-v1","title":"Player-selected squadron training","classification":"Squadron",
+ "template":"armada-squadron-training-m8","pointsSource":"bsdata-armada-47bfca1",
+ "units":["TIE Fighter Squadron","X-Wing Squadron"],
+ "scope":{"supported":["Player-selected faction and one to three generic squadrons per seat","26-point training allowance using sourced 8/13-point costs","Immutable roster selections and source profiles","Separate deployment slots and elimination of the entire opposing roster","Optional Swarm reroll with another friendly squadron engaging the defender"],"inapplicable":["Every Rebel squadron has Escort, so there is no unprotected friendly alternative","Bomber has no ship target"],"unsupported":["Standard fleet legality, ships, aces, upgrades and squadron-percentage caps","Official ruler calibration"],"geometry":"Development-unit geometry: catalogue speed times 100, edge range 100"},
+ "overrides":[
+  {"op":"add","path":"/state/pointSources","value":{"type":{"list":"string"},"initial":["",""],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/uniqueKeys","value":{"type":{"list":"string"},"initial":["",""],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/rosterPolicies","value":{"type":{"list":"string"},"initial":["imperial","rebel"],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/rosterPolicyChoices","value":{"type":{"list":{"list":"string"}},"initial":[["imperial","rebel"],["imperial","rebel"]],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/selectedPolicies","value":{"type":{"list":"string"},"initial":["imperial","rebel"],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/selectedRosters","value":{"type":{"list":{"list":"integer"}},"initial":[[0],[1]],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/rosterSlots","value":{"type":{"list":"integer"},"initial":[0,1,2],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/rosterEntityIds","value":{"type":{"list":{"list":"string"}},"initial":[["seat0-unit0","seat0-unit1","seat0-unit2"],["seat1-unit0","seat1-unit1","seat1-unit2"]],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/swarmProfiles","value":{"type":{"list":"boolean"},"initial":[true,false],"visibility":"PUBLIC"}},
+  {"op":"replace","path":"/state/deploymentY/initial","value":[100,300,500]},
+  {"op":"replace","path":"/dice/blue/maxRerolls","value":1},
+  {"op":"add","path":"/entities/squadron/attributes/uniqueKey","value":{"type":"string","initial":"","visibility":"PUBLIC"}},
+  {"op":"add","path":"/entities/squadron/attributes/swarm","value":{"type":"boolean","initial":false,"visibility":"PUBLIC"}},
+  {"op":"add","path":"/entities/squadron/attributes/deployX","value":{"type":"decimal","initial":0,"visibility":"PUBLIC"}},
+  {"op":"add","path":"/entities/squadron/attributes/deployY","value":{"type":"decimal","initial":0,"visibility":"PUBLIC"}},
+  {"op":"replace","path":"/actions/deploy/choices/zone","value":{"map":{"source":{"filter":{"source":{"list":{"elementType":"integer","items":[0,1]}},"as":"seat","where":{"op":"eq","args":[{"op":"at","args":[{"var":"players"},{"var":"seat"}]},{"var":"actor"}]}}},"as":"seat","value":{"op":"at","args":[{"state":"deploymentZones"},{"var":"seat"}]}}}},
+  {"op":"replace","path":"/actions/deploy/choices/x","value":{"list":{"elementType":"decimal","items":[{"get":{"entity":{"var":"entity"},"field":"deployX"}}]}}},
+  {"op":"replace","path":"/actions/deploy/choices/y","value":{"list":{"elementType":"decimal","items":[{"get":{"entity":{"var":"entity"},"field":"deployY"}}]}}},
+  {"op":"replace","path":"/scenario/rosters","value":{
+   "imperial":{"entityType":"squadron","points":"points","budget":26,"minimum":1,"maximum":3,"unique":"uniqueKey","faction":"faction","factions":["Galactic Empire"]},
+   "rebel":{"entityType":"squadron","points":"points","budget":26,"minimum":1,"maximum":3,"unique":"uniqueKey","faction":"faction","factions":["Rebel Alliance"]}
+  }},
+  {"op":"replace","path":"/procedures/prepare","value":{"parameters":{},"steps":[
+   {"op":"scenario.require","args":{"condition":{"op":"eq","args":[{"op":"count","args":[{"var":"players"}]},2]},"code":"TWO_PLAYERS"}},
+   {"op":"scenario.require","args":{"condition":{"op":"and","args":[{"op":"eq","args":[{"op":"count","args":[{"state":"selectedRosters"}]},2]},{"op":"eq","args":[{"op":"count","args":[{"state":"selectedPolicies"}]},2]}]},"code":"ROSTER_SEAT_COUNT"}},
+   {"op":"core.forEach","source":{"list":{"elementType":"integer","items":[0,1]}},"as":"seat","maxItems":2,"steps":[
+    {"op":"core.let","name":"p","value":{"op":"at","args":[{"var":"players"},{"var":"seat"}]}},
+    {"op":"core.let","name":"roster","value":{"op":"at","args":[{"state":"selectedRosters"},{"var":"seat"}]}},
+    {"op":"core.let","name":"policy","value":{"op":"at","args":[{"state":"selectedPolicies"},{"var":"seat"}]}},
+    {"op":"scenario.require","args":{"condition":{"op":"contains","args":[{"op":"at","args":[{"state":"rosterPolicyChoices"},{"var":"seat"}]},{"var":"policy"}]},"code":"ROSTER_POLICY"}},
+    {"op":"scenario.require","args":{"condition":{"op":"lte","args":[{"op":"count","args":[{"var":"roster"}]},{"op":"count","args":[{"state":"rosterSlots"}]}]},"code":"ROSTER_COUNT"}},
+    {"op":"core.forEach","source":{"filter":{"source":{"state":"rosterSlots"},"as":"slot","where":{"op":"lt","args":[{"var":"slot"},{"op":"count","args":[{"var":"roster"}]}]}}},"as":"slot","maxItems":3,"steps":[
+     {"op":"core.let","name":"profile","value":{"op":"at","args":[{"var":"roster"},{"var":"slot"}]}},
+     {"op":"core.createEntity","type":"squadron","id":{"op":"at","args":[{"op":"at","args":[{"state":"rosterEntityIds"},{"var":"seat"}]},{"var":"slot"}]},"owner":{"var":"p"},"attributes":{"catalogueId":{"op":"at","args":[{"state":"catalogueIds"},{"var":"profile"}]},"name":{"op":"at","args":[{"state":"names"},{"var":"profile"}]},"faction":{"op":"at","args":[{"state":"factions"},{"var":"profile"}]},"points":{"op":"at","args":[{"state":"points"},{"var":"profile"}]},"uniqueKey":{"op":"at","args":[{"state":"uniqueKeys"},{"var":"profile"}]},"speed":{"op":"at","args":[{"state":"speeds"},{"var":"profile"}]},"pool":{"op":"at","args":[{"state":"pools"},{"var":"profile"}]},"swarm":{"op":"at","args":[{"state":"swarmProfiles"},{"var":"profile"}]},"deployX":{"op":"at","args":[{"state":"startX"},{"var":"seat"}]},"deployY":{"op":"at","args":[{"state":"deploymentY"},{"var":"slot"}]}},"resources":{"health":{"op":"at","args":[{"state":"hulls"},{"var":"profile"}]}},"as":"unit"}
+    ]},
+    {"op":"scenario.roster","args":{"owner":{"var":"p"},"entities":{"filter":{"source":{"entities":"squadron"},"as":"unit","where":{"op":"eq","args":[{"owner":{"var":"unit"}},{"var":"p"}]}}},"policy":{"var":"policy"}}}
+   ]}
+  ]}},
+  {"op":"replace","path":"/procedures/attack","value":{"parameters":{"actor":"player","entity":"entity:squadron","target":"entity:squadron"},"steps":[
+   {"op":"dice.roll","args":{"owner":{"var":"actor"},"visibility":"PUBLIC","dice":{"get":{"entity":{"var":"entity"},"field":"pool"}}},"as":"roll"},
+   {"op":"core.if","condition":{"op":"and","args":[{"get":{"entity":{"var":"entity"},"field":"swarm"}},{"op":"gt","args":[{"op":"count","args":[{"filter":{"source":{"entities":"squadron"},"as":"ally","where":{"op":"and","args":[{"op":"eq","args":[{"owner":{"var":"ally"}},{"var":"actor"}]},{"op":"ne","args":[{"var":"ally"},{"var":"entity"}]},{"get":{"entity":{"var":"ally"},"field":"alive"}},{"op":"lte","args":[{"query":{"op":"space.distance","args":{"from":{"var":"ally"},"to":{"var":"target"},"mode":"EDGES"}}},100]}]}}}]},0]}]},"then":[{"op":"core.window","window":"swarm","args":{"actor":{"var":"actor"},"roll":{"var":"roll"}}}],"else":[]},
+   {"op":"scenario.damage","args":{"target":{"var":"target"},"policy":"wounds","amount":{"query":{"op":"dice.resolve","args":{"roll":{"var":"roll"},"table":"squadron"}}}},"as":"damage"},
+   {"op":"dice.close","args":{"roll":{"var":"roll"}}},{"op":"dice.clear","args":{"roll":{"var":"roll"}}},
+   {"op":"core.if","condition":{"op":"eq","args":[{"op":"count","args":[{"filter":{"source":{"entities":"squadron"},"as":"enemy","where":{"op":"and","args":[{"op":"ne","args":[{"owner":{"var":"enemy"}},{"var":"actor"}]},{"get":{"entity":{"var":"enemy"},"field":"alive"}}]}}}]},0]},"then":[{"op":"core.endGame","outcome":"elimination","winners":{"list":{"elementType":"player","items":[{"var":"actor"}]}}}],"else":[]}
+  ]}},
+  {"op":"add","path":"/procedures/swarmReroll","value":{"parameters":{"actor":"player","roll":"string"},"steps":[
+   {"op":"core.choose","player":{"var":"actor"},"options":{"query":{"op":"dice.indices","args":{"roll":{"var":"roll"}}}},"as":"index","visibility":"PUBLIC"},
+   {"op":"dice.reroll","args":{"roll":{"var":"roll"},"indices":{"list":{"elementType":"integer","items":[{"var":"index"}]}},"allowed":{"query":{"op":"dice.indices","args":{"roll":{"var":"roll"}}}},"maximum":1}}
+  ]}},
+  {"op":"add","path":"/windows","value":{"swarm":{"parameters":{"actor":"player","roll":"string"},"responders":{"list":{"elementType":"player","items":[{"var":"actor"}]}},"maxResponders":1,"allowPass":true,"visibility":"PUBLIC","choices":[{"id":"reroll","when":true,"procedure":"swarmReroll","args":{"actor":{"var":"actor"},"roll":{"var":"roll"}}}]}}}
+ ],
+ "modes":[
+  {"code":"close-engagement","name":"Close engagement","overrides":[{"op":"replace","path":"/state/startX/initial","value":[300,700]}]},
+  {"code":"short-battle","name":"Short battle","overrides":[{"op":"replace","path":"/state/roundLimit/initial","value":3}]}
+ ]
+}

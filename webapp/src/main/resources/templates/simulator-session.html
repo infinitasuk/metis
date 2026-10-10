@@ -241,7 +241,8 @@
           let phaseCode = 'setup';
            let activePlayerId = null;
            let activation = {};
-            let responseWindow = null;
+             let responseWindow = null;
+             let attackRoll = null;
             let orderState = {}, orderActivations = {}, orderQueues = {};
           const initialUnit = (base, payload, playerId) => {
               const profile = unitProfile(base);
@@ -265,7 +266,10 @@
                 if (type === 'unit_activated' && orderQueues[payload.unitId] && orderState[payload.unitId]) {
                     orderQueues[payload.unitId] = { entries: orderQueues[payload.unitId].entries.slice(1) };
                 }
-               responseWindow = type === 'response_opened' ? payload.responseWindow : null;
+                responseWindow = type === 'response_opened' ? payload.responseWindow
+                    : ['unit_attacked', 'game_won'].includes(type) ? null : responseWindow;
+                if (type === 'attack_roll' || type === 'response_opened' && payload.roll) attackRoll = payload.roll || payload;
+                if (type === 'unit_attacked' || type === 'game_won') attackRoll = payload.roll || attackRoll;
               if (type === 'game_started') {
                   status = 'running';
                   phaseCode = payload.phase || 'deployment';
@@ -353,8 +357,8 @@
                    for (const changed of payload.unitChanges || []) units.set(Number(changed.unitId), { ...changed });
                }
            });
-           return { ...source, status, round, phaseCode, activePlayerId,
-                stateVersion: eventCount, units: [...units.values()], events, values: { ...source.values, activation, responseWindow, orderState, orderActivations, orderQueues } };
+            return { ...source, status, round, phaseCode, activePlayerId,
+                 stateVersion: eventCount, units: [...units.values()], events, values: { ...source.values, activation, responseWindow, attackRoll, orderState, orderActivations, orderQueues } };
       };
       const replayDescription = state => {
           if (!state) return 'No recorded events';
@@ -590,10 +594,14 @@
          const actor = state.players.find(item => item.playerId === event.actorPlayerId);
          const actorName = actor?.factionCode || 'COMMAND';
            if (event.type === 'unit_moved') return `${actorName} moved ${unit ? unitLabel(unit) : 'unit'} at speed ${payload.speed || unit?.currentSpeed || 0} to ${Math.round(payload.positionX)}, ${Math.round(payload.positionY)}`;
-           if (event.type === 'unit_movement_reset') return `${actorName} reset movement for ${unit ? unitLabel(unit) : 'unit'} // ready to move again`;
-           if (event.type === 'unit_activated') return `${actorName} activated ${unit ? unitLabel(unit) : 'unit'}`;
-           if (event.type === 'activation_completed') return `${actorName} completed ${unit ? unitLabel(unit) : 'unit'} // ${phaseLabel(payload.phase)}`;
-         if (event.type === 'unit_attacked') return `${actorName} fired ${unit ? unitLabel(unit) : 'unit'} at ${target ? unitLabel(target) : 'target'} // ${payload.arc || 'front'} arc / ${payload.rangeBand || 'short'} range / ${payload.hits || 0} hits / ${payload.damage || 0} hull damage`;
+          if (event.type === 'unit_movement_reset') return `${actorName} reset movement for ${unit ? unitLabel(unit) : 'unit'} // ready to move again`;
+          if (event.type === 'unit_activated') return `${actorName} activated ${unit ? unitLabel(unit) : 'unit'}`;
+          if (event.type === 'activation_completed') return `${actorName} completed ${unit ? unitLabel(unit) : 'unit'} // ${phaseLabel(payload.phase)}`;
+          if (event.type === 'attack_roll') {
+              const roll = payload.roll || payload;
+              return `${actorName} rolled ${roll.attackDice || roll.dice?.length || 0} dice // ${roll.rawHits ?? roll.hits ?? 0} raw hits`;
+          }
+          if (event.type === 'unit_attacked') return `${actorName} fired ${unit ? unitLabel(unit) : 'unit'} at ${target ? unitLabel(target) : 'target'} // ${payload.arc || 'front'} arc / ${payload.rangeBand || 'short'} range / ${payload.hits || 0} hits / ${payload.damage || 0} hull damage`;
          if (event.type === 'game_won') return `${actorName} destroyed ${target ? unitLabel(target) : 'the final target'} // VICTORY`;
          if (event.type === 'turn_started') {
              const next = state.players.find(item => item.playerId === Number(payload.activePlayerId));
@@ -806,14 +814,23 @@
       nextActivationStep.addEventListener('click', () => {
           if (!nextActivationStep.disabled) submitAction(liveBoard, 'advance_step', { actorPlayerId: currentState.activePlayerId });
       });
-      const activationSummary = document.createElement('p');
-      activationSummary.className = 'activation-summary';
-      activationSummary.setAttribute('aria-live', 'polite');
-      document.querySelector('.board-status')?.after(activationSummary);
-      const decisionPanel = document.createElement('section');
-      decisionPanel.className = 'tactical-decision-panel';
-      decisionPanel.hidden = true;
-      activationSummary.after(decisionPanel);
+       const activationSummary = document.createElement('p');
+       activationSummary.className = 'activation-summary';
+       activationSummary.setAttribute('aria-live', 'polite');
+       document.querySelector('.board-status')?.after(activationSummary);
+       const attackRollPanel = document.createElement('section');
+       attackRollPanel.className = 'tactical-roll-panel';
+       attackRollPanel.setAttribute('aria-live', 'polite');
+       attackRollPanel.hidden = true;
+       activationSummary.after(attackRollPanel);
+       let animatedRollId = null;
+       let revealedRollDice = 0;
+       let rollAnimationComplete = true;
+       let rollAnimationTimer = null;
+       const decisionPanel = document.createElement('section');
+       decisionPanel.className = 'tactical-decision-panel';
+       decisionPanel.hidden = true;
+       attackRollPanel.after(decisionPanel);
       const privateChoiceDrafts = new Map();
       const orderPanel = document.createElement('section');
       orderPanel.className = 'tactical-decision-panel order-panel';
@@ -938,24 +955,94 @@
               });
               orderPanel.append(row);
           }
-      };
-      const renderDecisions = () => {
+       };
+       const renderAttackRoll = () => {
+           const roll = currentState?.values?.attackRoll;
+           const dice = Array.isArray(roll?.dice) ? roll.dice : [];
+           if (!roll || !dice.length) {
+               attackRollPanel.hidden = true;
+               if (rollAnimationTimer) { window.clearTimeout(rollAnimationTimer); rollAnimationTimer = null; }
+               animatedRollId = null;
+               revealedRollDice = 0;
+               rollAnimationComplete = true;
+               return;
+           }
+           const rollId = String(roll.rollId || `${currentState.stateVersion}:${roll.unitId}:${roll.targetUnitId}`);
+           if (animatedRollId !== rollId) {
+               if (rollAnimationTimer) window.clearTimeout(rollAnimationTimer);
+               rollAnimationTimer = null;
+               animatedRollId = rollId;
+               revealedRollDice = replayActive ? dice.length : 0;
+               rollAnimationComplete = replayActive;
+           }
+           attackRollPanel.hidden = false;
+           attackRollPanel.replaceChildren();
+           const heading = document.createElement('div');
+           heading.className = 'tactical-roll-heading';
+           const title = document.createElement('strong');
+           title.textContent = 'ATTACK ROLL';
+           const attacker = currentState.units.find(unit => unit.unitId === Number(roll.unitId));
+           const target = currentState.units.find(unit => unit.unitId === Number(roll.targetUnitId));
+           const context = document.createElement('span');
+           context.textContent = `${attacker ? unitLabel(attacker) : 'Attacker'} -> ${target ? unitLabel(target) : 'Target'} / ${roll.arc || 'front'} arc / ${roll.rangeBand || 'short'} range`;
+           heading.append(title, context);
+           attackRollPanel.append(heading);
+           const diceGrid = document.createElement('div');
+           diceGrid.className = 'attack-dice-grid';
+           dice.forEach((die, index) => {
+               const card = document.createElement('div');
+               const color = String(die.color || 'generic').toLowerCase();
+               const revealed = index < revealedRollDice;
+               card.className = `attack-die attack-die-${color} ${revealed ? 'revealed' : 'rolling'}${revealed && die.hit ? ' hit' : ''}`;
+               const dieLabel = document.createElement('small');
+               dieLabel.textContent = `${String(die.color || 'die').toUpperCase()} ${index + 1}`;
+               const face = document.createElement('strong');
+               face.textContent = revealed ? String(die.face) : '?';
+               const result = document.createElement('span');
+               result.textContent = revealed ? (die.hit ? 'HIT' : 'MISS') : 'ROLLING';
+               card.append(dieLabel, face, result);
+               if (revealed && die.rerolled) {
+                   const reroll = document.createElement('i');
+                   reroll.textContent = `rerolled from ${die.initialFace}`;
+                   card.append(reroll);
+               }
+               diceGrid.append(card);
+           });
+           attackRollPanel.append(diceGrid);
+           const summary = document.createElement('p');
+           summary.className = 'attack-roll-summary';
+           if (!rollAnimationComplete) summary.textContent = 'Rolling...';
+           else if (roll.status === 'awaiting_defense') summary.textContent = `${roll.hits || 0} hit${Number(roll.hits) === 1 ? '' : 's'} / awaiting defender response`;
+           else summary.textContent = `${roll.hits || 0} hit${Number(roll.hits) === 1 ? '' : 's'} / ${roll.damage || 0} hull damage / ${roll.shieldDamage || 0} shield damage`;
+           attackRollPanel.append(summary);
+           if (!rollAnimationComplete && revealedRollDice < dice.length && !rollAnimationTimer) {
+               rollAnimationTimer = window.setTimeout(() => {
+                   rollAnimationTimer = null;
+                   revealedRollDice += 1;
+                   if (revealedRollDice >= dice.length) rollAnimationComplete = true;
+                   renderAttackRoll();
+                   renderDecisions();
+               }, 360);
+           }
+       };
+       const renderDecisions = () => {
           decisionPanel.replaceChildren();
-          const response = currentState?.values?.responseWindow;
-          const decisions = replayActive ? [] : currentLegalActions.filter(action => ['respond', 'submit_private_choice'].includes(action.type));
-          decisionPanel.hidden = !response && !decisions.length;
-          if (response) {
-              const heading = document.createElement('p');
-              const subject = currentState.units.find(unit => unit.unitId === Number(response.subject?.unitId));
-               heading.textContent = currentState.status === 'paused' ? 'Pending response retained while the battle is paused.' : controlledPlayerIds.has(Number(response.responderPlayerId))
-                  ? `${response.label}${subject ? ' / ' + unitLabel(subject) : ''}` : 'Waiting for the designated player to respond.';
-              decisionPanel.append(heading);
-          }
+           const response = currentState?.values?.responseWindow;
+           const decisions = replayActive ? [] : currentLegalActions.filter(action => ['respond', 'submit_private_choice'].includes(action.type));
+           decisionPanel.hidden = !response && !decisions.length;
+           if (response) {
+               const heading = document.createElement('p');
+               const subject = currentState.units.find(unit => unit.unitId === Number(response.subject?.unitId));
+                heading.textContent = !rollAnimationComplete ? 'The attack is rolling. Defender choices unlock when all dice are revealed.'
+                   : currentState.status === 'paused' ? 'Pending response retained while the battle is paused.' : controlledPlayerIds.has(Number(response.responderPlayerId))
+                   ? `${response.label}${subject ? ' / ' + unitLabel(subject) : ''}` : 'Waiting for the designated player to respond.';
+               decisionPanel.append(heading);
+           }
           for (const action of decisions) {
               const row = document.createElement('div');
               row.className = 'decision-row';
-              const button = document.createElement('button');
-              button.type = 'button'; button.className = 'tactical-button'; button.disabled = replayActive;
+               const button = document.createElement('button');
+               button.type = 'button'; button.className = 'tactical-button'; button.disabled = replayActive || action.type === 'respond' && !rollAnimationComplete;
               if (action.type === 'respond') {
                   button.textContent = action.description;
                   button.addEventListener('click', async () => {
@@ -1278,10 +1365,11 @@
                  ? `${state.events.length} event${state.events.length === 1 ? '' : 's'} recorded.`
                  : 'No events recorded yet.';
          }
-          renderCpuActivity(state);
-          renderSelectedUnit();
-          syncSelectedActions();
-          renderDecisions();
+           renderCpuActivity(state);
+           renderSelectedUnit();
+           syncSelectedActions();
+           renderAttackRoll();
+           renderDecisions();
     };
     const syncControls = (actions, state) => {
         const permitted = new Set(actions.map(action => action.type));

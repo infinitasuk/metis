@@ -93,6 +93,7 @@
                         <param>com.metis.engine.core.rules.RuleType</param>
                         <param>com.metis.engine.core.rules.CompileScope</param>
                         <param>com.metis.engine.core.rules.RulesResolver</param>
+                        <param>com.metis.engine.core.rules.RosterValidator</param>
                         <param>com.metis.engine.core.rules.Expressions</param>
                         <param>com.metis.engine.core.rules.runtime.RuntimeChecks</param>
                         <param>com.metis.engine.core.rules.runtime.RuntimeMachine</param>

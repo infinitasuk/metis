@@ -72,21 +72,35 @@ class VisibilityAndResponsesTest {
                 VisibilityRules.defaults(),List.of(new TurnStructure.ResponseRule("attack_unit","targetUnitId","Response",Map.of("declineDefense",true),List.of(),"readyDefenseTokens","defenseTokenType"))));
     }
     @Test
-    void responsePausesBeforeRandomnessResumesOriginalActionOnceAndConsumesItsBudget() {
+    void responsePausesAfterRollingBeforeDamageAndResumesOriginalActionOnce() throws Exception {
         var rolls=new AtomicInteger(); var engine=new AuthoritativeGameEngine(bound->{rolls.incrementAndGet();return 5;});
         var def=respondingDefinition(); var s=engine.applyAction(def,state(Map.of()),new Action("start_game",0,Map.of())).resultingState();
         var open=engine.applyAction(def,s,new Action("attack_unit",10,Map.of("unitId",1,"targetUnitId",2,"secret","REQUEST_SECRET")));
-        assertTrue(open.accepted()); assertEquals("RESPONSE_REQUIRED",open.code()); assertEquals(0,rolls.get());
+        assertTrue(open.accepted()); assertEquals("RESPONSE_REQUIRED",open.code()); assertEquals(1,rolls.get());
         s=open.resultingState(); String window=ResponseWindows.pending(s).get("windowId").toString();
+        Map<String,Object> roll=ResponseWindows.object(s.values().get("attackRoll"));
+        assertEquals("awaiting_defense",roll.get("status"));
+        assertEquals(1,((List<?>)roll.get("dice")).size());
+        assertEquals(6,((Map<?,?>)((List<?>)roll.get("dice")).getFirst()).get("face"));
+        assertEquals(s.stateVersion(),s.events().size());
+        var publicState=new StateProjection(VisibilityRules.defaults(),Set.of(10L),s.units()).state(s);
+        assertEquals(roll,publicState.values().get("attackRoll"));
+        assertEquals(roll,publicState.events().getLast().payload().get("roll"));
+        assertEquals(20,s.units().get(1).hullPoints());
         assertTrue(ActivationContext.from(s).uses().isEmpty());
         assertFalse(new StateProjection(VisibilityRules.defaults(),Set.of(10L),s.units()).state(s).toString().contains("REQUEST_SECRET"));
         assertEquals("RESPONSE_PENDING",engine.applyAction(def,s,new Action("end_activation",10,Map.of())).code());
         assertEquals("NOT_RESPONDER",engine.applyAction(def,s,new Action("respond",10,Map.of("windowId",window,"choice","decline"))).code());
         assertEquals("STALE_RESPONSE",engine.applyAction(def,s,new Action("respond",20,Map.of("windowId","old","choice","decline"))).code());
         assertEquals("RESPONSE_INVALID",engine.applyAction(def,s,new Action("respond",20,Map.of("windowId",window,"choice","forged"))).code());
+        var json=new com.fasterxml.jackson.databind.ObjectMapper();
+        s=json.readValue(json.writeValueAsBytes(s),GameState.class);
         var resolved=engine.applyAction(def,s,new Action("respond",20,Map.of("windowId",window,"choice","resource:guard","targetUnitId",1)));
         assertTrue(resolved.accepted()); assertEquals(1,rolls.get());
         s=resolved.resultingState(); assertTrue(ResponseWindows.pending(s).isEmpty());
+        assertEquals(roll.get("rollId"),ResponseWindows.object(s.values().get("attackRoll")).get("rollId"));
+        assertEquals(roll.get("dice"),ResponseWindows.object(s.values().get("attackRoll")).get("dice"));
+        assertEquals(s.stateVersion(),s.events().size());
         assertEquals(10L,s.activePlayerId()); assertEquals(1,ActivationContext.from(s).uses().get("attack"));
         assertEquals(20,s.units().get(1).hullPoints()); assertEquals(1,s.units().get(1).exhaustedDefenseTokens().get("guard"));
         assertEquals("NO_RESPONSE_WINDOW",engine.applyAction(def,s,new Action("respond",20,Map.of("windowId",window,"choice","decline"))).code());

@@ -129,7 +129,9 @@ async function main() {
   const cpuWindow=await action(cpu,1,'attack_unit',cpu.players[0],{unitId:cpu.units[0],targetUnitId:cpu.units[1]});
   assert.equal(cpuWindow.code,'RESPONSE_REQUIRED');
   const afterCpu=await waitFor(cpu,s=>!s.values.responseWindow&&s.values.activation?.uses?.attack===1);
-  assert.equal(afterCpu.activePlayerId,cpu.players[0]);
+   assert.equal(afterCpu.activePlayerId,cpu.players[0]);
+   assert.deepEqual(afterCpu.values.attackRoll.dice,cpuWindow.resultingState.values.attackRoll.dice);
+   assert.equal(afterCpu.values.attackRoll.status,'resolved');
   assert.ok(!JSON.stringify(afterCpu).includes('BOB_NOTE_SENTINEL'));
   console.log('PASS: seat membership, spectator/admin limits, actor spoof rejection, hidden units/values/choices across state/DTOs/events/HTML/logs, safe restart, response pause/decline/resume and stale/duplicate rejection.');
   console.log('PASS: CPU handles its own response window; human cannot operate CPU seat.');

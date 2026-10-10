@@ -30,6 +30,11 @@ Canonical points, squadron caps, upgrades, ships, objectives and official ruler
 calibration remain future slices. They must be imported with source provenance before
 the pack can be described as a standard Armada fleet builder.
 
+The follow-on `armada-squadron-points-v1` slice now captures sourced costs for
+these two units and shares roster validation between preflight and setup. See
+[RULES_SOURCED_POINTS.md](RULES_SOURCED_POINTS.md). The original M8 pack retains
+its zero-cost contract; broader fleet formats remain future work.
+
 ## Acceptance
 
 - Invalid roster faction and count inputs reject atomically.

@@ -1,15 +1,19 @@
 {
   "schemaVersion": 1,
   "javaModules": ["engine-core", "engine-api", "webapp"],
-  "sql": ["profile_mapping.sql", "session_snapshots.sql", "seat_ownership.sql"],
+  "sql": ["profile_mapping.sql", "session_snapshots.sql", "seat_ownership.sql", "sourced_points.sql", "counter_squadrons.sql"],
   "fixtureSql": "multiplayer_fixtures.sql",
   "integrations": [
     {"id":"multiplayer", "script":"webapp/src/test/js/multiplayer-integration.cjs", "requiredOutput":["PASS: seat membership", "PASS: CPU handles its own response"]},
-    {"id":"orders-browser", "script":"webapp/src/test/js/orders-integration.cjs", "requiredOutput":["PASS: F07 queue privacy", "PASS: browser private planning controls"]},
+    {"id":"orders-browser", "script":"webapp/src/test/js/orders-integration.cjs", "requiredOutput":["PASS: F07 queue privacy", "PASS: browser private planning controls", "PASS: authoritative attack roll survives reload and replay"]},
     {"id":"interpreted-api", "script":"webapp/src/test/js/rules-api-integration.cjs", "requiredOutput":["PASS: interpreted publication", "PASS: transactional rollback", "PASS: durable restart"]},
     {"id":"mechanics-recovery", "script":"webapp/src/test/js/mechanics-recovery.cjs", "requiredOutput":["PASS: post-roll privacy", "PASS: random rollback"]},
     {"id":"spatial-conformance", "script":"webapp/src/test/js/spatial-conformance.cjs", "requiredOutput":["PASS: authoritative spatial preview", "PASS: three contrasting games"]},
     {"id":"modes-catalogue", "script":"webapp/src/test/js/modes-catalogue.cjs", "requiredOutput":["PASS: pinned mode resolution", "PASS: catalogue profiles imported"]},
+    {"id":"sourced-rosters", "script":"webapp/src/test/js/sourced-rosters.cjs", "requiredOutput":["PASS: sourced points", "PASS: generic catalogue browser shows source-backed costs"]},
+    {"id":"selected-rosters", "script":"webapp/src/test/js/selected-rosters.cjs", "requiredOutput":["PASS: selected factions and quantities", "PASS: browser roster edits and validation errors"]},
+    {"id":"fleet-presets", "script":"webapp/src/test/js/fleet-presets.cjs", "requiredOutput":["PASS: private fleet presets persist", "PASS: browser saves, reloads, renames and deletes personal fleets"]},
+    {"id":"counter-squadrons", "script":"webapp/src/test/js/counter-squadrons.cjs", "requiredOutput":["PASS: four source-backed squadron profiles", "PASS: Counter authorization", "PASS: generic browser builds mixed fleets"]},
     {"id":"rules-cpu", "script":"webapp/src/test/js/rules-cpu-integration.cjs", "requiredOutput":["PASS: persistent CPU seats", "PASS: an actual process kill during a CPU write"]},
     {"id":"rules-browser", "script":"webapp/src/test/js/rules-browser.cjs", "requiredOutput":["PASS: generic browser authors", "PASS: private drafts", "PASS: all three game styles"]},
     {"id":"simulator-sessions", "script":"webapp/src/test/js/simulator-sessions.cjs", "requiredOutput":["PASS: simulator cards show teams, human/CPU controllers and recorded historical winners."]}

@@ -307,8 +307,15 @@ The first post-M7 slice is additive and intentionally closed in scope:
   ruler behavior.
 
 The conformance fixture is `ArmadaM8ConformanceTest`; the catalogue/API acceptance is
-covered by `modes-catalogue.cjs`. The next rules slice requires a provenance-backed
-points projection before roster legality can expand beyond this training pack.
+covered by `modes-catalogue.cjs`. The follow-on sourced-points slice is implemented:
+see `RULES_SOURCED_POINTS.md` for the immutable two-unit cost projection, shared
+preflight/setup validator, priced training pack and browser/CPU acceptance.
+Player-selected roster capture is now delivered in the bounded 26-point
+squadron-training pack; see `RULES_ROSTER_SELECTION.md`. The next expansion needs
+ship rules and explicit full-format/cap rules. Personal fleet presets with
+revision-aware reuse are delivered in `RULES_FLEET_PRESETS.md`. The first catalogue
+expansion is delivered in `RULES_COUNTER_SQUADRONS.md`: four sourced generic
+squadrons with Counter, Swarm and Escort interactions.
 
 ## Definition of done for this initiative
 

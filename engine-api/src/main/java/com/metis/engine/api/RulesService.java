@@ -41,6 +41,12 @@ public class RulesService {
     private DefinitionView view(RulesRepository.Definition d,boolean source) { return new DefinitionView(d.id(),d.key(),d.revision(),d.version(),d.lifecycle(),d.fingerprint(),d.compiler(),d.runtime(),source?d.source():null); }
     public List<DefinitionView> definitions(MetisUser user,boolean drafts) { if(drafts)admin(user);return repository.definitions().stream().filter(d->drafts||d.lifecycle().equals("published")).map(d->view(d,false)).toList(); }
     public DefinitionView definition(long id,MetisUser user) { admin(user);return view(definition(id,false),true); }
+    private CatalogueRosters publishedRoster(long id) {
+        var source=definition(id,false);check(source.lifecycle().equals("published"),404,"DEFINITION_NOT_FOUND");
+        return new CatalogueRosters(source.executable());
+    }
+    public CatalogueRosters.View definitionRoster(long id) { return publishedRoster(id).view(); }
+    public CatalogueRosters.Validation validateDefinitionRoster(long id,JsonNode request) { return publishedRoster(id).validateRequest(request); }
     public RulesResolver.Result validate(long id,MetisUser user) { admin(user);return resolve(definition(id,false).source()); }
     private RulesResolver.Result resolve(String source) { return new RulesResolver(compiler).resolve(source,ref->repository.published(ref.id(),ref.revision()).map(RulesRepository.Definition::source).orElse(null)); }
     public Map<String,Object> resolved(long id,MetisUser user) {
@@ -86,7 +92,10 @@ public class RulesService {
         return new SessionView(row.id(),row.definitionId(),row.fingerprint(),paused,owned,row.owner()==user.userId(),RulesView.project(runtime.definition(),state,owned),repository.seats(row.id()).stream().map(s->new SeatView(s.playerId(),s.kind())).toList(),new CpuStatus(row.cpuLimit(),steps,paused?(reason==null?row.cpuError():reason):null));
     }
     @Transactional public SessionView createSession(JsonNode request,MetisUser user) {
-        shape(request,request.has("cpuCommandLimit")?Set.of("definitionId","visibility","seats","viewers","cpuCommandLimit"):Set.of("definitionId","visibility","seats","viewers"));long definitionId=integer(request,"definitionId");
+        check(request!=null&&request.isObject(),400,"REQUEST_FIELDS_INVALID");
+        var fields=new HashSet<>(Set.of("definitionId","visibility","seats","viewers"));
+        if(request.has("cpuCommandLimit"))fields.add("cpuCommandLimit");if(request.has("rosters"))fields.add("rosters");
+        shape(request,fields);long definitionId=integer(request,"definitionId");
         long cpuLimit=request.has("cpuCommandLimit")?integer(request,"cpuCommandLimit"):1000;check(cpuLimit>=1&&cpuLimit<=10000,400,"CPU_LIMIT_INVALID");
         String visibility=text(request,"visibility");check(Set.of("public","private").contains(visibility),400,"VISIBILITY_INVALID");
         var definition=definition(definitionId,false);check(definition.lifecycle().equals("published"),409,"DEFINITION_NOT_PUBLISHED");
@@ -103,10 +112,16 @@ public class RulesService {
         check(seats.findValuesAsText("kind").stream().noneMatch("CPU"::equals)||runtime.version().equals(RulesRuntime.VERSION),422,"CPU_REQUIRES_PROJECTED_RUNTIME");
         var viewers=new HashSet<Long>();for(var viewer:request.get("viewers"))check(viewer.isIntegralNumber()&&viewer.canConvertToLong()&&viewers.add(viewer.longValue()),400,"MEMBERSHIP_INVALID");
         UUID id=UUID.randomUUID();var initial=runtime.initial(id.toString(),players);
+        initial=new CatalogueRosters(compiled.definition()).select(initial,request.get("rosters"));
+        runtime.validateCheckpoint(initial);
         repository.createSession(id,definitionId,user.userId(),visibility,RulesStateCodec.encode(initial),seats.toString(),request.get("viewers").toString(),(int)cpuLimit);
         return view(session(id,user,false),runtime,initial,false,user);
     }
     public SessionView state(UUID id,MetisUser user) { var row=session(id,user,false);var runtime=runtime(row);return view(row,runtime,runtime.restore(row.checkpoint()),row.paused(),user); }
+    public CatalogueRosters.Capture roster(UUID id,MetisUser user) {
+        var row=session(id,user,false);var runtime=runtime(row);
+        return new CatalogueRosters(runtime.definition()).captured(runtime.restore(row.initial()));
+    }
     public Map<String,Object> compatibility(UUID id,MetisUser user) {
         var row=session(id,user,false);boolean valid;
         try { var runtime=runtime(row);runtime.restore(row.checkpoint());valid=true; }catch(RuntimeException error){valid=false;}

@@ -27,6 +27,9 @@ public final class ResponseWindows {
         return result;
     }
     public static ActionResult open(GameDefinition definition, GameState state, Action action) {
+        return open(definition, state, action, Map.of());
+    }
+    public static ActionResult open(GameDefinition definition, GameState state, Action action, Map<String,Object> eventData) {
         if (definition == null || definition.turnStructure() == null) return null;
         var rule = definition.turnStructure().responses().stream().filter(item->item.action().equals(action.type())).findFirst().orElse(null);
         if (rule == null || !(action.parameters().get(rule.targetUnitParameter()) instanceof Number targetId)) return null;
@@ -57,7 +60,8 @@ public final class ResponseWindows {
                 "subject",ScopedData.owner(target.playerId(),Map.of("unitId",target.unitId(),"unitCode",target.unitCode())));
         values.put("responseWindow",publicWindow);
         var events = new ArrayList<>(state.events());
-        events.add(new GameEvent(events.size()+1L,"response_opened",action.actorPlayerId(),Map.of("responseWindow",publicWindow)));
+        var payload = new HashMap<>(eventData); payload.put("responseWindow",publicWindow);
+        events.add(new GameEvent(events.size()+1L,"response_opened",action.actorPlayerId(),payload));
         return new ActionResult(true,"RESPONSE_REQUIRED","Waiting for the designated player's response",new GameState(state.sessionId(),state.definitionVersionId(),state.status(),state.round(),
                 state.phaseCode(),state.activePlayerId(),state.stateVersion()+1,state.players(),state.units(),state.board(),events,values));
     }

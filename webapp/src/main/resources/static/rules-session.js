@@ -13,6 +13,13 @@ function rejection(error) {
  return `${error.message}${reasons[error.message]?' — '+reasons[error.message]:''}${live?` (observed version ${live.view.state.version})`:''}`;
 }
 function connection(text,error=false) { if($('connection')) { $('connection').textContent=text;$('connection').dataset.error=String(error); } }
+async function startingRosters() {
+ try {
+  const {data}=await request(root+'/roster'),panel=$('starting-rosters');if(!panel||!data)return;
+  panel.hidden=false;panel.replaceChildren(element('h2','Captured starting rosters'));
+  for(const seat of data.seats)panel.append(element('p',`${seat.playerId} / ${seat.policy}: ${seat.units.map(unit=>`${unit.name} (${unit.points})`).join(', ')} — ${seat.points} of ${seat.budget} points`));
+ }catch(error){if(!authLost&&$('starting-rosters'))feedback('Could not load starting rosters: '+error.message,true);}
+}
 const isLive=()=>historyVersion===null;
 const canSend=()=>!!live&&isLive()&&!busy&&!pending&&!authLost&&version(live.view.state.version)>=confirmedVersion;
 function selectOptions(select,items,value) { select.replaceChildren(...items.map(([v,t])=>option(v,t)));if(items.some(([v])=>v===value))select.value=value; }
@@ -181,4 +188,4 @@ field.onpointermove=event=>{if(!drag)return;const ratio=drag.box/field.getBoundi
 field.onpointerup=field.onpointercancel=()=>{drag=null;persist();drawBoard();};
 window.addEventListener('rules-auth-lost',event=>{authLost=true;live=null;shown=null;drag=null;if(event.detail?.identityChanged) { try {for(const k of Object.keys(sessionStorage))if(k.startsWith(`metis-rules:${user}:`))sessionStorage.removeItem(k);}catch{} }document.querySelector('main').replaceChildren(element('a','Sign in again',{href:`/login?next=${encodeURIComponent('/rules/sessions/'+id)}`}));});
 window.addEventListener('online',()=>refresh(true));window.addEventListener('pageshow',event=>{if(event.persisted)location.reload();});
-$('pending-request').hidden=!pending;await refresh(true);setInterval(()=>refresh(),1000);
+$('pending-request').hidden=!pending;await refresh(true);startingRosters();setInterval(()=>refresh(),1000);
