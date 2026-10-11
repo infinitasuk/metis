@@ -101,6 +101,8 @@
                         <param>com.metis.engine.core.rules.runtime.RandomStream</param>
                         <param>com.metis.engine.core.rules.runtime.SpatialGeometry</param>
                         <param>com.metis.engine.core.rules.runtime.SpatialMachine</param>
+                        <param>com.metis.engine.core.rules.runtime.ManeuverGeometry</param>
+                        <param>com.metis.engine.core.rules.runtime.ManeuverMachine</param>
                         <param>com.metis.engine.core.rules.runtime.ScenarioMachine</param>
                     </targetClasses>
                     <targetTests><param>com.metis.engine.core.rules.*Test</param></targetTests>

@@ -17,10 +17,11 @@
    <label>Acting seat<select id="actor"></select></label><div id="decision"></div><div id="controls" class="rules-toolbar"></div>
    <form id="action-form"><label>Action<select id="action"></select></label><label>Offered inputs<select id="offer"><option value="">Manual inputs</option></select></label><div id="parameters"></div>
     <div class="rules-toolbar"><button id="preview" type="button">Preview</button><button id="execute" type="submit">Execute</button></div>
-   </form><pre id="preview-result" class="rules-json" aria-live="polite"></pre>
+   </form><p id="maneuver-measurement" aria-live="polite"></p><pre id="preview-result" class="rules-json" aria-live="polite"></pre>
   </section>
   <section class="rules-panel"><div class="rules-toolbar"><h2>Board and entities</h2><label>Board<select id="board"></select></label><label>Zoom<input id="zoom" type="range" min="25" max="300" value="100"></label><button id="reset-view" type="button">Reset view</button></div>
-   <div class="rules-toolbar"><label><input id="show-zones" type="checkbox" checked> Zones</label><label><input id="show-labels" type="checkbox" checked> Labels</label></div>
+    <div class="rules-toolbar"><label><input id="show-zones" type="checkbox" checked> Zones</label><label><input id="show-labels" type="checkbox" checked> Labels</label></div>
+    <p id="board-measurement" class="muted"></p>
    <div id="board-wrap"><svg id="battlefield" xmlns="http://www.w3.org/2000/svg" aria-label="Projected game board" role="img"></svg></div>
    <div id="entity-list" class="rules-toolbar"></div><div id="entity-detail"></div>
   </section>

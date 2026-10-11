@@ -29,6 +29,7 @@ final class RuntimeMachine {
     int pendingRound;
     final MechanicsMachine mechanics;
     final SpatialMachine spatial;
+    final ManeuverMachine maneuver;
     final ScenarioMachine scenario;
     final boolean previewMode;
     final List<SpatialMachine.Plan> movements=new ArrayList<>();
@@ -46,7 +47,7 @@ final class RuntimeMachine {
         require(remaining>0,"EVALUATION_LIMIT","","Continuation has no remaining execution budget");
         budget=new EvaluationContext.Budget(remaining);
         mechanics=control.mechanics()==null?null:new MechanicsMachine(this,control.mechanics());
-        spatial=new SpatialMachine(this);scenario=new ScenarioMachine(this);
+        spatial=new SpatialMachine(this);maneuver=new ManeuverMachine(this);scenario=new ScenarioMachine(this);
         if(continuation!=null) { purpose=continuation.purpose();actor=continuation.actor();action=continuation.action();actionStep=continuation.actionStep();frames.addAll(continuation.frames()); }
     }
     EvaluationContext context(Map<String,RuleValue> locals) {
@@ -54,6 +55,7 @@ final class RuntimeMachine {
         variables.put("players",RuleValue.list(RuleType.PLAYER,before.players().stream().map(RuleValue::player).toList()));
         var queries=new TreeMap<>(runtime.queries());if(mechanics!=null)queries.putAll(mechanics.queries());
         queries.putAll(spatial.queries());
+        queries.putAll(maneuver.queries());
         return new EvaluationContext(variables,globals,entities,rules.limits().maxCollectionSize(),budget,queries);
     }
     RuleValue evaluate(Expression expression,Map<String,RuleValue> locals) { return Expressions.evaluate(expression,context(locals)); }
@@ -179,6 +181,7 @@ final class RuntimeMachine {
                 var contract=runtime.operation(instruction.operation());
                 var args=arguments(instruction.inputs(),contract.arguments(),locals,path);RuleValue value;
                 if(instruction.operation().startsWith("space."))value=spatial.execute(instruction.operation(),args);
+                else if(instruction.operation().startsWith("maneuver."))value=maneuver.execute(instruction.operation(),args);
                 else if(instruction.operation().startsWith("scenario."))value=scenario.execute(instruction.operation(),args);
                 else { require(mechanics!=null,"OPERATION_UNAVAILABLE",path,"Mechanical state is unavailable");value=mechanics.execute(instruction.operation(),args); }
                 if(instruction.binding()!=null)bind(instruction.binding(),checked(value,contract.result(),path,true));

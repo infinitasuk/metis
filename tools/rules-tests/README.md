@@ -6,6 +6,10 @@ Prerequisites: Java 21, Maven, Node/npm (CI pins Node **24.16.0** in `.nvmrc`; t
 runner accepts Node 22+), and Docker configured for Linux containers. Initial setup
 needs network access for Maven/npm dependencies, Docker images and Chromium.
 On Linux, Playwright's automated OS-dependency installation needs root/sudo access.
+The runner uses non-interactive `sudo -n env DEBIAN_FRONTEND=noninteractive
+NEEDRESTART_MODE=l ... install-deps chromium`, then downloads Chromium separately.
+Root execution uses the same environment without sudo. This preserves the settings
+across sudo's environment boundary and writes separate dependency/browser logs.
 
 From the repository root, in PowerShell or a Unix shell:
 
@@ -51,7 +55,11 @@ This command:
     validation, immutable saved snapshots, session independence and browser reuse.
     The Counter squadron suite adds four-profile/keyword provenance, mixed fleets,
     Counter/Swarm response recovery, exact weighted-die outcomes and a browser
-    lost-acknowledgement retry during a Counter reroll.
+     lost-acknowledgement retry during a Counter reroll.
+     The ship-maneuver suite adds pinned ship costs/charts/calibration, rectangular
+     final-pose and used-tool validation, human/CPU courses, process restart and
+     exact retries, browser speed/joint/side controls, delayed-preview rejection,
+     retained drafts and lost-acknowledgement recovery with historical poses.
 8. Captures logs, reports and browser traces, removes its labeled containers/network,
    and verifies removal.
 9. Starts a second disposable environment and intentionally fails an assertion after
@@ -78,7 +86,7 @@ and M4 RNG/roll plus M5 geometry/CPU checks; broader performance and compatibili
   are enforced separately for language and runtime at 90% line / 85% branch coverage.
 - `engine-core/target/pit-reports/`: focused mutation results when `rules-mutation`
     is enabled. Targets include compiler/runtime/mechanics/stream and M5 spatial/scenario
-    code plus the M6 resolver. Survivors remain counted, not excluded; the minimum detection gate is 80%.
+    code plus the M6 resolver and the maneuver planner/geometry. Survivors remain counted, not excluded; the minimum detection gate is 80%.
 - `engine-core/target/rules-benchmark.json`: M7 versioned timing/environment and bounded
   history-growth report. Full runs record wall-clock timings; the dedicated CI
   performance job enforces their thresholds. See `RULES_CLIENT_M7.md`.

@@ -176,6 +176,12 @@ See [RULES_COUNTER_SQUADRONS.md](RULES_COUNTER_SQUADRONS.md) for mixed TIE Fight
 TIE Interceptor, X-Wing and A-Wing fleets with Counter, Swarm and Escort timing.
 Import recipe: `armada-squadron-counter-v1`.
 
+See [RULES_SHIP_MANEUVERS.md](RULES_SHIP_MANEUVERS.md) for the first small-ship movement
+slice: sourced CR90 Corvette A / Raider I profiles, speed/joint-yaw/tool-side controls,
+authoritative rotated-base previews and shared human/CPU recovery/replay. Import
+recipe: `armada-ship-maneuvers-v1`. Its explicit TTS-coordinate training calibration
+and final-overlap rejection policy are documented with the captured sources.
+
 - `RULES_ENGINE_DEVELOPMENT_PLAN.md` is the primary delivery plan: establish a
   working rules-driven engine through milestones M0–M7 before extending battle UI.
 - `RULES_ENGINE_TEST_PLAN.md` specifies the full automated suite, CI, deterministic

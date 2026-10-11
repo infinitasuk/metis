@@ -1,13 +1,18 @@
 # METIS Implementation Plan
 
-**Status:** Engine-first delivery; revised 2026-09-19.
+**Status:** Engine-first delivery; revised 2026-10-11.
 
 M0–M7 are implemented with local verification: compiler/runtime, durable APIs, reactions,
-mechanics/spatial modules, pinned modes, catalogue migration, generic browser and persistent CPU seats. Recovery, coverage
-and mutation gates pass. Hosted CI awaits repository execution.
-The first M8 setup slice is now implemented locally as an additive catalogue pack; see
-`RULES_M8_ARMADA_SLICE.md`. Hosted CI awaits repository execution.
-**Next release step: qualify and deploy the M8 revision.**
+mechanics/spatial modules, pinned modes, catalogue migration, generic browser and persistent CPU seats.
+M8 follow-ons include sourced points, selected rosters, personal presets and Counter
+squadrons. The first sourced ship-maneuver slice is implemented; see
+`RULES_SHIP_MANEUVERS.md` for its explicit training/calibration scope.
+Hosted CI for `ac809c3` passed fast Linux/Windows, mutation and performance; full
+acceptance timed out installing browser OS dependencies. The non-interactive installer
+fix is verified separately on Ubuntu 24.04; hosted qualification of the next committed
+revision remains a release step.
+Local ship qualification/deployment is complete: 363 Java tests, full SQL/API/browser
+acceptance, 86% focused mutation detection, V44 upgrade and deployed browser smoke.
 
 The primary priority is an actual rules-driven engine: executable game/mode JSON,
 a shared resumable interpreter and reusable mechanical modules, backed by a full
@@ -396,8 +401,9 @@ A feature is complete only when:
 3. Expand catalogue scope through classified rule migrations and richer R21 authoring tools.
 4. Expand the delivered player-selected roster capture (`RULES_ROSTER_SELECTION.md`)
    and personal fleet presets (`RULES_FLEET_PRESETS.md`) beyond the four-profile
-   Counter squadron pack (`RULES_COUNTER_SQUADRONS.md`) into ship rules and explicit
+   Counter squadron pack (`RULES_COUNTER_SQUADRONS.md`) and small-ship movement training
+   (`RULES_SHIP_MANEUVERS.md`) into command/overlap/combat rules and explicit
    standard-format/cap policies.
 
-M0–M8 implementation/local gates are delivered; hosted release qualification remains pending. Preserve the
+M0–M8 and the bounded ship-maneuver implementation/local gates are delivered; hosted release qualification remains pending. Preserve the
 combined command: `mvn -B "-Prules-full,rules-mutation" clean verify`.

@@ -1,0 +1,12 @@
+{
+ "pack":"armada-ship-maneuvers-v1","game":"Star Wars: Armada","definition":"armada-ship-maneuvers-v1","title":"Small-ship maneuver training","classification":"Ship",
+ "pointsSource":"bsdata-armada-ships-47bfca1","maneuverSource":"tts-armada-small-598f774",
+ "units":["CR90 Corvette A","Raider I-class Corvette"],
+ "scope":{
+  "supported":["One player-selected CR90 Corvette A or Raider I-class Corvette per seat, with sourced 44-point costs","Pinned per-speed yaw charts and TTS small-base/tool attachment calibration","Choose speed 0–4, signed joint yaw and port/starboard tool side each training activation","Authoritative rotated-base preview, commit, CPU suggestions and replay","Final base must stay on the board, clear the used tool and avoid other bases; touching is allowed","Six training rounds, or three in Short course"],
+  "inapplicable":[],
+  "unsupported":["Ship combat, shields, defense tokens, obstacles, squadrons, upgrades and fleet-building rules","Navigate command/token timing, speed-change restrictions and yaw bonuses","Official overlap resolution, speed reduction, collision damage and off-board destruction","Physical ruler/plastic-outline certification; the used tool is a capsule envelope"],
+  "geometry":"tts coordinates, x right/y down, clockwise headings; pinned unscaled TTS segment 2.6265, yaw 22.5 degrees, small base 2.796 forward × 1.614 across, attachment [0.618, ±1.127]. Tool collision uses a training capsule width of 0.64 (twice the source lateral attachment clearance)."
+ },
+ "modes":[{"code":"short-course","name":"Short course","overrides":[{"op":"replace","path":"/state/roundLimit/initial","value":3}]}]
+}

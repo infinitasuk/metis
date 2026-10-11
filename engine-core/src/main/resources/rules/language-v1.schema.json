@@ -21,7 +21,8 @@
     "actions":{"type":"object","minProperties":1,"maxProperties":256,"propertyNames":{"$ref":"#/$defs/id"},"additionalProperties":{
       "type":"object","additionalProperties":false,"required":["parameters","availableWhen","procedure","args"],"properties":{
         "parameters":{"$ref":"#/$defs/typeMap"},"availableWhen":{"$ref":"#/$defs/expression"},"procedure":{"$ref":"#/$defs/id"},"args":{"$ref":"#/$defs/expressions"},
-        "choices":{"$ref":"#/$defs/expressions"},"priority":{"type":"integer","minimum":-10000,"maximum":10000},"preview":{"enum":["MOVEMENT"]}}}},
+         "choices":{"$ref":"#/$defs/expressions"},"priority":{"type":"integer","minimum":-10000,"maximum":10000},"preview":{"enum":["MOVEMENT"]},
+         "maneuver":{"type":"object","additionalProperties":false,"required":["entity","speed","yaw","side","chart"],"properties":{"entity":{"$ref":"#/$defs/id"},"speed":{"$ref":"#/$defs/id"},"yaw":{"$ref":"#/$defs/id"},"side":{"$ref":"#/$defs/id"},"chart":{"$ref":"#/$defs/expression"}}}}}},
     "setup":{"$ref":"#/$defs/id"},
     "space":{"type":"object","additionalProperties":false,"required":["boards","bodies","movements","zones"],"properties":{
       "boards":{"type":"object","maxProperties":16,"propertyNames":{"$ref":"#/$defs/id"},"additionalProperties":{"type":"object","additionalProperties":false,

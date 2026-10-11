@@ -20,12 +20,18 @@ public final class RulesRuntime {
     private final Map<String,Block> blocks=new TreeMap<>();
     private record Block(List<CompiledRules.Instruction> instructions,List<Map<String,RuleType>> scopes,
                          Map<String,RuleType> loopParent,String loopBinding,RuleType loopElement,int loopMaximum) { }
-    public record Candidate(String action,Map<String,RuleType> parameters,int step,String entityParameter,String entity) {
+    public record ManeuverControl(String entity,String speed,String yaw,String side,List<List<Integer>> chart) {
+        public ManeuverControl { chart=chart.stream().map(List::copyOf).toList(); }
+    }
+    public record Candidate(String action,Map<String,RuleType> parameters,int step,String entityParameter,String entity,
+                            @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) ManeuverControl maneuver) {
         public Candidate { parameters=Map.copyOf(parameters); }
     }
     public record Pose(double x,double y,double heading) { }
-    public record Movement(String entity,String board,String unit,Pose from,Pose to,List<SpatialGeometry.Point> path,double distance) {
+    public record Movement(String entity,String board,String unit,Pose from,Pose to,List<SpatialGeometry.Point> path,double distance,
+                           @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) ManeuverGeometry.Trace maneuver) {
         public Movement { path=List.copyOf(path); }
+        public Movement(String entity,String board,String unit,Pose from,Pose to,List<SpatialGeometry.Point> path,double distance) { this(entity,board,unit,from,to,path,distance,null); }
     }
     public record ResourceChange(String entity,String resource,long before,long after) { }
     public record Preview(boolean allowed,String code,String message,List<Movement> movements,List<ResourceChange> resources) {
@@ -145,7 +151,7 @@ public final class RulesRuntime {
             // Start with a fresh budget: preview executes exactly the command path once.
             machine=visibleMachine(state,actor);executeAction(machine,actor,action,parameters);machine.commit();
             require(!machine.movements.isEmpty(),"PREVIEW_NO_MOVEMENT","","This branch did not execute movement");
-            var movements=machine.movements.stream().map(m->new Movement(m.entity(),m.board(),m.unit(),new Pose(m.from().x(),m.from().y(),m.from().heading()),new Pose(m.to().x(),m.to().y(),m.to().heading()),m.path(),m.distance())).toList();
+            var movements=machine.movements.stream().map(m->new Movement(m.entity(),m.board(),m.unit(),new Pose(m.from().x(),m.from().y(),m.from().heading()),new Pose(m.to().x(),m.to().y(),m.to().heading()),m.path(),m.distance(),m.maneuver())).toList();
             var resources=new ArrayList<ResourceChange>();
             for(var before:machine.before.entities().values()) {
                 var after=machine.entities.get(before.id());if(after==null)continue;
@@ -207,10 +213,21 @@ public final class RulesRuntime {
                 int step;
                 try { step=machine.actionStep(actor,entry.getKey()); }catch(RuleEvaluationException unavailable){continue;}
                 if(entry.getValue().parameters().isEmpty()&&!preview(state,actor,entry.getKey(),Map.of()).allowed())continue;
-                result.add(new Candidate(entry.getKey(),entry.getValue().parameters(),step,machine.phase().entityParameter(),machine.flow.entity()));
+                result.add(new Candidate(entry.getKey(),entry.getValue().parameters(),step,machine.phase().entityParameter(),machine.flow.entity(),maneuverControl(machine,entry.getValue())));
             }
             return List.copyOf(result);
         } catch(RuleEvaluationException unavailable) { return List.of(); }
+    }
+    private ManeuverControl maneuverControl(RuntimeMachine machine,CompiledRules.Action action) {
+        var hint=action.maneuver();if(hint==null)return null;
+        var entity=machine.entities.get(machine.flow.entity());if(entity==null)return null;
+        var rows=machine.evaluate(hint.chart(),Map.of("actor",RuleValue.player(machine.actor),hint.entity(),RuleValue.entity(entity.type(),entity.id()))).items();
+        require(!rows.isEmpty()&&rows.size()<=9,"MANEUVER_CHART","","Invalid control chart");var chart=new ArrayList<List<Integer>>();
+        for(int speed=0;speed<rows.size();speed++) {
+            var row=rows.get(speed).items();require(row.size()==speed&&row.stream().allMatch(v->v.integer()>=0&&v.integer()<=8),"MANEUVER_CHART","","Invalid control chart");
+            chart.add(row.stream().map(v->(int)v.integer()).toList());
+        }
+        return new ManeuverControl(hint.entity(),hint.speed(),hint.yaw(),hint.side(),chart);
     }
     public List<String> eligibleEntities(RulesState state,String actor) {
         compatible(state);ready(state);var machine=visibleMachine(state,actor);machine.actorAllowed(actor);

@@ -11,7 +11,10 @@ final class SpatialMachine {
     private final RuntimeMachine machine;
     SpatialMachine(RuntimeMachine machine) { this.machine=machine; }
     public record Pose(double x,double y,double heading) { }
-    public record Plan(String entity,String board,String unit,Pose from,Pose to,List<Point> path,double distance) { public Plan { path=List.copyOf(path); } }
+    public record Plan(String entity,String board,String unit,Pose from,Pose to,List<Point> path,double distance,ManeuverGeometry.Trace maneuver) {
+        public Plan { path=List.copyOf(path); }
+        public Plan(String entity,String board,String unit,Pose from,Pose to,List<Point> path,double distance) { this(entity,board,unit,from,to,path,distance,null); }
+    }
     private SpatialRules rules() { return machine.rules.space(); }
     private void tick() { machine.budget.spend("/space"); }
     private EvaluationContext.Entity entity(RuleValue value) { machine.checked(value,RuleType.ENTITY,"/space/entity",true);return machine.entities.get(((RuleValue.EntityRef)value.value()).id()); }
@@ -93,7 +96,7 @@ final class SpatialMachine {
         if(board.model()==SpatialRules.Model.GRID)require(point.x()==Math.rint(point.x())&&point.y()==Math.rint(point.y()),"GRID_POSITION","/space","Grid coordinates must be integral");
         require(inside(SpatialGeometry.footprint(body,board,point,facing),0,0,board.width(),board.height(),board.tolerance()),"BOARD_BOUNDS","/space","Footprint must remain on the board");
     }
-    private void place(EvaluationContext.Entity entity,Pose pose,boolean placed) {
+    void place(EvaluationContext.Entity entity,Pose pose,boolean placed) {
         var body=binding(entity);var schema=machine.rules.entities().get(entity.type());var values=new TreeMap<>(entity.attributes());
         for(var entry:Map.of(body.x(),pose.x(),body.y(),pose.y(),body.facing(),pose.heading()).entrySet()) {
             var type=schema.attributes().get(entry.getKey()).type();RuleValue value=type.equals(RuleType.INTEGER)?RuleValue.integer(BigDecimal.valueOf(entry.getValue()).longValueExact()):decimal(entry.getValue());values.put(entry.getKey(),value);

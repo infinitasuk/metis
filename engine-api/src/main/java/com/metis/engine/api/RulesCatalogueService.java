@@ -19,7 +19,8 @@ public class RulesCatalogueService {
             "armada-squadron-training-m8","armada-squadron-training-m8",
             "armada-squadron-points-v1","armada-squadron-points",
             "armada-squadron-rosters-v1","armada-squadron-rosters",
-            "armada-squadron-counter-v1","armada-squadron-counter");
+            "armada-squadron-counter-v1","armada-squadron-counter",
+            "armada-ship-maneuvers-v1","armada-ship-maneuvers");
     private final RulesRepository repository;
     private final RulesService rules;
     public RulesCatalogueService(RulesRepository repository,RulesService rules) { this.repository=repository;this.rules=rules; }
@@ -46,7 +47,8 @@ public class RulesCatalogueService {
         long version=request.get("gameVersionId").longValue();String packId=request.get("pack").textValue(),file=PACKS.get(packId);check(file!=null,422,"CATALOGUE_PACK_UNKNOWN");
         check(repository.lockCatalogue(version),409,"CATALOGUE_NOT_PUBLISHED");var pack=resource(file+".pack");
         var template=template(file,pack,new HashSet<>());
-        String source=pack.path("captureKeywords").asBoolean()?repository.keywordCatalogueSource(version,pack.get("units").toString(),pack.get("pointsSource").textValue())
+        String source=pack.has("maneuverSource")?repository.maneuverCatalogueSource(version,pack.get("units").toString(),pack.get("pointsSource").textValue(),pack.get("maneuverSource").textValue())
+                :pack.path("captureKeywords").asBoolean()?repository.keywordCatalogueSource(version,pack.get("units").toString(),pack.get("pointsSource").textValue())
                 :pack.has("pointsSource")?repository.pricedCatalogueSource(version,pack.get("units").toString(),pack.get("pointsSource").textValue())
                 :repository.catalogueSource(version,pack.get("units").toString());
         check(source!=null,409,"CATALOGUE_NOT_PUBLISHED");var snapshot=(ObjectNode)rules.parse(source);
@@ -81,6 +83,7 @@ public class RulesCatalogueService {
     /** Translate only measured catalogue data; all timing, targeting, symbols and endings stay in JSON. */
     static void populate(ObjectNode template,JsonNode snapshot,JsonNode pack) {
         var units=snapshot.path("units");check(units.isArray()&&units.size()==pack.get("units").size(),422,"CATALOGUE_PROFILE_MISSING");
+        if(pack.has("maneuverSource")) { populateManeuvers(template,units,pack);populatePoints(template,units);return; }
         var names=JsonNodeFactory.instance.arrayNode();var ids=names.deepCopy();var factions=names.deepCopy();var hulls=names.deepCopy();var speeds=names.deepCopy();var pools=names.deepCopy();BigDecimal radius=null;
         for(int i=0;i<units.size();i++) {
             var unit=units.get(i);check(unit.path("displayName").asText().equals(pack.get("units").get(i).textValue())&&unit.path("classification").asText().equals(pack.get("classification").textValue()),422,"CATALOGUE_PROFILE_MISMATCH");
@@ -99,23 +102,7 @@ public class RulesCatalogueService {
         }
         for(var entry:Map.of("names",names,"catalogueIds",ids,"factions",factions,"hulls",hulls,"speeds",speeds,"pools",pools).entrySet())((ObjectNode)template.at("/state/"+entry.getKey())).set("initial",entry.getValue());
         ((ObjectNode)template.at("/space/bodies/squadron")).put("radius",radius);
-        if(pack.has("pointsSource")) {
-            var points=JsonNodeFactory.instance.arrayNode();var sources=points.deepCopy();var unique=points.deepCopy();
-            for(var unit:units) {
-                var cost=unit.path("pointsCost");var provenance=unit.path("pointsSource");
-                check(cost.isIntegralNumber()&&cost.canConvertToLong()&&cost.longValue()>0,422,"CATALOGUE_POINTS_MISSING");
-                check(provenance.isObject()&&unit.path("uniqueKey").isTextual(),422,"CATALOGUE_POINTS_PROVENANCE");
-                for(String key:List.of("repository","file","revision","entryId","url","licence","rawPoints"))
-                    check(provenance.path(key).isTextual()&&!provenance.get(key).textValue().isBlank(),422,"CATALOGUE_POINTS_PROVENANCE");
-                check(provenance.path("commit").asText().matches("[0-9a-f]{40}")&&provenance.path("sha256").asText().matches("[0-9a-f]{64}"),422,"CATALOGUE_POINTS_PROVENANCE");
-                try { check(new BigDecimal(provenance.get("rawPoints").textValue()).compareTo(BigDecimal.valueOf(cost.longValue()))==0,422,"CATALOGUE_POINTS_PROVENANCE"); }
-                catch(NumberFormatException error) { throw new RulesService.Failure(422,"CATALOGUE_POINTS_PROVENANCE"); }
-                points.add(cost);sources.add(provenance.toString());unique.add(unit.get("uniqueKey"));
-            }
-            ((ObjectNode)template.at("/state/points")).set("initial",points);
-            ((ObjectNode)template.at("/state/pointSources")).set("initial",sources);
-            ((ObjectNode)template.at("/state/uniqueKeys")).set("initial",unique);
-        }
+        if(pack.has("pointsSource"))populatePoints(template,units);
         if(pack.path("captureKeywords").asBoolean()) {
             var fields=new TreeMap<String,ArrayNode>();pack.get("keywordDefaults").fieldNames().forEachRemaining(field->fields.put(field,JsonNodeFactory.instance.arrayNode()));
             var keywords=JsonNodeFactory.instance.arrayNode();var sources=JsonNodeFactory.instance.arrayNode();
@@ -137,6 +124,59 @@ public class RulesCatalogueService {
             ((ObjectNode)template.at("/state/keywordProfiles")).set("initial",keywords);
             ((ObjectNode)template.at("/state/keywordSources")).set("initial",sources);
         }
+    }
+    private static void populatePoints(ObjectNode template,JsonNode units) {
+        var points=JsonNodeFactory.instance.arrayNode();var sources=points.deepCopy();var unique=points.deepCopy();
+        for(var unit:units) {
+            var cost=unit.path("pointsCost");var provenance=unit.path("pointsSource");
+            check(cost.isIntegralNumber()&&cost.canConvertToLong()&&cost.longValue()>0,422,"CATALOGUE_POINTS_MISSING");
+            check(provenance.isObject()&&unit.path("uniqueKey").isTextual(),422,"CATALOGUE_POINTS_PROVENANCE");
+            for(String key:List.of("repository","file","revision","entryId","url","licence","rawPoints"))
+                check(provenance.path(key).isTextual()&&!provenance.get(key).textValue().isBlank(),422,"CATALOGUE_POINTS_PROVENANCE");
+            check(provenance.path("commit").asText().matches("[0-9a-f]{40}")&&provenance.path("sha256").asText().matches("[0-9a-f]{64}"),422,"CATALOGUE_POINTS_PROVENANCE");
+            try { check(new BigDecimal(provenance.get("rawPoints").textValue()).compareTo(BigDecimal.valueOf(cost.longValue()))==0,422,"CATALOGUE_POINTS_PROVENANCE"); }
+            catch(NumberFormatException error) { throw new RulesService.Failure(422,"CATALOGUE_POINTS_PROVENANCE"); }
+            points.add(cost);sources.add(provenance.toString());unique.add(unit.get("uniqueKey"));
+        }
+        ((ObjectNode)template.at("/state/points")).set("initial",points);
+        ((ObjectNode)template.at("/state/pointSources")).set("initial",sources);
+        ((ObjectNode)template.at("/state/uniqueKeys")).set("initial",unique);
+    }
+    private static BigDecimal dimension(JsonNode geometry,String field,boolean zeroAllowed,BigDecimal maximum) {
+        var value=geometry.path(field);check(value.isNumber(),422,"CATALOGUE_GEOMETRY_INVALID");var number=value.decimalValue();
+        check((zeroAllowed?number.signum()>=0:number.signum()>0)&&number.compareTo(maximum)<=0,422,"CATALOGUE_GEOMETRY_INVALID");return number;
+    }
+    /** Data-only adapter for the explicitly scoped, rectangular-base maneuver recipe. */
+    private static void populateManeuvers(ObjectNode template,JsonNode units,JsonNode pack) {
+        var fields=new TreeMap<String,ArrayNode>();for(String field:List.of("names","catalogueIds","factions","hulls","maxSpeeds","charts","maneuverSources"))fields.put(field,JsonNodeFactory.instance.arrayNode());
+        JsonNode geometry=null;
+        for(int i=0;i<units.size();i++) {
+            var unit=units.get(i);check(unit.path("displayName").asText().equals(pack.get("units").get(i).textValue())&&unit.path("classification").asText().equals(pack.get("classification").textValue()),422,"CATALOGUE_PROFILE_MISMATCH");
+            check(unit.path("code").isTextual()&&!unit.get("code").textValue().isBlank()&&unit.path("factionCode").isTextual(),422,"CATALOGUE_PROFILE_MISSING");
+            var hull=unit.path("maximumHullPoints");check(hull.isIntegralNumber()&&hull.canConvertToInt()&&hull.intValue()>0&&hull.intValue()<=100,422,"CATALOGUE_HULL_INVALID");
+            var speed=unit.path("maximumMovementDistance");check(speed.isNumber()&&speed.decimalValue().stripTrailingZeros().scale()<=0&&speed.decimalValue().compareTo(BigDecimal.ONE)>=0&&speed.decimalValue().compareTo(BigDecimal.valueOf(8))<=0,422,"CATALOGUE_SPEED_INVALID");
+            var chart=unit.path("maneuverChart");check(chart.isArray()&&chart.size()==speed.intValue()+1,422,"CATALOGUE_MANEUVER_CHART");
+            for(int row=0;row<chart.size();row++) {
+                check(chart.get(row).isArray()&&chart.get(row).size()==row,422,"CATALOGUE_MANEUVER_CHART");
+                for(var yaw:chart.get(row))check(yaw.isIntegralNumber()&&yaw.canConvertToInt()&&yaw.intValue()>=0&&yaw.intValue()<=8,422,"CATALOGUE_MANEUVER_CHART");
+            }
+            var source=unit.path("maneuverSource");check(source.isObject(),422,"CATALOGUE_MANEUVER_SOURCE");
+            for(String field:List.of("repository","file","url","licence"))check(source.path(field).isTextual()&&!source.get(field).textValue().isBlank(),422,"CATALOGUE_MANEUVER_SOURCE");
+            check(source.path("commit").asText().matches("[0-9a-f]{40}")&&source.path("sha256").asText().matches("[0-9a-f]{64}")&&source.path("calibration").isArray()&&!source.get("calibration").isEmpty(),422,"CATALOGUE_MANEUVER_SOURCE");
+            for(var reference:source.get("calibration"))check(reference.path("file").isTextual()&&!reference.get("file").textValue().isBlank()&&reference.path("sha256").asText().matches("[0-9a-f]{64}"),422,"CATALOGUE_MANEUVER_SOURCE");
+            var current=unit.path("maneuverGeometry");check(current.isObject()&&current.path("unit").asText().matches("[a-z][a-zA-Z0-9_-]{0,63}"),422,"CATALOGUE_GEOMETRY_INVALID");
+            for(String field:List.of("width","height","segment"))dimension(current,field,false,BigDecimal.valueOf(1e9));
+            dimension(current,"angle",false,BigDecimal.valueOf(90));dimension(current,"toolWidth",true,BigDecimal.valueOf(1e9));
+            var anchor=current.path("anchor");check(anchor.isArray()&&anchor.size()==2&&anchor.get(0).isNumber()&&anchor.get(1).isNumber()
+                    &&anchor.get(0).decimalValue().abs().compareTo(BigDecimal.valueOf(1e9))<=0&&anchor.get(1).decimalValue().signum()>=0&&anchor.get(1).decimalValue().compareTo(BigDecimal.valueOf(1e9))<=0,422,"CATALOGUE_GEOMETRY_INVALID");
+            check(geometry==null||geometry.equals(current),422,"CATALOGUE_FOOTPRINT_MISMATCH");geometry=current;
+            fields.get("names").add(unit.get("displayName"));fields.get("catalogueIds").add(unit.get("code"));fields.get("factions").add(unit.get("factionCode"));fields.get("hulls").add(hull);
+            fields.get("maxSpeeds").add(speed.intValue());fields.get("charts").add(chart);fields.get("maneuverSources").add(source.toString());
+        }
+        check(geometry!=null,422,"CATALOGUE_PROFILE_MISSING");fields.forEach((field,values)->((ObjectNode)template.at("/state/"+field)).set("initial",values));
+        for(var binding:Map.of("segment","segment","yawAngle","angle","anchor","anchor","toolWidth","toolWidth").entrySet())((ObjectNode)template.at("/state/"+binding.getKey())).set("initial",geometry.get(binding.getValue()).deepCopy());
+        ((ObjectNode)template.at("/space/boards/table")).set("unit",geometry.get("unit"));
+        var body=(ObjectNode)template.at("/space/bodies/ship");body.set("width",geometry.get("width"));body.set("height",geometry.get("height"));
     }
     private RulesRepository.Catalogue entry(long id) {
         return repository.catalogue().stream().filter(e->e.id()==id).findFirst().orElseThrow(()->new RulesService.Failure(404,"CATALOGUE_ENTRY_NOT_FOUND"));

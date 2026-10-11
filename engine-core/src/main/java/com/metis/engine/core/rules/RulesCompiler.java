@@ -66,6 +66,7 @@ public final class RulesCompiler {
             scope.expect(available.version().equals(version),"MODULE_VERSION","/modules/"+module,"Unsupported module version "+version);modules.put(module,version);
         }
         scope.expect(modules.containsKey("core"),"MODULE_REQUIRED","/modules/core","The core module must be pinned");
+        scope.expect(!modules.containsKey("maneuver")||modules.containsKey("space"),"MODULE_REQUIRED","/modules/maneuver","Maneuvers require the spatial module");
         scope.state.putAll(fields(scope,root.get("state"),"/state",false));
         for(String name:scope.entityNames.stream().sorted().toList()) {
             String path="/entities/"+name;var entity=root.get("entities").get(name);
@@ -127,7 +128,18 @@ public final class RulesCompiler {
                 scope.bind(choiceEnv,parameter,parameters.get(parameter),path+"/choices/"+parameter);
             }
             boolean movement=action.has("preview");if(movement)validateMovementPreview(procedure,procedures,registry,scope,new HashSet<>());
-            actions.put(name,new CompiledRules.Action(parameters,available,procedure,compiler.arguments(action.get("args"),compiler.procedure(procedure,path+"/procedure"),env,path+"/args"),choices,action.path("priority").asInt(0),movement));
+            CompiledRules.ManeuverControl maneuver=null;
+            if(action.has("maneuver")) {
+                var hint=action.get("maneuver");String at=path+"/maneuver",entity=hint.get("entity").textValue(),speed=hint.get("speed").textValue(),yaw=hint.get("yaw").textValue(),side=hint.get("side").textValue();
+                scope.expect(modules.containsKey("maneuver")&&movement,"MANEUVER_CONTROL",at,"Maneuver controls require the module and movement preview");
+                scope.expect(new HashSet<>(List.of(entity,speed,yaw,side)).size()==4&&parameters.containsKey(entity)&&parameters.get(entity).kind()==RuleType.Kind.ENTITY
+                        &&RuleType.INTEGER.equals(parameters.get(speed))&&RuleType.list(RuleType.INTEGER).equals(parameters.get(yaw))&&RuleType.STRING.equals(parameters.get(side)),
+                        "MANEUVER_CONTROL",at,"Bind distinct entity, integer speed, integer-list yaw and string side parameters");
+                var hintEnv=scope.environment(Map.of(entity,parameters.get(entity)),at);scope.bind(hintEnv,"actor",RuleType.PLAYER,at);
+                var chart=compiler.expression(hint.get("chart"),hintEnv,at+"/chart");scope.type(RuleType.list(RuleType.list(RuleType.INTEGER)),chart,chart.path());
+                maneuver=new CompiledRules.ManeuverControl(entity,speed,yaw,side,chart);
+            }
+            actions.put(name,new CompiledRules.Action(parameters,available,procedure,compiler.arguments(action.get("args"),compiler.procedure(procedure,path+"/procedure"),env,path+"/args"),choices,action.path("priority").asInt(0),movement,maneuver));
         }
         var flow=flow(scope,compiler,root.get("flow"),actions);
         var mechanics=MechanicsCompiler.compile(root,scope,modules.keySet());
@@ -149,7 +161,7 @@ public final class RulesCompiler {
         for(var step:steps) {
             var op=registry.operation(step.operation());
             scope.expect(!op.effects().contains(OperationRegistry.Effect.RANDOM)&&!op.effects().contains(OperationRegistry.Effect.DECISION),"MOVEMENT_PREVIEW",step.path(),"Movement previews cannot include random operations or decisions");
-            if(step.operation().equals("space.move"))movement=true;
+            if(step.operation().equals("space.move")||step.operation().equals("maneuver.move"))movement=true;
             if(step.operation().equals("core.call")&&!visited.contains(step.references().get("procedure"))) {
                 String callee=step.references().get("procedure");visited.add(callee);movement|=movementSteps(procedures.get(callee).steps(),procedures,registry,scope,visited);
             }
@@ -193,7 +205,8 @@ public final class RulesCompiler {
                 int min=step.get("minimum").intValue(),max=step.get("maximum").intValue();scope.expect(min<=max&&max<=scope.limits.maxInstructions(),"ACTION_BUDGET",at,"Invalid action budget");
                 var permitted=new ArrayList<String>();for(int j=0;j<step.get("actions").size();j++) {
                     String action=step.get("actions").get(j).textValue();scope.expect(actions.containsKey(action),"ACTION_UNKNOWN",at+"/actions/"+j,"Unknown action "+action);
-                    if(entityPhase)scope.expect(actions.get(action).parameters().containsKey(subject)&&actions.get(action).parameters().get(subject).accepts(entities.type().element()),"PHASE_SUBJECT",at+"/actions/"+j,"Action must declare the phase's typed entity subject");
+                     if(entityPhase)scope.expect(actions.get(action).parameters().containsKey(subject)&&actions.get(action).parameters().get(subject).accepts(entities.type().element()),"PHASE_SUBJECT",at+"/actions/"+j,"Action must declare the phase's typed entity subject");
+                     if(actions.get(action).maneuver()!=null)scope.expect(entityPhase&&actions.get(action).maneuver().entity().equals(subject),"MANEUVER_CONTROL",at+"/actions/"+j,"Maneuver controls bind the active entity subject");
                     permitted.add(action);
                 }
                 steps.add(new CompiledRules.Step(id,permitted,min,max));

@@ -32,6 +32,10 @@ path. M6 now provides mode composition and a bounded catalogue migration (see
 `RULES_MODES_M6.md`); M7 now supplies the generic browser and persistent CPU seats
 described in `RULES_CLIENT_M7.md`.
 
+The additive `maneuver:1` module now supplies segmented-tool, attached-base movement.
+Its distinct calibration, collision policy and client contract are documented in
+`RULES_SHIP_MANEUVERS.md`; the original `space.move` policy below remains intact.
+
 ## Version and persistence boundary
 
 Spatial/scenario modules, finite action choices, nonzero priorities or movement
@@ -142,7 +146,7 @@ damage and scoring at automatic phase entry; passing cannot skip the terminal ch
 ## Preview and projected choices
 
 An action may declare `"preview":"MOVEMENT"`. The compiler requires a reachable
-`space.move` and rejects random/decision operations in its procedure/callees. Preview
+`space.move` or `maneuver.move` and rejects random/decision operations in its procedure/callees. Preview
 executes the deterministic action on an isolated seat-visible snapshot using the same
 arguments, costs, budgets, effects, phase completion and planner as `act`. Random or
 decision work encountered in a subsequent phase fails closed with an explicit

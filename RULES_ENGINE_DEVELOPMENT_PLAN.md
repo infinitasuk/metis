@@ -311,11 +311,17 @@ covered by `modes-catalogue.cjs`. The follow-on sourced-points slice is implemen
 see `RULES_SOURCED_POINTS.md` for the immutable two-unit cost projection, shared
 preflight/setup validator, priced training pack and browser/CPU acceptance.
 Player-selected roster capture is now delivered in the bounded 26-point
-squadron-training pack; see `RULES_ROSTER_SELECTION.md`. The next expansion needs
-ship rules and explicit full-format/cap rules. Personal fleet presets with
+squadron-training pack; see `RULES_ROSTER_SELECTION.md`. Personal fleet presets with
 revision-aware reuse are delivered in `RULES_FLEET_PRESETS.md`. The first catalogue
 expansion is delivered in `RULES_COUNTER_SQUADRONS.md`: four sourced generic
 squadrons with Counter, Swarm and Escort interactions.
+
+The first ship slice is implemented in `RULES_SHIP_MANEUVERS.md`: two sourced small
+ships, immutable maneuver/calibration capture, a generic segmented-tool module,
+speed/yaw/side controls and shared preview/CPU/recovery tests. Its movement-training
+format uses explicit TTS coordinates and rejects invalid final overlaps. Further
+ship work needs command-driven speed/yaw modification, official overlap resolution,
+combat and explicit full-format/cap policies.
 
 ## Definition of done for this initiative
 

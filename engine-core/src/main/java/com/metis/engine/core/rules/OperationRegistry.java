@@ -29,7 +29,7 @@ public final class OperationRegistry {
     private final Map<String,Operation> operations;
     public OperationRegistry(List<Module> extensions) {
         var modules=new TreeMap<String,Module>();var operations=new TreeMap<String,Operation>();
-        var all=new ArrayList<Module>();all.add(core());all.addAll(mechanics());all.addAll(spatial());all.addAll(extensions);
+        var all=new ArrayList<Module>();all.add(core());all.addAll(mechanics());all.addAll(spatial());all.add(maneuver());all.addAll(extensions);
         for(var module:all) {
             if(modules.putIfAbsent(module.id(),module)!=null)throw new IllegalArgumentException("Duplicate module "+module.id());
             for(var operation:module.operations()) {
@@ -125,5 +125,12 @@ public final class OperationRegistry {
                 op("scenario.require",null,Effect.STATE,"condition",RuleType.BOOLEAN,"code",s),
                 op("scenario.roster",null,Effect.STATE,"owner",RuleType.PLAYER,"entities",RuleType.list(e),"policy",s),
                 op("scenario.damage",RuleType.INTEGER,Effect.STATE,"target",e,"policy",s,"amount",RuleType.INTEGER))));
+    }
+    private static Module maneuver() {
+        var e=RuleType.ENTITY;var i=RuleType.INTEGER;var s=RuleType.STRING;var d=RuleType.DECIMAL;var ints=RuleType.list(i);var decimals=RuleType.list(d);var chart=RuleType.list(ints);
+        return new Module("maneuver","1",List.of(
+                op("maneuver.move",null,Effect.STATE,"entity",e,"speed",i,"yaw",ints,"side",s,"chart",chart,"segment",d,"angle",d,"anchor",decimals,"toolWidth",d,"collisions",RuleType.BOOLEAN),
+                op("maneuver.canMove",RuleType.BOOLEAN,Effect.PURE,"entity",e,"speed",i,"yaw",ints,"side",s,"chart",chart,"segment",d,"angle",d,"anchor",decimals,"toolWidth",d,"collisions",RuleType.BOOLEAN),
+                op("maneuver.options",chart,Effect.PURE,"entity",e,"speed",i,"side",s,"chart",chart,"segment",d,"angle",d,"anchor",decimals,"toolWidth",d,"collisions",RuleType.BOOLEAN)));
     }
 }

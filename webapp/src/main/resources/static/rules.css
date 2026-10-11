@@ -6,6 +6,10 @@
 .rules-panel label { display: flex; flex-direction: column; gap: .35rem; margin: .7rem 0; font-size: .9rem; }
 .rules-panel input, .rules-panel select, .rules-panel textarea { padding: .6rem; border-radius: 6px; border: 1px solid #87909a; max-width: 100%; font: inherit; }
 .rules-panel textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; }
+.rules-panel label[hidden] { display: none; }
+.maneuver-joints { display: flex; flex-wrap: wrap; gap: .7rem; }
+.maneuver-joints p { flex-basis: 100%; margin-bottom: 0; }
+.maneuver-joints label { flex: 1 1 120px; }
 .rules-toolbar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
 .rules-toolbar h2, .rules-toolbar h3 { margin: 0 auto 0 0; }
 .rules-toolbar label { margin: .3rem; }

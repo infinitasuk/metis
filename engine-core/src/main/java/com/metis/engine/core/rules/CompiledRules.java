@@ -45,8 +45,9 @@ public record CompiledRules(String id, String revision, String compilerVersion, 
     public record Procedure(Map<String,RuleType> parameters,List<Instruction> steps,long instructionBound) {
         public Procedure { parameters=immutable(parameters);steps=List.copyOf(steps); }
     }
+    public record ManeuverControl(String entity,String speed,String yaw,String side,Expression chart) { }
     public record Action(Map<String,RuleType> parameters,Expression availableWhen,String procedure,Map<String,Expression> arguments,
-                         Map<String,Expression> choices,int priority,boolean movementPreview) {
+                         Map<String,Expression> choices,int priority,boolean movementPreview,ManeuverControl maneuver) {
         public Action { parameters=immutable(parameters);arguments=immutable(arguments);choices=immutable(choices); }
     }
     public record Step(String id,List<String> actions,int minimum,int maximum) {

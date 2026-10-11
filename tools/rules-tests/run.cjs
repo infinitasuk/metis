@@ -5,6 +5,7 @@ const path=require('node:path');
 const crypto=require('node:crypto');
 const assert=require('node:assert/strict');
 const {command,validateManifest,verifyJavaReports,junit}=require('./support.cjs');
+const {browserInstallCommands}=require('./browser.cjs');
 const root=path.resolve(__dirname,'../..');
 const args=process.argv.slice(2);
 const jarIndex=args.indexOf('--jar');
@@ -77,7 +78,7 @@ async function main() {
   await stage('pinned-browser-install',async()=>{
    await run('npm',['ci','--ignore-scripts','--no-audit','--no-fund'],{cwd:path.join(root,'webapp'),log:path.join(artifact,'npm.log')});
    const cli=path.join(root,'webapp/node_modules/playwright/cli.js');
-   await run(process.execPath,[cli,'install',...(process.platform==='linux'?['--with-deps']:[]),'chromium'],{timeout:600000,log:path.join(artifact,'browser-install.log')});
+    for(const install of browserInstallCommands(cli))await run(install.exe,install.args,{timeout:600000,log:path.join(artifact,install.log)});
   });
   await stage('disposable-database',async()=>{
    resourcesStarted=true;
