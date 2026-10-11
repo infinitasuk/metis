@@ -179,4 +179,7 @@ Node runtime, and Node-24-based checkout/setup/artifact actions.
   previewed and committed combined dial/token payment to reach speed 4. Reload and
   replay agreed; the temporary smoke session was removed. Screenshot:
   `target/navigation-local.png`. Existing 14 catalogue entries were preserved.
-- Hosted results are recorded by GitHub Actions for the pushed revision.
+- All five hosted jobs passed for feature commit `662c7a7` in
+  [run 38156147156](https://github.com/infinitasuk/metis/actions/runs/38156147156),
+  including full acceptance in 6m40s. Subsequent CI-maintenance results are recorded
+  by GitHub Actions for their pushed revisions.

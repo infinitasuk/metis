@@ -25,7 +25,7 @@ jobs:
           node-version-file: .nvmrc
       - run: mvn -B clean verify
       - run: node --test tools/rules-tests/runner.test.cjs
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: fast-${{ matrix.os }}
@@ -50,7 +50,7 @@ jobs:
           cache: npm
           cache-dependency-path: webapp/package-lock.json
       - run: mvn -B -Prules-full clean verify
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: rules-full
@@ -72,7 +72,7 @@ jobs:
           java-version: '21'
           cache: maven
       - run: mvn -B -pl engine-core -Prules-mutation clean verify
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: rules-mutation
@@ -90,7 +90,7 @@ jobs:
           java-version: '21'
           cache: maven
       - run: mvn -B -pl engine-core -Prules-benchmark -Drules.benchmark.enforce=true compile exec:java
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: rules-performance
