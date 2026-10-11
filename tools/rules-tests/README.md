@@ -83,6 +83,10 @@ This command:
      final-pose and used-tool validation, human/CPU courses, process restart and
      exact retries, browser speed/joint/side controls, delayed-preview rejection,
      retained drafts and lost-acknowledgement recovery with historical poses.
+     Navigate coverage adds strict command-source capture, private FIFO planning,
+     reveal/bank decisions, persistent speed, single-joint yaw bonuses, combined
+     payments, actual transaction-time process kills, per-viewer replay and browser
+     command/resource recovery.
 8. Captures logs, reports and browser traces, removes its labeled containers/network,
    and verifies removal.
 9. Starts a second disposable environment and intentionally fails an assertion after
@@ -126,7 +130,7 @@ The failure probe deliberately has `probe: true`, `status: failed` and
 still pass. Similarly, `intentional-oracle-probe` and `intentional-tape-probe` are
 expected-negative harness self-tests, not failed Java tests.
 
-CI in `.github/workflows/rules-tests.yml` runs fast checks on Linux/Windows and the
+CI in `.github/workflows/rules-tests.yml` runs fast checks on Ubuntu 24.04/Windows and the
 full suite plus a separate mutation job on Linux, uploading artifacts even when a job fails. Hosted CI execution
 occurs when the workflow is run in the repository; local success is not a claim that
 remote CI has already run.

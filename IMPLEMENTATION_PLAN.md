@@ -4,15 +4,13 @@
 
 M0–M7 are implemented with local verification: compiler/runtime, durable APIs, reactions,
 mechanics/spatial modules, pinned modes, catalogue migration, generic browser and persistent CPU seats.
-M8 follow-ons include sourced points, selected rosters, personal presets and Counter
-squadrons. The first sourced ship-maneuver slice is implemented; see
-`RULES_SHIP_MANEUVERS.md` for its explicit training/calibration scope.
-Hosted CI for `a32ebdf` passed fast Linux/Windows, mutation and performance; full
-acceptance exposed a Node 24.16.0 browser archive-extraction hang. CI now pins Node
-24.21.0, which includes the upstream stream fix. See `tools/rules-tests/README.md`
-for the diagnosis and GitHub Actions for each committed revision's hosted results.
-Local ship qualification/deployment is complete: 363 Java tests, full SQL/API/browser
-acceptance, 86% focused mutation detection, V44 upgrade and deployed browser smoke.
+M8 follow-ons include sourced points, selected rosters, personal presets, Counter
+squadrons and small-ship maneuvers. The Navigate-aware corvette slice adds private
+command queues, reveal-time banking, persistent speed and atomic dial/token movement;
+see `RULES_SHIP_NAVIGATION.md` for source, scope and qualification details.
+The prior ship baseline passed every hosted CI job at `cb6e874`, following the Node
+24.21.0 extraction fix. CI now also pins Ubuntu 24.04 and uses Node-24-based actions.
+Each release retains the full SQL/API/browser, privacy, replay and mutation gates.
 
 The primary priority is an actual rules-driven engine: executable game/mode JSON,
 a shared resumable interpreter and reusable mechanical modules, backed by a full
@@ -396,14 +394,14 @@ A feature is complete only when:
 
 ## Immediate Work Queue
 
-1. Run hosted fast/full/mutation/performance CI on the committed revision.
+1. Keep hosted fast/full/mutation/performance CI green on each committed release.
 2. Preserve the local browser/CPU, recovery, privacy and replay acceptance gates.
 3. Expand catalogue scope through classified rule migrations and richer R21 authoring tools.
 4. Expand the delivered player-selected roster capture (`RULES_ROSTER_SELECTION.md`)
    and personal fleet presets (`RULES_FLEET_PRESETS.md`) beyond the four-profile
    Counter squadron pack (`RULES_COUNTER_SQUADRONS.md`) and small-ship movement training
-   (`RULES_SHIP_MANEUVERS.md`) into command/overlap/combat rules and explicit
+   (`RULES_SHIP_MANEUVERS.md`, `RULES_SHIP_NAVIGATION.md`) into overlap/combat rules and explicit
    standard-format/cap policies.
 
-M0–M8 and the bounded ship-maneuver implementation/local gates are delivered; hosted release qualification remains pending. Preserve the
+M0–M8 and the bounded ship-maneuver baseline have passed local and hosted qualification. Preserve the
 combined command: `mvn -B "-Prules-full,rules-mutation" clean verify`.

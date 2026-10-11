@@ -44,8 +44,8 @@ verified:** see `RULES_ENGINE_M0_BASELINE.md` and `tools/rules-tests/README.md`.
 **M5's spatial/setup/scoring and headless CPU contracts are delivered:** see `RULES_SPATIAL_M5.md`.
 **M6's mode resolver and bounded catalogue migration are delivered:** see `RULES_MODES_M6.md`.
 **M7's generic client and persistent CPU path are implemented:** see `RULES_CLIENT_M7.md`.
-**M8's first setup slice is implemented:** see `RULES_M8_ARMADA_SLICE.md`. Hosted release CI and broader
-classified catalogue work are next. Remaining F08–F22 work should build on these
+**M8's first setup slice is implemented:** see `RULES_M8_ARMADA_SLICE.md`. The ship baseline passed hosted release CI at `cb6e874`;
+broader classified catalogue work continues. Remaining F08–F22 work should build on these
 contracts. Existing delivered foundations and their statuses below are retained.
 
 ## Prioritized fixes
@@ -58,9 +58,9 @@ contracts. Existing delivered foundations and their statuses below are retained.
 | F04 | P0 | Protect snapshot/definition consistency | Versioned profile/rules contracts, explicit old-state migration/restart policy; no automatic healing or rewriting past battles | Delivered: captured definitions + explicit restart |
 | F05 | P1 | Replace hardcoded phases and player-wide activation | Definition-selected phase/activation policies; active entity/group, step, action budgets, mandatory passes and phase completion | Core slice delivered |
 | F06 | P1 | Implement player-controlled hidden information | Seat ownership, per-player state/event projection, simultaneous submissions, response windows | Foundation delivered |
-| F07 | P1 | Implement command/planning mechanics | Optional queued-order module, capacity per entity, reveal timing, resource conversion and effect resolution | Foundation delivered |
-| F08 | P1 | Unify direct manipulation and CPU movement | Definition-selected continuous/grid/path movement; origin-based previews; legal facing; one commit boundary; shared validators | Planned |
-| F09 | P1 | Correct geometry and overlaps | Base shapes, zones, targeting points, destination occupancy, collision resolution policies, board-edge consequences | Planned |
+| F07 | P1 | Implement command/planning mechanics | Optional queued-order module, capacity per entity, reveal timing, resource conversion and effect resolution | Foundation plus sourced corvette Navigate queues, banking, payment and once-per-round rules delivered; other ship command effects remain |
+| F08 | P1 | Unify direct manipulation and CPU movement | Definition-selected continuous/grid/path movement; origin-based previews; legal facing; one commit boundary; shared validators | Shared interpreter movement, segmented-tool and command-paid previews delivered; richer direct manipulation remains |
+| F09 | P1 | Correct geometry and overlaps | Base shapes, zones, targeting points, destination occupancy, collision resolution policies, board-edge consequences | Analytic footprints, bounds and final-overlap rejection delivered; official collision resolution and consequences remain |
 | F10 | P1 | Replace simplified attack resolution | Attack-step state machine, selectable sources/targets, attack budgets, configurable dice faces/pools and modifiers; remove automatic-hit rule from normal combat | Planned |
 | F11 | P1 | Implement defensive responses and damage effects | Defender input, reusable resource/token effects, spend/exhaust/discard lifecycle, optional damage-deck and persistent-effect modules | Planned |
 | F12 | P1 | Separate unit-class activation/movement behavior | Traits select eligibility, movement measure, engagement rules and action budgets; no hardcoded ship/squadron split in shared engine | Squadron movement and sourced small-ship segmented-tool training delivered through separate JSON/module contracts; broader class interactions remain |
@@ -70,7 +70,7 @@ contracts. Existing delivered foundations and their statuses below are retained.
 | F16 | P2 | Replace decorative terrain/objectives with runtime objects | Geometry, placement rules, interactions, triggers and scoring; UI renders state rather than fixed shapes | Planned |
 | F17 | P2 | Implement upgrades, keywords and named effects | Optional loadouts, eligibility, reusable effect/timing hooks, executable support registry per revision | Generic squadron Counter/Swarm/Escort slice delivered in captured JSON; upgrades and broader named effects remain |
 | F18 | P2 | Complete refresh/end-of-round behavior | Definition-driven resource refresh, effect expiration, order cleanup, recurring/paid refresh, objective timing | Planned |
-| F19 | P2 | Adapt CPU to the selected mechanics | Budget-legal roster generation and activation-aware actions through shared interfaces; no privileged movement path | Planned |
+| F19 | P2 | Adapt CPU to the selected mechanics | Budget-legal roster generation and activation-aware actions through shared interfaces; no privileged movement path | Projection-only CPU and shared legal offers delivered; broader fleet generation and tactical improvements remain |
 | F20 | P2 | Correct labels and legal-action UI | Labels from definitions; distinguish current/min/max resources; selected-actor legal targets; previews from rules; preserve view settings | Planned |
 | F21 | P2 | Strengthen conformance and replay tests | Rules examples, real projection checks, negative authorization tests, deterministic outcomes, browser interaction checks | Planned |
 | F22 | P3 | Support specialist and campaign formats | Optional extra zones, reaction attacks, delayed deployment, campaign persistence, teams and tournament policy modules | Planned |

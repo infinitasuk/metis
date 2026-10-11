@@ -4,6 +4,9 @@
 `/rules` client and CPU submit the same speed, joint-yaw and tool-side inputs to the
 authoritative `maneuver:1` module. The pack is a closed movement-training format.
 
+The additive `armada-ship-navigation-v1` pack supplies persistent speed and Navigate
+command/dial/token timing; see [RULES_SHIP_NAVIGATION.md](RULES_SHIP_NAVIGATION.md).
+
 ## Play and supported scope
 
 An administrator imports a published Armada catalogue revision using:

@@ -20,8 +20,10 @@ public final class RulesRuntime {
     private final Map<String,Block> blocks=new TreeMap<>();
     private record Block(List<CompiledRules.Instruction> instructions,List<Map<String,RuleType>> scopes,
                          Map<String,RuleType> loopParent,String loopBinding,RuleType loopElement,int loopMaximum) { }
-    public record ManeuverControl(String entity,String speed,String yaw,String side,List<List<Integer>> chart) {
-        public ManeuverControl { chart=chart.stream().map(List::copyOf).toList(); }
+    public record ManeuverControl(String entity,String speed,String yaw,String side,List<List<Integer>> chart,
+                                  @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) List<Integer> speeds,
+                                  @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String note) {
+        public ManeuverControl { chart=chart.stream().map(List::copyOf).toList();if(speeds!=null)speeds=List.copyOf(speeds); }
     }
     public record Candidate(String action,Map<String,RuleType> parameters,int step,String entityParameter,String entity,
                             @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) ManeuverControl maneuver) {
@@ -221,13 +223,20 @@ public final class RulesRuntime {
     private ManeuverControl maneuverControl(RuntimeMachine machine,CompiledRules.Action action) {
         var hint=action.maneuver();if(hint==null)return null;
         var entity=machine.entities.get(machine.flow.entity());if(entity==null)return null;
-        var rows=machine.evaluate(hint.chart(),Map.of("actor",RuleValue.player(machine.actor),hint.entity(),RuleValue.entity(entity.type(),entity.id()))).items();
+        var locals=Map.of("actor",RuleValue.player(machine.actor),hint.entity(),RuleValue.entity(entity.type(),entity.id()));
+        var rows=machine.evaluate(hint.chart(),locals).items();
         require(!rows.isEmpty()&&rows.size()<=9,"MANEUVER_CHART","","Invalid control chart");var chart=new ArrayList<List<Integer>>();
         for(int speed=0;speed<rows.size();speed++) {
             var row=rows.get(speed).items();require(row.size()==speed&&row.stream().allMatch(v->v.integer()>=0&&v.integer()<=8),"MANEUVER_CHART","","Invalid control chart");
             chart.add(row.stream().map(v->(int)v.integer()).toList());
         }
-        return new ManeuverControl(hint.entity(),hint.speed(),hint.yaw(),hint.side(),chart);
+        List<Integer> speeds=null;
+        if(hint.speeds()!=null) {
+            var values=machine.evaluate(hint.speeds(),locals).items();
+            require(values.stream().allMatch(v->v.integer()>=0&&v.integer()<chart.size())&&new HashSet<>(values).size()==values.size(),"MANEUVER_SPEED","","Control speeds must be distinct chart rows");
+            speeds=values.stream().map(v->(int)v.integer()).toList();
+        }
+        return new ManeuverControl(hint.entity(),hint.speed(),hint.yaw(),hint.side(),chart,speeds,hint.note());
     }
     public List<String> eligibleEntities(RulesState state,String actor) {
         compatible(state);ready(state);var machine=visibleMachine(state,actor);machine.actorAllowed(actor);

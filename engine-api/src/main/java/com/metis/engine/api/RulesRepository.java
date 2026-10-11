@@ -55,6 +55,7 @@ public class RulesRepository {
     public String pricedCatalogueSource(long version,String names,String costs) { return jdbc.queryForObject("SELECT game_engine.fn_rules_catalogue_priced_source(?,?,?)",String.class,version,names,costs); }
     public String keywordCatalogueSource(long version,String names,String costs) { return jdbc.queryForObject("SELECT game_engine.fn_rules_catalogue_keyword_source(?,?,?)",String.class,version,names,costs); }
     public String maneuverCatalogueSource(long version,String names,String costs,String maneuvers) { return jdbc.queryForObject("SELECT game_engine.fn_rules_catalogue_maneuver_source(?,?,?,?)",String.class,version,names,costs,maneuvers); }
+    public String commandCatalogueSource(long version,String names,String costs,String maneuvers) { return jdbc.queryForObject("SELECT game_engine.fn_rules_catalogue_command_source(?,?,?,?)",String.class,version,names,costs,maneuvers); }
     public void registerCatalogue(long version,String pack,String mode,String name,long definition,String fingerprint,String snapshot,String scope) {
         call("game_engine.sp_rules_catalogue_register",version,pack,mode,name,definition,fingerprint,snapshot,scope);
     }

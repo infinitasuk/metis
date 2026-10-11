@@ -35,6 +35,7 @@ function maneuverJoints() {
  try{previous=parse(raw.value).map(Number);}catch{/* A new form starts with straight joints. */}
  const yaw=limits.map((limit,i)=>Number.isInteger(previous[i])&&Math.abs(previous[i])<=Number(limit)?previous[i]:0);raw.value=wire(yaw);
  const panel=$('maneuver-joints');panel.replaceChildren(element('p',limits.length?'Joint yaw · negative turns port, positive turns starboard. Preview checks the final base and used tool.':'Speed zero holds the current pose.'));
+ if(hint.note)panel.prepend(element('p',hint.note,{class:'muted','data-maneuver-note':'true'}));
  for(let i=0;i<limits.length;i++) {
   const wrapper=element('label',`Joint ${i+1} · up to ${limits[i]} clicks each way`),input=element('select',undefined,{'aria-label':`Joint ${i+1} yaw`,'data-joint':String(i)});
   for(let value=-Number(limits[i]);value<=Number(limits[i]);value++)input.append(option(String(value),value<0?`Port ${-value}`:value>0?`Starboard ${value}`:'Straight'));
@@ -78,7 +79,7 @@ function form() {
    const hint=candidate.maneuver;
    for(const [name,type] of Object.entries(candidate.parameters)) {
     const wrapper=element('label',`${label(name)} · ${typeName(type)}`);let input;
-    if(hint&&name===hint.speed) { input=element('select');hint.chart.forEach((row,speed)=>input.append(option(String(speed),`Speed ${speed}`))); }
+    if(hint&&name===hint.speed) { input=element('select');(hint.speeds??hint.chart.map((row,speed)=>speed)).forEach(speed=>input.append(option(String(speed),`Speed ${speed}`))); }
     else if(hint&&name===hint.side) { input=element('select');input.append(option('PORT','Port'),option('STARBOARD','Starboard')); }
     else if(hint&&name===hint.yaw) { input=element('input',undefined,{type:'hidden'});wrapper.hidden=true; }
     else if(type.kind==='ENTITY'||type.kind==='PLAYER') {
@@ -89,7 +90,7 @@ function form() {
    input.dataset.parameter=name;input.setAttribute('aria-label',name);
     const value=hint&&name===hint.entity?candidate.entity:cache&&Object.hasOwn(cache,name)?cache[name]:Object.hasOwn(defaults,name)?defaults[name]:name===candidate.entityParameter?candidate.entity:type.kind==='BOOLEAN'?false:type.kind==='LIST'?'[]':type.kind==='INTEGER'||type.kind==='DECIMAL'?'0':input.value||'';
    if(input.type==='checkbox')input.checked=value;
-   else { const text=Array.isArray(value)?wire(value):String(value??'');if(input.tagName==='SELECT'&&![...input.options].some(o=>o.value===text))input.append(option(text,text));input.value=text; }
+   else { const text=Array.isArray(value)?wire(value):String(value??'');if(hint?.speeds&&name===hint.speed)input.value=[...input.options].some(o=>o.value===text)?text:input.options[0]?.value||'';else {if(input.tagName==='SELECT'&&![...input.options].some(o=>o.value===text))input.append(option(text,text));input.value=text;} }
     input.oninput=()=>{if(hint&&name===hint.speed)maneuverJoints();rememberFields();inputsChanged();};wrapper.append(input);$('parameters').append(wrapper);
    }
    if(hint) { $('parameters').append(element('div',undefined,{id:'maneuver-joints',class:'maneuver-joints'}));maneuverJoints(); }
@@ -174,7 +175,7 @@ function drawBoard() {
      destination.append(svg('line',{x1:0,y1:0,x2:body.shape==='RECTANGLE'?Number(body.width)/2:body.radius,y2:0,stroke:'#ffe285','stroke-width':width/400}));surface.append(destination);
     }
     const number=value=>Number(value).toFixed(4).replace(/\.?0+$/,'');
-    $('maneuver-measurement').textContent=`Speed ${trace.speed} · ${trace.side.toLowerCase()} tool · yaw [${trace.yaw.join(', ')}] · final (${number(move.to.x)}, ${number(move.to.y)}) ${move.unit} · heading ${number(move.to.heading)}°`;
+    $('maneuver-measurement').textContent=`Speed ${trace.speed} · ${trace.side.toLowerCase()} tool · yaw [${trace.yaw.join(', ')}] · final (${number(move.to.x)}, ${number(move.to.y)}) ${move.unit} · heading ${number(move.to.heading)}°`+(preview.resources.length?' · Resources: '+preview.resources.map(r=>`${label(r.resource)} ${r.before} → ${r.after}`).join(', '):'');
    }
  }
 }

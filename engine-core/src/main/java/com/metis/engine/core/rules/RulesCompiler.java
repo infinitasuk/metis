@@ -137,7 +137,8 @@ public final class RulesCompiler {
                         "MANEUVER_CONTROL",at,"Bind distinct entity, integer speed, integer-list yaw and string side parameters");
                 var hintEnv=scope.environment(Map.of(entity,parameters.get(entity)),at);scope.bind(hintEnv,"actor",RuleType.PLAYER,at);
                 var chart=compiler.expression(hint.get("chart"),hintEnv,at+"/chart");scope.type(RuleType.list(RuleType.list(RuleType.INTEGER)),chart,chart.path());
-                maneuver=new CompiledRules.ManeuverControl(entity,speed,yaw,side,chart);
+                Expression speeds=null;if(hint.has("speeds")) { speeds=compiler.expression(hint.get("speeds"),hintEnv,at+"/speeds");scope.type(RuleType.list(RuleType.INTEGER),speeds,speeds.path()); }
+                maneuver=new CompiledRules.ManeuverControl(entity,speed,yaw,side,chart,speeds,hint.has("note")?hint.get("note").textValue():null);
             }
             actions.put(name,new CompiledRules.Action(parameters,available,procedure,compiler.arguments(action.get("args"),compiler.procedure(procedure,path+"/procedure"),env,path+"/args"),choices,action.path("priority").asInt(0),movement,maneuver));
         }

@@ -182,6 +182,10 @@ authoritative rotated-base previews and shared human/CPU recovery/replay. Import
 recipe: `armada-ship-maneuvers-v1`. Its explicit TTS-coordinate training calibration
 and final-overlap rejection policy are documented with the captured sources.
 
+See [RULES_SHIP_NAVIGATION.md](RULES_SHIP_NAVIGATION.md) for persistent speed,
+private command queues, reveal-time token banking and atomic Navigate dial/token
+movement. Import recipe: `armada-ship-navigation-v1`.
+
 - `RULES_ENGINE_DEVELOPMENT_PLAN.md` is the primary delivery plan: establish a
   working rules-driven engine through milestones M0–M7 before extending battle UI.
 - `RULES_ENGINE_TEST_PLAN.md` specifies the full automated suite, CI, deterministic

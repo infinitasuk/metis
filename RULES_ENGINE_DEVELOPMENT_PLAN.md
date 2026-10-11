@@ -319,9 +319,11 @@ squadrons with Counter, Swarm and Escort interactions.
 The first ship slice is implemented in `RULES_SHIP_MANEUVERS.md`: two sourced small
 ships, immutable maneuver/calibration capture, a generic segmented-tool module,
 speed/yaw/side controls and shared preview/CPU/recovery tests. Its movement-training
-format uses explicit TTS coordinates and rejects invalid final overlaps. Further
-ship work needs command-driven speed/yaw modification, official overlap resolution,
-combat and explicit full-format/cap policies.
+format uses explicit TTS coordinates and rejects invalid final overlaps.
+`RULES_SHIP_NAVIGATION.md` adds sourced command ratings, private FIFO planning,
+reveal-time banking, persistent speed and atomic Navigate dial/token movement through
+the existing modules. Further ship work needs official overlap resolution, combat
+and explicit full-format/cap policies.
 
 ## Definition of done for this initiative
 
@@ -342,7 +344,7 @@ combat and explicit full-format/cap policies.
 ## Immediate implementation queue
 
 1. Preserve the M0–M7 regression, recovery, browser, coverage, mutation and benchmark gates.
-2. Run hosted fast/full/mutation/performance CI on the committed revision to complete
-   release qualification; local execution is recorded separately.
+2. Preserve hosted fast/full/mutation/performance qualification on each release.
+   The baseline passed all hosted jobs at `cb6e874`; local results remain separately recorded.
 3. Expand catalogue scope through explicit definitions and the H01–H22 classifications
    in `RULES_MODES_M6.md`, then pursue R21's richer authoring/inspection tools.

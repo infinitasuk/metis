@@ -1,0 +1,113 @@
+{
+ "pack":"armada-ship-navigation-v1","game":"Star Wars: Armada","definition":"armada-ship-navigation-v1","title":"Navigate-aware corvette training","classification":"Ship",
+ "extendsPack":"armada-ship-maneuvers","pointsSource":"bsdata-armada-ships-47bfca1","maneuverSource":"tts-armada-small-598f774","captureCommands":true,
+ "units":["CR90 Corvette A","Raider I-class Corvette"],
+ "rulesSource":{"version":"1.6.0","url":"https://cdn.svc.asmodee.net/production-amgcom/uploads/2025/01/SWM_Rules_Reference_Guide_1.6.0_web.pdf","sha256":"c48ee9e97676aec77e998b58d36fe88e3024740a7206060352f64531c472e7fb","sections":["Command Dials, Command Phase, Command Tokens (p3)","Commands: Navigate, combined payment, once per round, no-effect resolution (p4)","Setup (p16)","Ship Activation and Ship Movement (p17)","Speed (p19)","Yaw (p22)"]},
+ "scope":{
+  "supported":["Sourced CR90 Corvette A / Raider I profiles, 44-point one-ship rosters and command value 1","Initial speed 1–4, persistent current speed, private FIFO command planning and public reveal","Navigate dial: speed change up to one and/or one extra yaw click at one joint, capped at two clicks","Navigate token: speed change up to one; combined dial/token: up to two plus the dial's single yaw bonus","Bank Navigate tokens only at reveal; duplicate newly gained tokens are discarded; retained tokens persist across rounds","Navigate payment and movement commit atomically; one Navigate resolution per ship per round","Shared human/CPU choices, authoritative preview, retry, reload and replay"],
+  "inapplicable":["Repair, Squadron and Concentrate Fire dials may be planned/revealed but their effects are declined in this movement-only course"],
+  "unsupported":["Banking or resolving non-Navigate command tokens","Ship combat, shields, obstacles, squadrons, upgrades, fleet formats and official victory scoring","Official overlap resolution, collision damage and off-board destruction","Physical ruler certification; inherited TTS coordinates and training tool envelope"],
+  "geometry":"Inherited pinned tts calibration and final-overlap rejection policy; no speed/yaw exceptions from upgrades."
+ },
+ "overrides":[
+  {"op":"add","path":"/modules/queues","value":"1"},{"op":"add","path":"/modules/resources","value":"1"},
+  {"op":"add","path":"/state/commandRatings","value":{"type":{"list":"integer"},"initial":[1,1],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/commandSources","value":{"type":{"list":"string"},"initial":["",""],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/commandSlots","value":{"type":{"list":"integer"},"initial":[0,1,2,3],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/jointSlots","value":{"type":{"list":"integer"},"initial":[0,1,2,3],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/maximumYaw","value":{"type":"integer","initial":2,"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/speedChoices","value":{"type":{"list":"integer"},"initial":[2,1,3,4,0],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/state/orders","value":{"type":{"list":"string"},"initial":["navigate","repair","squadron","concentrateFire"],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/entities/ship/attributes/commandValue","value":{"type":"integer","initial":1,"visibility":"PUBLIC"}},
+  {"op":"add","path":"/entities/ship/attributes/orders","value":{"type":{"list":"string"},"initial":[],"visibility":"OWNER"}},
+  {"op":"add","path":"/entities/ship/attributes/revealedCommand","value":{"type":"string","initial":"","visibility":"PUBLIC"}},
+  {"op":"add","path":"/entities/ship/attributes/dialChart","value":{"type":{"list":{"list":"integer"}},"initial":[],"visibility":"PUBLIC"}},
+  {"op":"add","path":"/entities/ship/resources/navigateDial","value":{"initial":0,"minimum":0,"maximum":1,"visibility":"PUBLIC"}},
+  {"op":"add","path":"/entities/ship/resources/navigateToken","value":{"initial":0,"minimum":0,"maximum":1,"visibility":"PUBLIC"}},
+  {"op":"add","path":"/events/commandRevealed","value":{"visibility":"PUBLIC","fields":{"entity":"entity:ship","command":"string"}}},
+  {"op":"add","path":"/events/commandDeclined","value":{"visibility":"PUBLIC","fields":{"entity":"entity:ship","command":"string"}}},
+  {"op":"add","path":"/events/navigateTokenBanked","value":{"visibility":"PUBLIC","fields":{"entity":"entity:ship","duplicateDiscarded":"boolean"}}},
+  {"op":"add","path":"/events/navigationResolved","value":{"visibility":"PUBLIC","fields":{"entity":"entity:ship","oldSpeed":"integer","speed":"integer","dial":"boolean","token":"boolean"}}},
+  {"op":"replace","path":"/setup","value":"prepareNavigation"},
+  {"op":"add","path":"/procedures/prepareNavigation","value":{"parameters":{},"steps":[
+   {"op":"core.call","procedure":"prepare","args":{}},
+   {"op":"core.forEach","source":{"list":{"elementType":"integer","items":[0,1]}},"as":"profile","maxItems":2,"steps":[
+    {"op":"core.forEach","source":{"filter":{"source":{"entities":"ship"},"as":"candidate","where":{"op":"eq","args":[{"get":{"entity":{"var":"candidate"},"field":"catalogueId"}},{"op":"at","args":[{"state":"catalogueIds"},{"var":"profile"}]}]}}},"as":"unit","maxItems":2,"steps":[
+     {"op":"core.setAttribute","entity":{"var":"unit"},"field":"commandValue","value":{"op":"at","args":[{"state":"commandRatings"},{"var":"profile"}]}},
+     {"op":"core.setAttribute","entity":{"var":"unit"},"field":"dialChart","value":{"map":{"source":{"get":{"entity":{"var":"unit"},"field":"chart"}},"as":"row","value":{"map":{"source":{"var":"row"},"as":"limit","value":{"op":"add","args":[{"var":"limit"},{"op":"count","args":[{"filter":{"source":{"list":{"elementType":"integer","items":[1]}},"as":"bonus","where":{"op":"lt","args":[{"var":"limit"},{"state":"maximumYaw"}]}}}]}]}}}}}}
+    ]}
+   ]}
+  ]}},
+  {"op":"replace","path":"/procedures/deploy","value":{"parameters":{"entity":"entity:ship","x":"decimal","y":"decimal","heading":"decimal","zone":"string","speed":"integer"},"steps":[
+   {"op":"scenario.require","args":{"condition":{"op":"and","args":[{"op":"gt","args":[{"var":"speed"},0]},{"op":"lte","args":[{"var":"speed"},{"get":{"entity":{"var":"entity"},"field":"maxSpeed"}}]}]},"code":"DEPLOY_SPEED"}},
+   {"op":"space.deploy","args":{"entity":{"var":"entity"},"x":{"var":"x"},"y":{"var":"y"},"heading":{"var":"heading"},"zone":{"var":"zone"}}},
+   {"op":"core.setAttribute","entity":{"var":"entity"},"field":"speed","value":{"var":"speed"}}
+  ]}},
+  {"op":"add","path":"/actions/deploy/parameters/speed","value":"integer"},
+  {"op":"add","path":"/actions/deploy/args/speed","value":{"var":"speed"}},
+  {"op":"add","path":"/actions/deploy/choices/speed","value":{"filter":{"source":{"state":"speedChoices"},"as":"s","where":{"op":"and","args":[{"op":"gt","args":[{"var":"s"},0]},{"op":"lte","args":[{"var":"s"},{"get":{"entity":{"var":"entity"},"field":"maxSpeed"}}]}]}}}},
+  {"op":"add","path":"/procedures/planOrders","value":{"parameters":{"entity":"entity:ship","orders":{"list":"string"}},"steps":[
+   {"op":"queues.plan","args":{"entity":{"var":"entity"},"field":"orders","capacity":{"get":{"entity":{"var":"entity"},"field":"commandValue"}},"orders":{"var":"orders"},"allowed":{"state":"orders"}}},
+   {"op":"queues.commit","args":{"entity":{"var":"entity"},"field":"orders"}},
+   {"op":"core.setAttribute","entity":{"var":"entity"},"field":"revealedCommand","value":""}
+  ]}},
+  {"op":"add","path":"/actions/planOrders","value":{"parameters":{"entity":"entity:ship","orders":{"list":"string"}},"availableWhen":{"op":"eq","args":[{"owner":{"var":"entity"}},{"var":"actor"}]},"procedure":"planOrders","args":{"entity":{"var":"entity"},"orders":{"var":"orders"}},"choices":{
+   "entity":{"filter":{"source":{"entities":"ship"},"as":"unit","where":{"op":"eq","args":[{"owner":{"var":"unit"}},{"var":"actor"}]}}},
+   "orders":{"map":{"source":{"state":"orders"},"as":"command","value":{"map":{"source":{"filter":{"source":{"state":"commandSlots"},"as":"slot","where":{"op":"lt","args":[{"var":"slot"},{"op":"sub","args":[{"get":{"entity":{"var":"entity"},"field":"commandValue"}},{"op":"count","args":[{"get":{"entity":{"var":"entity"},"field":"orders"}}]}]}]}}},"as":"slot","value":{"var":"command"}}}}}
+  }}},
+  {"op":"add","path":"/procedures/revealCommand","value":{"parameters":{"actor":"player","entity":"entity:ship"},"steps":[
+   {"op":"queues.reveal","args":{"entity":{"var":"entity"},"field":"orders"},"as":"order"},
+   {"op":"core.setAttribute","entity":{"var":"entity"},"field":"revealedCommand","value":{"var":"order"}},
+   {"op":"core.emit","event":"commandRevealed","values":{"entity":{"var":"entity"},"command":{"var":"order"}}},
+   {"op":"resources.reset","args":{"entity":{"var":"entity"},"resource":"navigateDial","value":0}},
+   {"op":"core.if","condition":{"op":"eq","args":[{"var":"order"},"navigate"]},"then":[
+    {"op":"resources.reset","args":{"entity":{"var":"entity"},"resource":"navigateDial","value":1}},
+    {"op":"core.choose","player":{"var":"actor"},"options":{"list":{"elementType":"string","items":["keepDial","bankToken"]}},"as":"disposition","visibility":"PUBLIC"},
+    {"op":"core.if","condition":{"op":"eq","args":[{"var":"disposition"},"bankToken"]},"then":[
+     {"op":"core.let","name":"duplicate","value":{"op":"gt","args":[{"resource":{"entity":{"var":"entity"},"field":"navigateToken"}},0]}},
+     {"op":"core.if","condition":{"var":"duplicate"},"then":[{"op":"core.modifyResource","entity":{"var":"entity"},"resource":"navigateDial","delta":-1}],"else":[{"op":"resources.convert","args":{"entity":{"var":"entity"},"from":"navigateDial","to":"navigateToken","spend":1,"gain":1}}]},
+     {"op":"core.emit","event":"navigateTokenBanked","values":{"entity":{"var":"entity"},"duplicateDiscarded":{"var":"duplicate"}}}
+    ],"else":[]}
+   ],"else":[{"op":"core.emit","event":"commandDeclined","values":{"entity":{"var":"entity"},"command":{"var":"order"}}}]}
+  ]}},
+  {"op":"add","path":"/actions/revealCommand","value":{"parameters":{"entity":"entity:ship"},"availableWhen":true,"procedure":"revealCommand","args":{"actor":{"var":"actor"},"entity":{"var":"entity"}},"choices":{"entity":{"entities":"ship"}}}},
+  {"op":"replace","path":"/procedures/maneuver","value":{"parameters":{"entity":"entity:ship","speed":"integer","yaw":{"list":"integer"},"side":"string","dial":"boolean","token":"boolean","change":"integer","chart":{"list":{"list":"integer"}}},"steps":[
+   {"op":"core.let","name":"oldSpeed","value":{"get":{"entity":{"var":"entity"},"field":"speed"}}},
+   {"op":"scenario.require","args":{"condition":{"op":"and","args":[{"op":"gte","args":[{"var":"speed"},0]},{"op":"lte","args":[{"var":"speed"},{"get":{"entity":{"var":"entity"},"field":"maxSpeed"}}]},{"op":"gte","args":[{"var":"speed"},{"op":"sub","args":[{"var":"oldSpeed"},{"var":"change"}]}]},{"op":"lte","args":[{"var":"speed"},{"op":"add","args":[{"var":"oldSpeed"},{"var":"change"}]}]}]},"code":"NAVIGATE_SPEED"}},
+   {"op":"scenario.require","args":{"condition":{"op":"eq","args":[{"op":"count","args":[{"var":"yaw"}]},{"var":"speed"}]},"code":"NAVIGATE_JOINTS"}},
+   {"op":"core.if","condition":{"var":"dial"},"then":[
+    {"op":"core.let","name":"printed","value":{"op":"at","args":[{"get":{"entity":{"var":"entity"},"field":"chart"}},{"var":"speed"}]}},
+    {"op":"scenario.require","args":{"condition":{"op":"lte","args":[{"op":"count","args":[{"filter":{"source":{"state":"jointSlots"},"as":"joint","where":{"op":"and","args":[{"op":"lt","args":[{"var":"joint"},{"var":"speed"}]},{"op":"or","args":[{"op":"gt","args":[{"op":"at","args":[{"var":"yaw"},{"var":"joint"}]},{"op":"at","args":[{"var":"printed"},{"var":"joint"}]}]},{"op":"lt","args":[{"op":"at","args":[{"var":"yaw"},{"var":"joint"}]},{"op":"sub","args":[0,{"op":"at","args":[{"var":"printed"},{"var":"joint"}]}]}]}]}]}}}]},1]},"code":"NAVIGATE_YAW_BONUS"}}
+   ],"else":[]},
+   {"op":"core.if","condition":{"op":"or","args":[{"var":"dial"},{"var":"token"}]},"then":[{"op":"resources.once","args":{"entity":{"var":"entity"},"key":"navigate","period":"ROUND"}}],"else":[]},
+   {"op":"core.if","condition":{"var":"dial"},"then":[{"op":"core.modifyResource","entity":{"var":"entity"},"resource":"navigateDial","delta":-1}],"else":[]},
+   {"op":"core.if","condition":{"var":"token"},"then":[{"op":"core.modifyResource","entity":{"var":"entity"},"resource":"navigateToken","delta":-1}],"else":[]},
+   {"op":"maneuver.move","args":{"entity":{"var":"entity"},"speed":{"var":"speed"},"yaw":{"var":"yaw"},"side":{"var":"side"},"chart":{"var":"chart"},"segment":{"state":"segment"},"angle":{"state":"yawAngle"},"anchor":{"state":"anchor"},"toolWidth":{"state":"toolWidth"},"collisions":true}},
+   {"op":"core.setAttribute","entity":{"var":"entity"},"field":"speed","value":{"var":"speed"}},
+   {"op":"core.emit","event":"navigationResolved","values":{"entity":{"var":"entity"},"oldSpeed":{"var":"oldSpeed"},"speed":{"var":"speed"},"dial":{"var":"dial"},"token":{"var":"token"}}},
+   {"op":"resources.reset","args":{"entity":{"var":"entity"},"resource":"navigateDial","value":0}}
+  ]}},
+  {"op":"replace","path":"/actions/maneuver","value":{"parameters":{"entity":"entity:ship","speed":"integer","yaw":{"list":"integer"},"side":"string"},"availableWhen":true,"procedure":"maneuver","args":{"entity":{"var":"entity"},"speed":{"var":"speed"},"yaw":{"var":"yaw"},"side":{"var":"side"},"dial":false,"token":false,"change":0,"chart":{"get":{"entity":{"var":"entity"},"field":"chart"}}},"preview":"MOVEMENT","priority":10,
+   "maneuver":{"entity":"entity","speed":"speed","yaw":"yaw","side":"side","chart":{"get":{"entity":{"var":"entity"},"field":"chart"}},"speeds":{"list":{"elementType":"integer","items":[{"get":{"entity":{"var":"entity"},"field":"speed"}}]}},"note":"Maintain current speed and printed yaw. No Navigate payment; an unused dial is discarded after the maneuver."},
+   "choices":{"entity":{"entities":"ship"},"side":{"list":{"elementType":"string","items":["PORT","STARBOARD"]}},"speed":{"list":{"elementType":"integer","items":[{"get":{"entity":{"var":"entity"},"field":"speed"}}]}},"yaw":{"query":{"op":"maneuver.options","args":{"entity":{"var":"entity"},"speed":{"var":"speed"},"side":{"var":"side"},"chart":{"get":{"entity":{"var":"entity"},"field":"chart"}},"segment":{"state":"segment"},"angle":{"state":"yawAngle"},"anchor":{"state":"anchor"},"toolWidth":{"state":"toolWidth"},"collisions":true}}}}
+  }},
+  {"op":"add","path":"/actions/navigateDial","value":{"parameters":{"entity":"entity:ship","speed":"integer","yaw":{"list":"integer"},"side":"string"},"availableWhen":{"op":"and","args":[{"op":"gt","args":[{"resource":{"entity":{"var":"entity"},"field":"navigateDial"}},0]},{"op":"not","args":[{"query":{"op":"resources.used","args":{"entity":{"var":"entity"},"key":"navigate","period":"ROUND"}}}]}]},"procedure":"maneuver","args":{"entity":{"var":"entity"},"speed":{"var":"speed"},"yaw":{"var":"yaw"},"side":{"var":"side"},"dial":true,"token":false,"change":1,"chart":{"get":{"entity":{"var":"entity"},"field":"dialChart"}}},"preview":"MOVEMENT","priority":20,
+   "maneuver":{"entity":"entity","speed":"speed","yaw":"yaw","side":"side","chart":{"get":{"entity":{"var":"entity"},"field":"dialChart"}},"speeds":{"filter":{"source":{"state":"speedChoices"},"as":"s","where":{"op":"and","args":[{"op":"lte","args":[{"var":"s"},{"get":{"entity":{"var":"entity"},"field":"maxSpeed"}}]},{"op":"gte","args":[{"var":"s"},{"op":"sub","args":[{"get":{"entity":{"var":"entity"},"field":"speed"}},1]}]},{"op":"lte","args":[{"var":"s"},{"op":"add","args":[{"get":{"entity":{"var":"entity"},"field":"speed"}},1]}]}]}}},"note":"Spend the revealed Navigate dial: change speed by up to one and/or use one bonus yaw click across the whole maneuver. Each joint is capped at two clicks."},
+   "choices":{"entity":{"entities":"ship"},"side":{"list":{"elementType":"string","items":["PORT","STARBOARD"]}},"speed":{"filter":{"source":{"state":"speedChoices"},"as":"s","where":{"op":"and","args":[{"op":"lte","args":[{"var":"s"},{"get":{"entity":{"var":"entity"},"field":"maxSpeed"}}]},{"op":"gte","args":[{"var":"s"},{"op":"sub","args":[{"get":{"entity":{"var":"entity"},"field":"speed"}},1]}]},{"op":"lte","args":[{"var":"s"},{"op":"add","args":[{"get":{"entity":{"var":"entity"},"field":"speed"}},1]}]}]}}},"yaw":{"query":{"op":"maneuver.options","args":{"entity":{"var":"entity"},"speed":{"var":"speed"},"side":{"var":"side"},"chart":{"get":{"entity":{"var":"entity"},"field":"dialChart"}},"segment":{"state":"segment"},"angle":{"state":"yawAngle"},"anchor":{"state":"anchor"},"toolWidth":{"state":"toolWidth"},"collisions":true}}}}
+  }},
+  {"op":"add","path":"/actions/navigateToken","value":{"parameters":{"entity":"entity:ship","speed":"integer","yaw":{"list":"integer"},"side":"string"},"availableWhen":{"op":"and","args":[{"op":"gt","args":[{"resource":{"entity":{"var":"entity"},"field":"navigateToken"}},0]},{"op":"not","args":[{"query":{"op":"resources.used","args":{"entity":{"var":"entity"},"key":"navigate","period":"ROUND"}}}]}]},"procedure":"maneuver","args":{"entity":{"var":"entity"},"speed":{"var":"speed"},"yaw":{"var":"yaw"},"side":{"var":"side"},"dial":false,"token":true,"change":1,"chart":{"get":{"entity":{"var":"entity"},"field":"chart"}}},"preview":"MOVEMENT","priority":15,
+   "maneuver":{"entity":"entity","speed":"speed","yaw":"yaw","side":"side","chart":{"get":{"entity":{"var":"entity"},"field":"chart"}},"speeds":{"filter":{"source":{"state":"speedChoices"},"as":"s","where":{"op":"and","args":[{"op":"lte","args":[{"var":"s"},{"get":{"entity":{"var":"entity"},"field":"maxSpeed"}}]},{"op":"gte","args":[{"var":"s"},{"op":"sub","args":[{"get":{"entity":{"var":"entity"},"field":"speed"}},1]}]},{"op":"lte","args":[{"var":"s"},{"op":"add","args":[{"get":{"entity":{"var":"entity"},"field":"speed"}},1]}]}]}}},"note":"Spend one Navigate token: change speed by up to one. Printed yaw applies; a token grants no bonus yaw. An unused dial is discarded after the maneuver."},
+   "choices":{"entity":{"entities":"ship"},"side":{"list":{"elementType":"string","items":["PORT","STARBOARD"]}},"speed":{"filter":{"source":{"state":"speedChoices"},"as":"s","where":{"op":"and","args":[{"op":"lte","args":[{"var":"s"},{"get":{"entity":{"var":"entity"},"field":"maxSpeed"}}]},{"op":"gte","args":[{"var":"s"},{"op":"sub","args":[{"get":{"entity":{"var":"entity"},"field":"speed"}},1]}]},{"op":"lte","args":[{"var":"s"},{"op":"add","args":[{"get":{"entity":{"var":"entity"},"field":"speed"}},1]}]}]}}},"yaw":{"query":{"op":"maneuver.options","args":{"entity":{"var":"entity"},"speed":{"var":"speed"},"side":{"var":"side"},"chart":{"get":{"entity":{"var":"entity"},"field":"chart"}},"segment":{"state":"segment"},"angle":{"state":"yawAngle"},"anchor":{"state":"anchor"},"toolWidth":{"state":"toolWidth"},"collisions":true}}}}
+  }},
+  {"op":"add","path":"/actions/navigateDialAndToken","value":{"parameters":{"entity":"entity:ship","speed":"integer","yaw":{"list":"integer"},"side":"string"},"availableWhen":{"op":"and","args":[{"op":"gt","args":[{"resource":{"entity":{"var":"entity"},"field":"navigateDial"}},0]},{"op":"gt","args":[{"resource":{"entity":{"var":"entity"},"field":"navigateToken"}},0]},{"op":"not","args":[{"query":{"op":"resources.used","args":{"entity":{"var":"entity"},"key":"navigate","period":"ROUND"}}}]}]},"procedure":"maneuver","args":{"entity":{"var":"entity"},"speed":{"var":"speed"},"yaw":{"var":"yaw"},"side":{"var":"side"},"dial":true,"token":true,"change":2,"chart":{"get":{"entity":{"var":"entity"},"field":"dialChart"}}},"preview":"MOVEMENT","priority":25,
+   "maneuver":{"entity":"entity","speed":"speed","yaw":"yaw","side":"side","chart":{"get":{"entity":{"var":"entity"},"field":"dialChart"}},"speeds":{"filter":{"source":{"state":"speedChoices"},"as":"s","where":{"op":"and","args":[{"op":"lte","args":[{"var":"s"},{"get":{"entity":{"var":"entity"},"field":"maxSpeed"}}]},{"op":"gte","args":[{"var":"s"},{"op":"sub","args":[{"get":{"entity":{"var":"entity"},"field":"speed"}},2]}]},{"op":"lte","args":[{"var":"s"},{"op":"add","args":[{"get":{"entity":{"var":"entity"},"field":"speed"}},2]}]}]}}},"note":"Spend the Navigate dial and token together: change speed by up to two and/or use one bonus yaw click across the whole maneuver. This is one Navigate resolution."},
+   "choices":{"entity":{"entities":"ship"},"side":{"list":{"elementType":"string","items":["PORT","STARBOARD"]}},"speed":{"filter":{"source":{"state":"speedChoices"},"as":"s","where":{"op":"and","args":[{"op":"lte","args":[{"var":"s"},{"get":{"entity":{"var":"entity"},"field":"maxSpeed"}}]},{"op":"gte","args":[{"var":"s"},{"op":"sub","args":[{"get":{"entity":{"var":"entity"},"field":"speed"}},2]}]},{"op":"lte","args":[{"var":"s"},{"op":"add","args":[{"get":{"entity":{"var":"entity"},"field":"speed"}},2]}]}]}}},"yaw":{"query":{"op":"maneuver.options","args":{"entity":{"var":"entity"},"speed":{"var":"speed"},"side":{"var":"side"},"chart":{"get":{"entity":{"var":"entity"},"field":"dialChart"}},"segment":{"state":"segment"},"angle":{"state":"yawAngle"},"anchor":{"state":"anchor"},"toolWidth":{"state":"toolWidth"},"collisions":true}}}}
+  }},
+  {"op":"replace","path":"/flow/roundStart","value":"planning"},
+  {"op":"replace","path":"/flow/phases/deployment/next","value":"planning"},
+  {"op":"add","path":"/flow/phases/planning","value":{"controller":"SIMULTANEOUS","groupSize":1,"steps":[{"id":"plan","actions":["planOrders"],"minimum":1,"maximum":1}],"next":"navigation"}},
+  {"op":"replace","path":"/flow/phases/navigation/steps","value":[{"id":"reveal","actions":["revealCommand"],"minimum":1,"maximum":1},{"id":"maneuver","actions":["maneuver","navigateDial","navigateToken","navigateDialAndToken"],"minimum":1,"maximum":1}]},
+  {"op":"replace","path":"/flow/phases/scoring/next","value":"planning"}
+ ],
+ "modes":[{"code":"short-course","name":"Short course","overrides":[{"op":"replace","path":"/state/roundLimit/initial","value":3}]}]
+}

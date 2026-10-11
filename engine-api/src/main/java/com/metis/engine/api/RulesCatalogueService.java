@@ -20,7 +20,8 @@ public class RulesCatalogueService {
             "armada-squadron-points-v1","armada-squadron-points",
             "armada-squadron-rosters-v1","armada-squadron-rosters",
             "armada-squadron-counter-v1","armada-squadron-counter",
-            "armada-ship-maneuvers-v1","armada-ship-maneuvers");
+            "armada-ship-maneuvers-v1","armada-ship-maneuvers",
+            "armada-ship-navigation-v1","armada-ship-navigation");
     private final RulesRepository repository;
     private final RulesService rules;
     public RulesCatalogueService(RulesRepository repository,RulesService rules) { this.repository=repository;this.rules=rules; }
@@ -47,7 +48,8 @@ public class RulesCatalogueService {
         long version=request.get("gameVersionId").longValue();String packId=request.get("pack").textValue(),file=PACKS.get(packId);check(file!=null,422,"CATALOGUE_PACK_UNKNOWN");
         check(repository.lockCatalogue(version),409,"CATALOGUE_NOT_PUBLISHED");var pack=resource(file+".pack");
         var template=template(file,pack,new HashSet<>());
-        String source=pack.has("maneuverSource")?repository.maneuverCatalogueSource(version,pack.get("units").toString(),pack.get("pointsSource").textValue(),pack.get("maneuverSource").textValue())
+        String source=pack.path("captureCommands").asBoolean()?repository.commandCatalogueSource(version,pack.get("units").toString(),pack.get("pointsSource").textValue(),pack.get("maneuverSource").textValue())
+                :pack.has("maneuverSource")?repository.maneuverCatalogueSource(version,pack.get("units").toString(),pack.get("pointsSource").textValue(),pack.get("maneuverSource").textValue())
                 :pack.path("captureKeywords").asBoolean()?repository.keywordCatalogueSource(version,pack.get("units").toString(),pack.get("pointsSource").textValue())
                 :pack.has("pointsSource")?repository.pricedCatalogueSource(version,pack.get("units").toString(),pack.get("pointsSource").textValue())
                 :repository.catalogueSource(version,pack.get("units").toString());
@@ -83,7 +85,7 @@ public class RulesCatalogueService {
     /** Translate only measured catalogue data; all timing, targeting, symbols and endings stay in JSON. */
     static void populate(ObjectNode template,JsonNode snapshot,JsonNode pack) {
         var units=snapshot.path("units");check(units.isArray()&&units.size()==pack.get("units").size(),422,"CATALOGUE_PROFILE_MISSING");
-        if(pack.has("maneuverSource")) { populateManeuvers(template,units,pack);populatePoints(template,units);return; }
+        if(pack.has("maneuverSource")) { populateManeuvers(template,units,pack);populatePoints(template,units);if(pack.path("captureCommands").asBoolean())populateCommands(template,units);return; }
         var names=JsonNodeFactory.instance.arrayNode();var ids=names.deepCopy();var factions=names.deepCopy();var hulls=names.deepCopy();var speeds=names.deepCopy();var pools=names.deepCopy();BigDecimal radius=null;
         for(int i=0;i<units.size();i++) {
             var unit=units.get(i);check(unit.path("displayName").asText().equals(pack.get("units").get(i).textValue())&&unit.path("classification").asText().equals(pack.get("classification").textValue()),422,"CATALOGUE_PROFILE_MISMATCH");
@@ -180,6 +182,22 @@ public class RulesCatalogueService {
     }
     private RulesRepository.Catalogue entry(long id) {
         return repository.catalogue().stream().filter(e->e.id()==id).findFirst().orElseThrow(()->new RulesService.Failure(404,"CATALOGUE_ENTRY_NOT_FOUND"));
+    }
+    private static void populateCommands(ObjectNode template,JsonNode units) {
+        var ratings=JsonNodeFactory.instance.arrayNode();var sources=ratings.deepCopy();int maximum=template.at("/state/commandSlots/initial").size();
+        for(var unit:units) {
+            var value=unit.path("commandValue");check(value.isIntegralNumber()&&value.canConvertToInt()&&value.intValue()>0&&value.intValue()<=maximum,422,"CATALOGUE_COMMAND_VALUE");
+            var source=unit.path("commandSource");var characteristic=source.path("characteristic");var provenance=unit.path("pointsSource");
+            check(source.isObject()&&source.path("rawValue").isTextual()&&source.path("provenance").equals(provenance)
+                    &&characteristic.path("characteristic").asText().equals("Command")&&characteristic.path("profile").asText().equals(unit.path("displayName").asText())
+                    &&characteristic.path("catalogue").equals(provenance.get("file"))&&characteristic.path("revision").equals(provenance.get("revision")),422,"CATALOGUE_COMMAND_SOURCE");
+            try { check(new BigDecimal(source.get("rawValue").textValue()).compareTo(BigDecimal.valueOf(value.intValue()))==0,422,"CATALOGUE_COMMAND_SOURCE"); }
+            catch(NumberFormatException error) { throw new RulesService.Failure(422,"CATALOGUE_COMMAND_SOURCE"); }
+            check(unit.get("maneuverChart").size()<=template.at("/state/jointSlots/initial").size()+1,422,"CATALOGUE_SCOPE_UNSUPPORTED");
+            for(var row:unit.get("maneuverChart"))for(var yaw:row)check(yaw.intValue()<=template.at("/state/maximumYaw/initial").intValue(),422,"CATALOGUE_SCOPE_UNSUPPORTED");
+            ratings.add(value);sources.add(source.toString());
+        }
+        ((ObjectNode)template.at("/state/commandRatings")).set("initial",ratings);((ObjectNode)template.at("/state/commandSources")).set("initial",sources);
     }
     private CatalogueRosters rosters(RulesRepository.Catalogue entry) {
         var definition=repository.definition(entry.definitionId(),false).orElseThrow(()->new RulesService.Failure(404,"DEFINITION_NOT_FOUND"));
