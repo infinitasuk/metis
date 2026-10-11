@@ -75,11 +75,13 @@ async function main() {
    const output=await run(process.execPath,['--test','--test-reporter=tap',path.join(__dirname,'runner.test.cjs')],{log:path.join(artifact,'runner-tests.log')});
    assert.match(output,/# tests [1-9]\d*/,'No runner contract tests executed');
   });
-  await stage('pinned-browser-install',async()=>{
+  await stage('pinned-browser-packages',async()=>{
    await run('npm',['ci','--ignore-scripts','--no-audit','--no-fund'],{cwd:path.join(root,'webapp'),log:path.join(artifact,'npm.log')});
-   const cli=path.join(root,'webapp/node_modules/playwright/cli.js');
-    for(const install of browserInstallCommands(cli))await run(install.exe,install.args,{timeout:600000,log:path.join(artifact,install.log)});
   });
+  const cli=path.join(root,'webapp/node_modules/playwright/cli.js');
+  for(const install of browserInstallCommands(cli))await stage(install.stage,()=>run(install.exe,install.args,{
+   timeout:600000,log:path.join(artifact,install.log),env:{...process.env,DEBUG:[process.env.DEBUG,'pw:install'].filter(Boolean).join(',')}
+  }));
   await stage('disposable-database',async()=>{
    resourcesStarted=true;
    await docker(['network','create','--label',label,network]);

@@ -7,10 +7,10 @@ mechanics/spatial modules, pinned modes, catalogue migration, generic browser an
 M8 follow-ons include sourced points, selected rosters, personal presets and Counter
 squadrons. The first sourced ship-maneuver slice is implemented; see
 `RULES_SHIP_MANEUVERS.md` for its explicit training/calibration scope.
-Hosted CI for `ac809c3` passed fast Linux/Windows, mutation and performance; full
-acceptance timed out installing browser OS dependencies. The non-interactive installer
-fix is verified separately on Ubuntu 24.04; hosted qualification of the next committed
-revision remains a release step.
+Hosted CI for `a32ebdf` passed fast Linux/Windows, mutation and performance; full
+acceptance exposed a Node 24.16.0 browser archive-extraction hang. CI now pins Node
+24.21.0, which includes the upstream stream fix. See `tools/rules-tests/README.md`
+for the diagnosis and GitHub Actions for each committed revision's hosted results.
 Local ship qualification/deployment is complete: 363 Java tests, full SQL/API/browser
 acceptance, 86% focused mutation detection, V44 upgrade and deployed browser smoke.
 

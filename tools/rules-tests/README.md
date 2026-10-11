@@ -2,7 +2,7 @@
 
 ## Run from a clean checkout
 
-Prerequisites: Java 21, Maven, Node/npm (CI pins Node **24.16.0** in `.nvmrc`; the
+Prerequisites: Java 21, Maven, Node/npm (CI pins Node **24.21.0** in `.nvmrc`; the
 runner accepts Node 22+), and Docker configured for Linux containers. Initial setup
 needs network access for Maven/npm dependencies, Docker images and Chromium.
 On Linux, Playwright's automated OS-dependency installation needs root/sudo access.
@@ -10,6 +10,29 @@ The runner uses non-interactive `sudo -n env DEBIAN_FRONTEND=noninteractive
 NEEDRESTART_MODE=l ... install-deps chromium`, then downloads Chromium separately.
 Root execution uses the same environment without sudo. This preserves the settings
 across sudo's environment boundary and writes separate dependency/browser logs.
+Package installation, OS dependencies and browser download/extraction each have
+their own timed stage. `pw:install` diagnostics record the download and extraction
+steps in `browser-install.log`.
+
+### Browser extraction compatibility
+
+Use the `.nvmrc` version for release qualification. Node 24.16.0/24.17.0 have a
+[stream compatibility regression](https://github.com/nodejs/node/issues/63487)
+that can stall Playwright 1.58.2's ZIP extraction after a browser download reaches
+100%. The upstream fix shipped in Node 24.18.0; the pinned 24.21.0 includes it.
+This caused the full-job timeout in
+[run 38137578839](https://github.com/infinitasuk/metis/actions/runs/38137578839),
+before the disposable integration environment started. Cached browser installations
+can mask the problem, so runtime changes should also be checked with an empty
+`PLAYWRIGHT_BROWSERS_PATH`, including an actual headless browser launch.
+
+The correction was verified on 2026-10-11 with a fresh Ubuntu 24.04/non-root install
+and headless launch, then the complete Windows-hosted Docker acceptance suite under
+Node 24.21.0 with an empty browser cache: 363 Java tests, all SQL/API/browser suites
+and failure-cleanup checks passed. Local report:
+`target/rules-suite/metis-rules-1791721492448-5222dd36/summary.json`.
+
+### Full acceptance command
 
 From the repository root, in PowerShell or a Unix shell:
 
